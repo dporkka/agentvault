@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #0f1117;
+  --bg-secondary: #1a1d27;
+  --bg-tertiary: #232734;
+  --bg-hover: #2a2f3d;
+  --accent: #4f7cff;
+  --accent-hover: #3d6aef;
+  --accent-muted: rgba(79, 124, 255, 0.15);
+  --text-primary: #e4e6eb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --border-color: #2e3344;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Selection */
+::selection {
+  background-color: var(--accent-muted);
+  color: var(--text-primary);
+}
+
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-radius: 4px;
+}
+
+/* Input placeholder */
+::placeholder {
+  color: var(--text-muted);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.2s ease-out;
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Type badges */
+.type-badge {
+  @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full;
+}
+
+.type-badge-note {
+  @apply bg-emerald-500/15 text-emerald-400;
+}
+
+.type-badge-decision {
+  @apply bg-amber-500/15 text-amber-400;
+}
+
+.type-badge-task {
+  @apply bg-blue-500/15 text-blue-400;
+}
+
+.type-badge-meeting {
+  @apply bg-purple-500/15 text-purple-400;
+}
+
+.type-badge-source {
+  @apply bg-rose-500/15 text-rose-400;
+}
+
+.type-badge-default {
+  @apply bg-gray-500/15 text-gray-400;
+}

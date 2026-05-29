@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-primary: #0f1117;
+    --bg-secondary: #1a1d27;
+    --bg-tertiary: #232734;
+    --bg-hover: #2a2e3b;
+    --border: #2e3344;
+    --text-primary: #e4e6eb;
+    --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
+    --accent: #4f7cff;
+    --accent-hover: #6b93ff;
+    --success: #22c55e;
+    --warning: #eab308;
+    --error: #ef4444;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #root {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--bg-hover);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+  }
+
+  /* Selection */
+  ::selection {
+    background: rgba(79, 124, 255, 0.3);
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-3 py-1.5 rounded text-sm font-medium transition-colors cursor-pointer;
+  }
+
+  .btn-primary {
+    @apply btn bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)];
+  }
+
+  .btn-secondary {
+    @apply btn bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border)];
+  }
+
+  .btn-ghost {
+    @apply btn text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)];
+  }
+
+  .input {
+    @apply bg-[var(--bg-secondary)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors;
+  }
+
+  .panel {
+    @apply bg-[var(--bg-secondary)] border-r border-[var(--border)] flex flex-col;
+  }
+}

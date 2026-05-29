@@ -1,0 +1,18 @@
+# Build artifacts
+bin/
+core/agentvault
+dist/
+apps/desktop-wails/build/
+apps/desktop-wails/desktop
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+
+# WSL/Windows metadata
+*:Zone.Identifier
+
+# Local test vault
+test-vault/

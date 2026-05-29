@@ -1,0 +1,22 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "AgentVault",
+  "outputfilename": "AgentVault",
+  "frontend": {
+    "dir": "./frontend",
+    "install": "npm install",
+    "build": "npm run build",
+    "dev": "npm run dev",
+    "watch": "src"
+  },
+  "author": {
+    "name": "AgentVault Contributors"
+  },
+  "info": {
+    "companyName": "AgentVault",
+    "productName": "AgentVault",
+    "productVersion": "0.1.0",
+    "copyright": "Copyright 2026 AgentVault Contributors",
+    "comments": "Local-first AI knowledge operating system"
+  }
+}

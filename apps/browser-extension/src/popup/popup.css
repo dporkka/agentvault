@@ -1,0 +1,14 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: #0f1117; color: #e4e6eb;
+  width: 380px; min-height: 400px; overflow-x: hidden;
+}
+input, select, textarea, button { font-family: inherit; font-size: 13px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #4f7cff !important; }
+button { cursor: pointer; transition: opacity 0.15s ease; }
+button:hover { opacity: 0.9; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0f1117; }
+::-webkit-scrollbar-thumb { background: #2a2d3a; border-radius: 3px; }
