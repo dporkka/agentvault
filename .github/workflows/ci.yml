@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs on the same branch/PR.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Core (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: core/go.sum
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+      - name: go build
+        run: go build -o /tmp/agentvault ./cmd/agentvault
+
+  frontends:
+    name: Frontend (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - web-local
+          - browser-extension
+          - desktop-wails/frontend
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/${{ matrix.app }}/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Type-check and build
+        run: npm run build # runs `tsc && vite build`
+
+  mobile:
+    name: Mobile (Expo type-check)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile-expo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/mobile-expo/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Type-check
+        run: npx tsc --noEmit
+
+  desktop:
+    name: Desktop (Wails build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: apps/desktop-wails/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/desktop-wails/frontend/package-lock.json
+      - name: Install GTK/WebKit system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Build frontend (required by //go:embed frontend/dist)
+        working-directory: apps/desktop-wails/frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Build desktop app (Go)
+        working-directory: apps/desktop-wails
+        # Ubuntu ships webkit2gtk 4.1, so the webkit2_41 build tag is required.
+        run: go build -tags webkit2_41 ./...
