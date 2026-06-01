@@ -1,5 +1,9 @@
 # AgentVault Implementation Plan — Phases 11-14
 
+> Status: historical planning document.
+>
+> Git integration, vector-search foundations, multi-provider AI, and the standalone web UI now exist at least partially in the codebase. Use [docs/CODEBASE_ANALYSIS.md](docs/CODEBASE_ANALYSIS.md) for current-state details and [docs/IMPROVEMENT_PLAN.md](docs/IMPROVEMENT_PLAN.md) for the active improvement plan.
+
 ## Phase 11: Git Integration
 
 **Goal:** Native Git commands in the CLI for vault versioning and review workflows.

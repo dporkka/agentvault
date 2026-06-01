@@ -1,11 +1,15 @@
 # AgentVault Desktop App Design
 
+> Status: implementation design note.
+>
+> This file captures the desktop app direction, but the current repository state is summarized in [../../docs/CODEBASE_ANALYSIS.md](../../docs/CODEBASE_ANALYSIS.md). Prefer that document for cross-application architecture and improvement planning.
+
 ## Overview
 A local-first desktop knowledge base application built with Wails (Go backend + React frontend). The app provides a fast, keyboard-first interface for managing Markdown notes with AI-powered search and retrieval.
 
 ## Tech Stack
 - **Backend**: Go (Wails v2 runtime)
-- **Frontend**: React 19 + TypeScript + Tailwind CSS v3
+- **Frontend**: React 18 + TypeScript + Tailwind CSS v3
 - **Editor**: CodeMirror 6 (@codemirror/lang-markdown)
 - **State**: React Context (no external state library needed)
 
@@ -16,9 +20,10 @@ The Go backend exposes methods via Wails bindings. The frontend calls these meth
 ```
 VaultService:
   - GetVaultPath() string
-  - SetVaultPath(path string) error
   - IsVault(path string) bool
   - InitVault(path string) error
+  - OpenVault(path string) error
+  - SelectFolder() (string, error)
   - GetStatus() VaultStatus
 
 NoteService:

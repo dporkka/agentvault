@@ -1,45 +1,60 @@
 # AgentVault
 
-Your notes, decisions, docs, and research — structured for humans, searchable by agents, stored as files.
+AgentVault is a local-first knowledge operating system for notes, decisions, research, tasks, and agent-readable context.
 
-## What is AgentVault?
+Markdown files are the source of truth. SQLite is a rebuildable index and cache used for search, retrieval, API responses, and UI clients.
 
-AgentVault is a local-first, open-source AI knowledge operating system. It turns a folder of Markdown/YAML files into an intelligent, searchable, source-grounded, agent-accessible knowledge base.
+## Current Status
+
+AgentVault is an early application with a working Go core, CLI, local HTTP API, MCP server, Wails desktop app, standalone web app, browser extension, and Expo mobile app scaffold. The codebase is ahead of the original phase-plan documents, so current planning now lives in:
+
+- [Codebase analysis](docs/CODEBASE_ANALYSIS.md)
+- [Improvement plan](docs/IMPROVEMENT_PLAN.md)
+
+Important current gaps:
+
+- The CLI and desktop app have real AI/RAG paths, but the local HTTP `/ask` endpoint is still a stub.
+- The local API and frontend clients have a few contract mismatches that should be fixed before treating the web, extension, or mobile surfaces as stable.
+- Go verification could not be run in this shell because `go` is not on `PATH`; GitHub Actions is configured to run Go 1.23 tests, vet, and builds.
 
 ## Features
 
-- **Local-first**: Your data stays on your machine as plain Markdown files
-- **Markdown-native**: Plain Markdown + YAML frontmatter — no lock-in
-- **Full-text search**: SQLite FTS5 for instant search with filters
-- **AI-powered answers**: Source-grounded retrieval with Ollama/local LLMs
-- **MCP server**: Model Context Protocol for AI agent integration
-- **Local HTTP API**: Powers desktop app, browser extension, and mobile clients
-- **Git-friendly**: Works naturally with version control
-- **Low dependency**: Single Go binary, pure Go SQLite, minimal deps
+- **Local-first storage**: Durable Markdown files with YAML frontmatter.
+- **SQLite index**: Rebuildable SQLite schema with FTS5, tags, captures, chunks, and agent-run tables.
+- **CLI workflow**: Initialize vaults, create notes, index, search, read, ask, import, validate, configure, serve, and use vault Git commands.
+- **AI retrieval**: Source-grounded `agentvault ask` with Ollama, OpenAI-compatible, Anthropic, OpenRouter, and mock providers.
+- **Semantic search foundation**: Chunking, embeddings, vector utilities, and hybrid search support in the core.
+- **MCP integration**: stdio and HTTP transports with search/read/create/capture/list/git/audit tools.
+- **Local HTTP API**: Localhost API for app clients, protected write endpoints, and CORS for local and extension origins.
+- **Desktop app**: Wails v2 backend with React/TypeScript frontend, vault picker, search, editor, dashboards, settings, and AI panel.
+- **Standalone web app**: React/Vite client for the local API.
+- **Browser extension**: MV3 extension for page capture and vault search through the local API.
+- **Mobile app**: Expo app with capture-first flows, local inbox, settings, search, and sync hooks.
+- **Importers and starters**: Markdown/Obsidian importers and starter vault templates for founder, developer, agent-memory, and research workflows.
 
 ## Quick Start
 
 ```bash
-# Build
-cd core && go build -o ../bin/agentvault ./cmd/agentvault
+# Build the CLI
+cd core
+go build -o ../bin/agentvault ./cmd/agentvault
 
 # Initialize a vault
-./bin/agentvault init ./my-vault
-cd ./my-vault
+../bin/agentvault init ../my-vault
+cd ../my-vault
+
+# Optional starter templates
+../bin/agentvault init ../founder-vault --template founder
+../bin/agentvault init ../developer-vault --template developer
 
 # Create notes
 ../bin/agentvault new note --title "My first note"
-../bin/agentvault new decision --project myproject --title "Use Postgres"
-../bin/agentvault new task --project myproject --title "Build API"
+../bin/agentvault new decision --project platform --title "Use Postgres"
+../bin/agentvault new task --project platform --title "Build API"
 
-# Index everything
+# Index and search
 ../bin/agentvault index
-
-# Search
 ../bin/agentvault search "Postgres"
-
-# Ask AI (requires Ollama)
-../bin/agentvault ask "What have I decided about databases?"
 
 # Validate
 ../bin/agentvault doctor
@@ -47,35 +62,37 @@ cd ./my-vault
 
 ## CLI Reference
 
-### Core Commands
-
 | Command | Description |
-|---------|-------------|
-| `agentvault init [path]` | Initialize a new vault with folder structure |
-| `agentvault index [--force \| --rebuild]` | Index all Markdown files for search |
-| `agentvault search <query> [--type] [--project]` | Full-text search with filters |
-| `agentvault read <id-or-path>` | Read a specific note |
+| --- | --- |
+| `agentvault init [path] [--template]` | Initialize a vault and optional starter template |
+| `agentvault index [--force] [--rebuild] [--path] [--embed]` | Index Markdown files and optionally generate embeddings |
+| `agentvault search <query> [--type] [--project] [--tag] [--status]` | Full-text search with filters |
+| `agentvault read <id-or-path>` | Read a note by ID or path |
 | `agentvault new <type> --title <title>` | Create a structured note |
-| `agentvault doctor` | Validate vault health (7 checks) |
+| `agentvault ask <question>` | Ask a source-grounded question over indexed notes |
+| `agentvault import <markdown|obsidian> <source>` | Import external Markdown or Obsidian notes |
+| `agentvault doctor` | Validate vault health |
+| `agentvault config get/set/show` | Manage vault configuration |
+| `agentvault git status/diff/commit/log/init` | Use Git from the vault context |
+| `agentvault serve` | Start the local HTTP API |
+| `agentvault mcp serve` | Start the MCP server |
 
-### New Note Types
+### Note Types
 
 ```bash
 agentvault new note --title "My Idea"
-agentvault new decision --project myproject --title "Use Postgres"
-agentvault new task --project myproject --title "Build API"
-agentvault new meeting --project myproject --title "Sprint Planning"
+agentvault new decision --project platform --title "Use Postgres"
+agentvault new task --project platform --title "Build API"
+agentvault new meeting --project platform --title "Sprint Planning"
 agentvault new source --title "Article" --url "https://example.com"
+agentvault new project --title "Platform"
 ```
 
-### AI Commands
+### AI Configuration
 
-```bash
-# Ask a question (requires Ollama running)
-agentvault ask "What have I decided about vector databases?"
-agentvault ask "What are my open questions for Adacavo?"
+By default, AgentVault uses Ollama at `http://localhost:11434`.
 
-# Configure AI in .agentvault/config.json:
+```json
 {
   "ai": {
     "provider": "ollama",
@@ -86,234 +103,167 @@ agentvault ask "What are my open questions for Adacavo?"
 }
 ```
 
-### Local API Server
+Provider options in the core include `ollama`, `openai`, `anthropic`, `openrouter`, and `mock`. Cloud providers can read `AGENTVAULT_API_KEY` when no API key is stored in the vault config.
 
 ```bash
-# Start the local HTTP API (default: 127.0.0.1:47321)
-agentvault serve
-agentvault serve --port 8080
-
-# Endpoints:
-# GET  /health, /vault/status, /search?q=, /notes/:id
-# GET  /projects, /recent, /stale, /git/status
-# POST /vault/index, /notes, /capture, /ask
+agentvault ask "What have I decided about vector search?"
+agentvault ask --provider openai --model gpt-4o-mini "Summarize open architecture decisions"
+agentvault index --embed
 ```
 
-### MCP Server
+## Local HTTP API
 
 ```bash
-# Start MCP server (stdio mode for Claude/Cursor/etc)
+# Default bind address: 127.0.0.1:47321
+agentvault serve
+agentvault serve --port 8080
+```
+
+The server prints an auth token at startup. `GET` endpoints are open locally; write endpoints require `X-AgentVault-Token` or `Authorization: Bearer <token>`.
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /health` | Server health |
+| `GET /vault/status` | Vault status and indexed note count |
+| `POST /vault/index` | Trigger indexing |
+| `GET /search?q=...` | Search notes |
+| `GET /notes/{id}` | Read a note |
+| `POST /notes` | Create a note |
+| `POST /capture` | Capture to inbox |
+| `POST /ask` | Currently returns a stub response |
+| `GET /projects` | List projects |
+| `GET /recent` | Recent notes |
+| `GET /stale` | Stale notes |
+| `GET /git/status` | Currently returns a stub status |
+
+## MCP Server
+
+```bash
+# stdio mode for Claude, Cursor, and other MCP clients
 agentvault mcp serve
 
 # HTTP mode
 agentvault mcp serve --http --port 7777
-
-# Available tools: agentvault.search, agentvault.read_note,
-# agentvault.create_note, agentvault.create_decision,
-# agentvault.capture, agentvault.summarize, agentvault.list_projects,
-# agentvault.list_recent, agentvault.git_status
 ```
+
+Registered tools:
+
+- `agentvault.search`
+- `agentvault.read_note`
+- `agentvault.create_note`
+- `agentvault.create_decision`
+- `agentvault.create_task`
+- `agentvault.capture`
+- `agentvault.summarize`
+- `agentvault.list_projects`
+- `agentvault.list_recent`
+- `agentvault.git_status`
+- `agentvault.log_agent_run`
 
 ## Architecture
 
-```
-Markdown/YAML files (canonical source of truth)
+```text
+Markdown/YAML files
         |
-    Go Core Engine
+        v
+Go core engine
         |
-    +----------------+----------------+----------------+
-    |                |                |                |
- SQLite + FTS5    CLI tool      Local HTTP API    MCP Server
- (index/cache)     |                |                |
-              +----+----+      +----+----+      +----+----+
-              |         |      |         |      |         |
-           Wails   Terminal  Browser  Mobile   Claude   Other
-          Desktop     CLI   Extension   App     Code    Agents
+        +--> SQLite + FTS5 + chunks
+        +--> CLI
+        +--> Local HTTP API
+        +--> MCP server
+        +--> Wails services
+                 |
+                 v
+        Desktop, web, browser extension, mobile, agent clients
 ```
-
-## Desktop App (Wails)
-
-```bash
-cd apps/desktop-wails
-
-# Install frontend dependencies
-cd frontend && npm install
-
-# Install Wails CLI (requires Go 1.22+)
-go install github.com/wailsapp/wails/v2/cmd/wails@latest
-
-# Run in development mode
-wails dev
-
-# Build for production
-wails build
-```
-
-### Desktop Features
-
-- **Vault picker**: Open or create vaults on first launch
-- **Search**: Full-text search with keyboard shortcuts (`/` to focus)
-- **Editor**: CodeMirror 6 Markdown editor with live preview split
-- **AI Panel**: Source-grounded Q&A with the vault (collapsible sidebar)
-- **Project Dashboard**: Grouped notes by project
-- **Decision Dashboard**: Track decision records and their status
-- **Settings**: AI provider config, keyboard shortcuts, vault info
-- **Keyboard-first**: `Ctrl+K` search, `Ctrl+N` new note, `Ctrl+S` save, `Ctrl+J` toggle AI
 
 ## Project Structure
 
-```
+```text
 agentvault/
-├── core/                          # Go core engine (the product)
-│   ├── cmd/agentvault/           # CLI entrypoint
-│   │   ├── main.go               # Root command, shared helpers
-│   │   ├── init.go               # agentvault init
-│   │   ├── index.go              # agentvault index
-│   │   ├── search.go             # agentvault search
-│   │   ├── read.go               # agentvault read
-│   │   ├── new.go                # agentvault new
-│   │   ├── ask.go                # agentvault ask
-│   │   ├── doctor.go             # agentvault doctor
-│   │   ├── serve.go              # agentvault serve
-│   │   └── mcp.go                # agentvault mcp serve
+├── core/                         # Go core engine and CLI
+│   ├── cmd/agentvault/           # Cobra commands
 │   ├── internal/
-│   │   ├── ai/                   # AI provider interface + Ollama client
-│   │   ├── api/                  # Local HTTP API server + handlers
-│   │   ├── config/               # Vault configuration (JSON)
-│   │   ├── db/                   # SQLite wrapper + migrations
-│   │   ├── doctor/               # Vault validation (7 checks)
-│   │   ├── indexer/              # File scanner + FTS5 indexer
-│   │   ├── markdown/             # YAML frontmatter parser
-│   │   ├── mcp/                  # MCP server + 10 tools
+│   │   ├── ai/                   # AI provider interface and providers
+│   │   ├── api/                  # Local HTTP API
+│   │   ├── chunker/              # Markdown/text chunking
+│   │   ├── config/               # Vault configuration
+│   │   ├── db/                   # SQLite wrapper and migrations
+│   │   ├── doctor/               # Vault validation
+│   │   ├── embeddings/           # Embedding clients
+│   │   ├── git/                  # Git CLI wrapper
+│   │   ├── importers/            # Markdown and Obsidian importers
+│   │   ├── indexer/              # File scanner and index writer
+│   │   ├── markdown/             # Frontmatter/parser utilities
+│   │   ├── mcp/                  # MCP server and tools
 │   │   ├── rag/                  # Retrieval-augmented generation pipeline
-│   │   ├── search/               # FTS5 search with filters
-│   │   ├── templates/            # Embedded Markdown templates
-│   │   └── vault/                # Vault initialization + folder structure
-│   ├── migrations/001_init.sql   # Full SQLite + FTS5 schema
-│   └── go.mod
+│   │   ├── search/               # FTS and vector search
+│   │   ├── templates/            # Note and starter templates
+│   │   ├── vault/                # Vault folder layout
+│   │   └── vectors/              # Vector math
+│   └── migrations/001_init.sql
 ├── apps/
-│   └── desktop-wails/            # Wails desktop app
-│       ├── main.go               # Wails entry
-│       ├── app.go                # Backend services exposed to frontend
-│       ├── wails.json            # Wails config
-│       └── frontend/             # React + TypeScript + Tailwind
-│           ├── src/
-│           │   ├── App.tsx
-│           │   ├── components/   # 15 React components
-│           │   ├── types/
-│           │   └── styles/
-│           └── package.json
-├── templates/                    # User-customizable templates (future)
-├── docs/                         # Documentation (future)
-├── README.md
+│   ├── desktop-wails/            # Wails v2 desktop app
+│   ├── web-local/                # React/Vite local web app
+│   ├── browser-extension/        # MV3 browser extension
+│   └── mobile-expo/              # Expo mobile app
+├── docs/
+│   ├── CODEBASE_ANALYSIS.md
+│   └── IMPROVEMENT_PLAN.md
 ├── Makefile
-└── LICENSE (Apache 2.0)
+└── README.md
 ```
 
 ## Tech Stack
 
 | Component | Technology |
-|-----------|-----------|
-| Core engine | Go 1.22+ |
-| Database | SQLite + FTS5 (modernc.org/sqlite, pure Go) |
-| Markdown | Goldmark |
+| --- | --- |
+| Core engine | Go 1.23 |
+| Database | SQLite + FTS5 via `modernc.org/sqlite` |
+| Markdown | YAML frontmatter parser and Markdown templates |
 | CLI | Cobra |
-| Desktop | Wails v2 + React 19 + TypeScript |
+| Desktop | Wails v2 + React 18 + TypeScript |
+| Web app | React 18 + Vite + TypeScript |
+| Browser extension | Manifest V3 + React 18 + Vite |
+| Mobile | Expo 51 + React Native 0.74 |
 | Editor | CodeMirror 6 |
 | Styling | Tailwind CSS v3 |
-| AI | Ollama API (local-first) |
-| Protocol | MCP (Model Context Protocol) |
+| AI providers | Ollama, OpenAI-compatible, Anthropic, OpenRouter |
+| Agent protocol | MCP |
 
-## Data Model
+## Development
 
-Files are the source of truth. SQLite is a rebuildable index.
+```bash
+# Go core
+cd core
+go test ./...
+go vet ./...
+go build -o ../bin/agentvault ./cmd/agentvault
 
-```yaml
----
-id: dec_2026_05_29_001
-type: decision
-title: Use Postgres and pgvector before Qdrant
-project: myproject
-status: active
-tags: [architecture, ai-memory]
-entities: [Postgres, pgvector, Qdrant]
-created: 2026-05-29
-updated: 2026-05-29
----
+# Local web app
+cd apps/web-local
+npm ci
+npm run build
 
-# Use Postgres and pgvector before Qdrant
+# Browser extension
+cd apps/browser-extension
+npm ci
+npm run build
 
-## Decision
-...
+# Desktop frontend
+cd apps/desktop-wails/frontend
+npm ci
+npm run build
+
+# Mobile type-check
+cd apps/mobile-expo
+npm ci
+npx tsc --noEmit
 ```
 
-## Test Results
-
-All 9 test packages pass (100+ tests):
-
-```
-ok  github.com/agentvault/core/internal/ai       (12 tests)
-ok  github.com/agentvault/core/internal/api       (11 tests)
-ok  github.com/agentvault/core/internal/db        (8 tests)
-ok  github.com/agentvault/core/internal/doctor    (7 checks + integration)
-ok  github.com/agentvault/core/internal/markdown  (3 tests)
-ok  github.com/agentvault/core/internal/mcp       (36 tests, 10 tools)
-ok  github.com/agentvault/core/internal/rag       (11 tests)
-ok  github.com/agentvault/core/internal/search    (6 tests)
-ok  github.com/agentvault/core/internal/templates (12 tests)
-```
-
-## Roadmap
-
-### Completed ✅
-
-- [x] Go core engine with CLI
-- [x] Vault initialization with folder structure
-- [x] Markdown + YAML frontmatter parser
-- [x] SQLite database with migrations
-- [x] FTS5 full-text search engine
-- [x] Incremental indexer with content hashing
-- [x] Note templates (note, decision, task, meeting, source)
-- [x] `agentvault init`, `index`, `search`, `read`, `new`, `doctor`
-- [x] AI/RAG pipeline with Ollama provider
-- [x] `agentvault ask` with source-grounded answers
-- [x] Local HTTP API server (13 endpoints, auth, CORS)
-- [x] `agentvault serve` with graceful shutdown
-- [x] MCP server with 10 tools (stdio + HTTP)
-- [x] `agentvault mcp serve`
-- [x] Wails desktop app with React frontend
-- [x] CodeMirror 6 Markdown editor with preview
-- [x] Search view with keyboard shortcuts
-- [x] AI ask panel (collapsible sidebar)
-- [x] Project and decision dashboards
-- [x] Settings view
-
-### Upcoming
-
-- [ ] Browser extension (clip pages, send to vault)
-- [ ] Expo mobile app (capture-first)
-- [ ] Importers (Obsidian, Markdown folders)
-- [ ] Starter templates (Founder OS, Developer OS)
-- [ ] Sync (Git, Syncthing)
-- [ ] Vector search with embeddings
-- [ ] Additional AI providers (OpenAI, Anthropic)
-- [ ] Team workspaces (paid)
+The repository also includes GitHub Actions for the Go core, frontend builds, mobile type-checking, and desktop Go build with the `webkit2_41` tag used on Ubuntu.
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE)
-
-## Contributing
-
-Contributions welcome! The project follows standard Go conventions and uses `go test ./...` for testing.
-
-```bash
-# Run tests
-cd core && go test ./...
-
-# Build
-cd core && go build -o ../bin/agentvault ./cmd/agentvault
-
-# Format
-cd core && gofmt -w .
-```
+Apache 2.0. See [LICENSE](LICENSE).

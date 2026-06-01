@@ -1,5 +1,9 @@
 # AgentVault Implementation Plan — Phases 3-6
 
+> Status: historical planning document.
+>
+> These phases have been implemented or partially superseded in the current codebase. Use [docs/CODEBASE_ANALYSIS.md](docs/CODEBASE_ANALYSIS.md) for the current architecture map and [docs/IMPROVEMENT_PLAN.md](docs/IMPROVEMENT_PLAN.md) for the active improvement plan.
+
 ## Phase 3: AI/RAG (`agentvault ask`)
 
 ### New Packages
@@ -93,7 +97,7 @@ agentvault.git_status    — Git status
 ## Phase 6: Wails Desktop App
 
 ### Project Setup
-- `apps/desktop-wails/` — Wails v3 project
+- `apps/desktop-wails/` — Wails desktop project (implemented with Wails v2)
 - Go backend wrapping core engine
 - React frontend with TypeScript + Tailwind
 
@@ -107,8 +111,8 @@ agentvault.git_status    — Git status
 - Settings
 
 ### Dependencies
-- Wails v3
-- React 19 + TypeScript
+- Wails v2
+- React 18 + TypeScript
 - CodeMirror 6
 - Tailwind CSS v3
 
@@ -116,7 +120,7 @@ agentvault.git_status    — Git status
 
 ## Execution Order
 1. Parallel: Phases 3, 4, 5 (independent implementations)
-2. Merge all into master
+2. Merge all into main
 3. Phase 6: Wails desktop (depends on API stability)
 4. Integration testing
 
