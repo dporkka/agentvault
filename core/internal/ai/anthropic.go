@@ -19,9 +19,9 @@ type AnthropicProvider struct {
 
 // anthropicMessageRequest is the request body for Anthropic's /v1/messages endpoint.
 type anthropicMessageRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	MaxTokens int      `json:"max_tokens"`
+	Model     string    `json:"model"`
+	Messages  []Message `json:"messages"`
+	MaxTokens int       `json:"max_tokens"`
 }
 
 // anthropicMessageResponse is the response body from Anthropic's /v1/messages endpoint.

@@ -22,7 +22,7 @@ type Doctor struct {
 // CheckResult is the outcome of a single diagnostic check.
 type CheckResult struct {
 	Name    string
-	Status  string   // "ok", "warn", "error"
+	Status  string // "ok", "warn", "error"
 	Message string
 	Details []string
 }

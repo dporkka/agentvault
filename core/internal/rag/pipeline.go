@@ -55,9 +55,9 @@ func (p *Pipeline) Ask(ctx context.Context, question string) (*Answer, error) {
 	// 2. If no results, return a helpful "no information" answer
 	if len(results) == 0 {
 		return &Answer{
-			Answer: "I couldn't find any relevant notes in your vault that answer this question.",
-			Sources: []Source{},
-			Confidence: "low",
+			Answer:      "I couldn't find any relevant notes in your vault that answer this question.",
+			Sources:     []Source{},
+			Confidence:  "low",
 			MissingInfo: "No indexed notes matched the query.",
 			SuggestedActions: []string{
 				"Try rephrasing your question",

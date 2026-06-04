@@ -94,7 +94,7 @@ func TestRenderDecisionTemplateWithProject(t *testing.T) {
 func TestGenerateIDFormat(t *testing.T) {
 	// Test known types
 	tests := []struct {
-		noteType string
+		noteType   string
 		wantPrefix string
 	}{
 		{"note", "note_"},

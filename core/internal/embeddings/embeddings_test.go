@@ -255,8 +255,8 @@ func TestGenerateBatchEmpty(t *testing.T) {
 
 func TestClientDimension(t *testing.T) {
 	tests := []struct {
-		model     string
-		wantDim   int
+		model   string
+		wantDim int
 	}{
 		{"nomic-embed-text", 768},
 		{"all-minilm", 384},

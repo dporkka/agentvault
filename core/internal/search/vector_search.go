@@ -17,10 +17,10 @@ import (
 // VectorQuery extends Query with vector search capabilities.
 type VectorQuery struct {
 	Query
-	VectorSearch bool     // enable vector search
-	QueryText    string   // text to embed for query
-	TopK         int      // number of vector results
-	HybridWeight float64  // weight for FTS vs vector (0=FTS only, 1=vector only, 0.5=both)
+	VectorSearch bool    // enable vector search
+	QueryText    string  // text to embed for query
+	TopK         int     // number of vector results
+	HybridWeight float64 // weight for FTS vs vector (0=FTS only, 1=vector only, 0.5=both)
 }
 
 // chunkEmbedding represents a stored chunk with its embedding.
