@@ -1,8 +1,41 @@
 # AgentVault
 
-AgentVault is a local-first knowledge operating system for notes, decisions, research, tasks, and agent-readable context.
+AgentVault is a local-first AI knowledge base and Markdown knowledge management system for notes, decisions, research, tasks, and agent-readable context.
 
-Markdown files are the source of truth. SQLite is a rebuildable index and cache used for search, retrieval, API responses, and UI clients.
+It combines plain-text Markdown files, a rebuildable SQLite search index, retrieval-augmented generation (RAG), an MCP server, a local API, and multiple local clients so you can build a private second brain for humans and AI agents without giving up file ownership.
+
+## What is AgentVault?
+
+AgentVault is designed for people who want:
+
+- A **local-first knowledge base** instead of a cloud-only notes product.
+- A **Markdown note-taking system** that keeps files portable and Git-friendly.
+- An **AI-ready personal knowledge base** with source-grounded answers over local notes.
+- An **agent memory layer** for MCP clients, coding agents, and local workflows.
+- A **developer-friendly PKM system** with CLI, API, desktop, web, extension, and mobile surfaces.
+
+## Who is AgentVault for?
+
+AgentVault is a fit for:
+
+- **Developers** who want Markdown notes, project memory, architecture decisions, and local AI search.
+- **Founders and operators** who need research notes, decisions, tasks, and meeting records in one vault.
+- **Researchers and knowledge workers** who want a private knowledge repository with semantic search foundations.
+- **AI agent builders** who need MCP-accessible context, searchable notes, and local retrieval workflows.
+
+## Suggested GitHub Description And Topics
+
+**Suggested repository description**
+
+> Local-first AI knowledge base for Markdown notes, decisions, research, and tasks with SQLite search, RAG, MCP, CLI, desktop, web, browser extension, and mobile clients.
+
+**Suggested GitHub topics**
+
+`local-first`, `ai`, `knowledge-base`, `markdown`, `notes`, `pkm`, `second-brain`, `sqlite`, `rag`, `mcp`, `llm`, `agent-memory`, `knowledge-management`, `developer-tools`, `wails`
+
+## Core Keywords
+
+Local-first AI knowledge base, Markdown knowledge base, AI notes app, personal knowledge management, PKM, second brain, agent memory, developer knowledge base, private RAG, local RAG, SQLite search, semantic search, note-taking, research repository, decision log, task tracking, MCP server, local API, browser clipper, desktop knowledge app, mobile capture app.
 
 ## Current Status
 
@@ -15,7 +48,15 @@ Important current gaps:
 
 - The CLI and desktop app have real AI/RAG paths, but the local HTTP `/ask` endpoint is still a stub.
 - The local API and frontend clients have a few contract mismatches that should be fixed before treating the web, extension, or mobile surfaces as stable.
-- Go verification could not be run in this shell because `go` is not on `PATH`; GitHub Actions is configured to run Go 1.23 tests, vet, and builds.
+- GitHub Actions is configured to run Go 1.23 tests, vet, and builds alongside frontend builds and mobile type-checking.
+
+## Why AgentVault
+
+- **You own the files**: Markdown files remain the source of truth.
+- **Search is rebuildable**: SQLite acts as an index and cache for retrieval, search, UI clients, and API responses.
+- **AI stays grounded**: AgentVault is built around source-aware retrieval instead of opaque chat history alone.
+- **It works across surfaces**: CLI, desktop, web, extension, mobile, and agent integrations can all use the same vault.
+- **It is automation-friendly**: MCP tools, a local API, and structured note templates make it useful for agents and scripts.
 
 ## Features
 
@@ -31,6 +72,14 @@ Important current gaps:
 - **Browser extension**: MV3 extension for page capture and vault search through the local API.
 - **Mobile app**: Expo app with capture-first flows, local inbox, settings, search, and sync hooks.
 - **Importers and starters**: Markdown/Obsidian importers and starter vault templates for founder, developer, agent-memory, and research workflows.
+
+## Common Use Cases
+
+- Build a **private AI second brain** backed by local Markdown files.
+- Keep **engineering notes, ADRs, tasks, and project context** in one searchable vault.
+- Create a **personal research database** with web capture and structured notes.
+- Give **coding agents or MCP clients** access to searchable repository and project memory.
+- Run a **local knowledge base for founders or teams** without locking data into a SaaS platform.
 
 ## Quick Start
 
@@ -119,7 +168,7 @@ agentvault serve
 agentvault serve --port 8080
 ```
 
-The server prints an auth token at startup. `GET` endpoints are open locally; write endpoints require `X-AgentVault-Token` or `Authorization: Bearer <token>`.
+The server prints an auth token at startup. `GET` endpoints are open locally; write endpoints require `X-AgentVault-Token` or a bearer authorization header.
 
 | Endpoint | Description |
 | --- | --- |
@@ -226,7 +275,7 @@ agentvault/
 | Desktop | Wails v2 + React 18 + TypeScript |
 | Web app | React 18 + Vite + TypeScript |
 | Browser extension | Manifest V3 + React 18 + Vite |
-| Mobile | Expo 51 + React Native 0.74 |
+| Mobile | Expo 56 + React Native 0.85 |
 | Editor | CodeMirror 6 |
 | Styling | Tailwind CSS v3 |
 | AI providers | Ollama, OpenAI-compatible, Anthropic, OpenRouter |
@@ -263,6 +312,24 @@ npx tsc --noEmit
 ```
 
 The repository also includes GitHub Actions for the Go core, frontend builds, mobile type-checking, and desktop Go build with the `webkit2_41` tag used on Ubuntu.
+
+## FAQ
+
+### Is AgentVault a note-taking app, knowledge base, or AI memory system?
+
+It is all three: a Markdown note system, a local knowledge base, and an AI-ready context layer for retrieval and agents.
+
+### Does AgentVault store notes in plain files?
+
+Yes. Markdown files are the source of truth, and SQLite is a rebuildable index rather than the canonical store.
+
+### Can I use AgentVault with local AI models?
+
+Yes. The default configuration uses Ollama, and the core also supports OpenAI-compatible, Anthropic, OpenRouter, and mock providers.
+
+### Does AgentVault support MCP?
+
+Yes. AgentVault includes an MCP server with tools for search, note reading, note creation, capture, project listing, and audit workflows.
 
 ## License
 
