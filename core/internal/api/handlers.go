@@ -11,7 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/ai"
+	"github.com/agentvault/core/internal/config"
+	"github.com/agentvault/core/internal/git"
 	"github.com/agentvault/core/internal/indexer"
+	"github.com/agentvault/core/internal/rag"
 	"github.com/agentvault/core/internal/search"
 	"github.com/agentvault/core/internal/templates"
 	"github.com/agentvault/core/internal/vault"
@@ -344,7 +348,7 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ── Ask (AI stub) ───────────────────────────────────────────────────
+// ── Ask (source-grounded AI) ────────────────────────────────────────
 
 func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -357,11 +361,39 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	req.Question = strings.TrimSpace(req.Question)
+	if req.Question == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"error":  "missing question",
+			"detail": "question is required",
+		})
+		return
+	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"answer":  "AI integration not yet implemented. Question received: " + req.Question,
-		"sources": []string{},
-	})
+	cfg, err := config.Load(s.vaultPath)
+	if err != nil {
+		cfg = config.DefaultConfig(s.vaultPath)
+	}
+
+	provider, err := ai.LoadProvider(cfg.AI)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "failed to load AI provider",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	answer, err := rag.New(s.searcher, provider).Ask(r.Context(), req.Question)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]interface{}{
+			"error":  "AI provider failed",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, answer)
 }
 
 // ── Projects ────────────────────────────────────────────────────────
@@ -381,7 +413,10 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var projects []string
+	// Return a bare JSON array to match the clients (web, extension, mobile)
+	// and the other list endpoints (/search, /recent, /stale). Initialized as
+	// an empty slice so an empty result serializes to [] rather than null.
+	projects := []string{}
 	for rows.Next() {
 		var p string
 		if err := rows.Scan(&p); err != nil {
@@ -390,9 +425,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		projects = append(projects, p)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"projects": projects,
-	})
+	writeJSON(w, http.StatusOK, projects)
 }
 
 // ── Recent ──────────────────────────────────────────────────────────
@@ -438,10 +471,49 @@ func (s *Server) handleStale(w http.ResponseWriter, r *http.Request) {
 // ── Git Status ──────────────────────────────────────────────────────
 
 func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
+	// A vault that is not under version control is a normal, valid state —
+	// report it truthfully rather than erroring so clients can show it.
+	if !git.IsGitRepo(s.vaultPath) {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"isGitRepo":      false,
+			"branch":         "",
+			"clean":          true,
+			"aheadBehind":    "",
+			"modifiedFiles":  []interface{}{},
+			"untrackedFiles": []string{},
+		})
+		return
+	}
+
+	status, err := git.Status(s.vaultPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "git status failed",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	modified := make([]map[string]interface{}, 0, len(status.ModifiedFiles))
+	for _, f := range status.ModifiedFiles {
+		modified = append(modified, map[string]interface{}{
+			"path":   f.Path,
+			"status": f.Status,
+			"staged": f.Staged,
+		})
+	}
+	untracked := status.UntrackedFiles
+	if untracked == nil {
+		untracked = []string{}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status": "ok",
-		"branch": "main",
-		"clean":  true,
+		"isGitRepo":      true,
+		"branch":         status.Branch,
+		"clean":          status.IsClean,
+		"aheadBehind":    status.AheadBehind,
+		"modifiedFiles":  modified,
+		"untrackedFiles": untracked,
 	})
 }
 

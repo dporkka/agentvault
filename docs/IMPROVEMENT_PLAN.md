@@ -1,20 +1,23 @@
 # AgentVault Improvement Plan
 
-Last updated: 2026-06-01
+Last updated: 2026-06-09
 
 ## Goal
 
 Make AgentVault dependable as a local-first knowledge app across CLI, desktop, web, extension, mobile, and agent clients. The immediate focus should be correctness and contract stability, then UX completeness, then release readiness.
 
+## Recently Completed (Phase 0)
+
+- `POST /ask` is wired to `internal/rag.Pipeline` with the configured AI provider and returns the structured `Answer` shape (JSON-tagged); API tests assert a real answer plus a `sources` array and reject the old stub.
+- `GET /projects` now returns a bare JSON `string[]`, matching the web, extension, and mobile clients and the other list endpoints; the API test asserts the array shape.
+- `GET /git/status` now reports real vault state via `internal/git.Status` (branch, clean flag, ahead/behind, modified and untracked files), including a truthful `isGitRepo: false` for non-versioned vaults; API tests cover both the repo and non-repo paths.
+
 ## Priority Backlog
 
 | Priority | Work | Why it matters | Evidence |
 | --- | --- | --- | --- |
-| P0 | Fix API/client contract mismatches | Web, extension, and mobile can compile while still failing at runtime. | `/projects` API returns an object; clients expect `string[]`. |
-| P0 | Replace HTTP `/ask` stub with shared RAG pipeline | The web and extension surfaces cannot deliver the advertised AI behavior through the API. | CLI and desktop have real RAG paths; API returns placeholder text. |
-| P0 | Implement real HTTP `/git/status` | The API currently reports a fake clean `main` state. | `internal/git` exists and is used by CLI/MCP; API handler is hard-coded. |
-| P0 | Add contract tests for API responses consumed by clients | Prevents future type drift. | Current TypeScript builds do not catch JSON-shape mismatches. |
-| P1 | Reuse one RAG/search service across CLI, API, desktop, and MCP | Avoids behavior drift and repeated prompt/parse logic. | RAG logic exists in multiple places. |
+| P0 | Share or generate API TypeScript types from one contract source | Each client still hand-maintains its own request/response types, which is how the `/projects` drift happened. | Web, extension, and mobile each redeclare API shapes. |
+| P1 | Reuse one RAG/search service across CLI, API, desktop, and MCP | Avoids behavior drift and repeated prompt/parse logic. | API and core now use `internal/rag.Pipeline`; CLI still has duplicate search/prompt/parse flow. |
 | P1 | Auto-index or clearly queue indexing after writes | Created notes/captures should become searchable without confusing manual steps. | API/MCP write files separately from indexing. |
 | P1 | Expose vector/hybrid search consistently | The core has vector capabilities, but clients mostly expose plain FTS. | `index --embed` and search vector helpers exist. |
 | P1 | Generate or share API TypeScript types | Reduces cross-app drift and duplicated hand-written contracts. | Each client owns its API assumptions. |
@@ -29,12 +32,11 @@ Target: 1-3 focused days.
 
 Deliverables:
 
-- Decide and document stable JSON shapes for every local API endpoint.
-- Make `GET /projects` return the shape clients use, or update all clients and types to consume `{ projects: string[] }`.
-- Replace `POST /ask` stub with `internal/rag.Pipeline` using the configured AI provider.
-- Replace hard-coded `GET /git/status` with `internal/git.Status`.
-- Add API tests that assert the exact JSON shapes consumed by web, extension, and mobile.
-- Add a small shared API contract document under `docs/` or generate an OpenAPI file from handlers/tests.
+- Done — `GET /projects` returns the bare `string[]` shape the clients already consume.
+- Done — `POST /ask` is covered by API tests and returns the structured RAG response shape.
+- Done — hard-coded `GET /git/status` replaced with `internal/git.Status`.
+- Done — API tests assert the exact JSON shapes for `/projects`, `/ask`, and `/git/status`.
+- Remaining — add a small shared API contract document under `docs/` or generate an OpenAPI file from handlers/tests.
 
 Exit criteria:
 
@@ -117,12 +119,12 @@ Exit criteria:
 
 ## Near-Term Suggested First PR
 
-Scope the first implementation PR to contract stabilization:
+The original contract-stabilization PR is now complete:
 
-1. Fix `GET /projects` contract and all clients/tests.
-2. Wire `POST /ask` to the shared RAG pipeline.
-3. Wire `GET /git/status` to `internal/git`.
-4. Add API response-shape tests.
-5. Update docs if any endpoint shape changes.
+1. Done — `GET /projects` returns a bare `string[]` matching all clients and tests.
+2. Done — `POST /ask` is wired to the shared RAG pipeline.
+3. Done — `GET /git/status` is wired to `internal/git.Status`.
+4. Done — API response-shape tests cover `/projects`, `/ask`, and `/git/status`.
+5. Done — docs updated to reflect the endpoint shapes.
 
-This is the smallest useful improvement because it makes existing surfaces more truthful without adding a new feature surface.
+Next suggested PR: consolidate the hand-written client API types into one shared or generated contract source so future endpoint changes cannot silently drift the web, extension, and mobile clients again.

@@ -74,10 +74,11 @@ AgentVault is a local-first Markdown vault with agent-facing retrieval and multi
 
 ### Drift And Risk
 
-1. API and client contracts are not stable enough.
-   - `GET /projects` returns `{ "projects": [...] }`, while web, extension, and mobile clients type/use it as `string[]`.
-   - `POST /ask` returns a stub even though the CLI and desktop app have real RAG implementations.
-   - `GET /git/status` returns a hard-coded success payload rather than using `internal/git`.
+1. API and client contracts are now aligned for the core endpoints, with remaining type-sharing work.
+   - `GET /projects` now returns a bare `string[]`, matching the web, extension, and mobile clients and the other list endpoints (`/search`, `/recent`, `/stale`).
+   - `POST /ask` uses the core RAG pipeline and returns the structured `Answer` shape; API tests assert a real (non-stub) answer plus a `sources` array.
+   - `GET /git/status` now reports real vault state via `internal/git.Status`, including the not-a-repo case.
+   - Clients still hand-maintain their TypeScript contracts; a shared or generated type source remains the next contract-stability step.
 
 2. RAG behavior is duplicated.
    - `internal/rag.Pipeline`, `cmd/agentvault/ask.go`, desktop `AIService`, and API `/ask` do not share one implementation path.
@@ -112,14 +113,14 @@ AgentVault is a local-first Markdown vault with agent-facing retrieval and multi
 | `apps/browser-extension npm run build` | Pass | Vite production build succeeded. |
 | `apps/desktop-wails/frontend npm run build` | Pass with warning | Bundle warning: one desktop JS chunk is above 500 kB after minification. |
 | `apps/mobile-expo npx tsc --noEmit` | Pass | No TypeScript output. |
-| `core go test ./...` | Blocked locally | `zsh:1: command not found: go`. CI installs Go 1.23. |
+| `core go test ./...` | Pass | Run with the toolchain under `$HOME/.local/go`; `go vet ./...` also clean. CI installs Go 1.23. |
 
 ## Recommended Engineering Direction
 
-The next work should prioritize correctness and contract stability before adding more features. The highest-leverage path is:
+Contract stability for the core endpoints is now in place (`/projects`, `/ask`, `/git/status` match clients and have shape tests). The next highest-leverage path is:
 
-1. Make the HTTP API contract match clients and tests.
-2. Route all AI ask behavior through one core RAG service.
-3. Ensure writes become searchable predictably.
-4. Consolidate shared API types.
+1. Done — make the HTTP API contract match clients and tests for `/projects`, `/ask`, and `/git/status`.
+2. Finish routing all AI ask behavior through one core RAG service (CLI still has a duplicate flow).
+3. Ensure writes become searchable predictably (auto-index or explicit "index needed" state).
+4. Consolidate shared API types so clients stop hand-maintaining contracts.
 5. Then improve UX, packaging, and release readiness across the app surfaces.

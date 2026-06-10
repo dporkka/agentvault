@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ func setupTestVault(t *testing.T) (string, *db.DB) {
 	}
 
 	// Create a config file
-	config := fmt.Sprintf(`{"vaultPath": %q, "createdAt": %q}`, tmpDir, time.Now().UTC().Format(time.RFC3339))
+	config := fmt.Sprintf(`{"vaultPath": %q, "createdAt": %q, "ai": {"provider": "mock"}}`, tmpDir, time.Now().UTC().Format(time.RFC3339))
 	if err := os.WriteFile(filepath.Join(tmpDir, ".agentvault", "config.json"), []byte(config), 0644); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
@@ -416,14 +417,10 @@ func TestProjectsEndpoint(t *testing.T) {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
 	}
 
-	var body map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("failed to decode: %v", err)
-	}
-
-	projects, ok := body["projects"].([]interface{})
-	if !ok {
-		t.Fatalf("expected projects array, got %T", body["projects"])
+	// Clients (web, extension, mobile) consume /projects as a bare string[].
+	var projects []string
+	if err := json.NewDecoder(resp.Body).Decode(&projects); err != nil {
+		t.Fatalf("failed to decode projects array: %v", err)
 	}
 
 	found := false
@@ -465,6 +462,9 @@ func TestRecentEndpoint(t *testing.T) {
 	}
 }
 
+// TestGitStatusEndpoint covers the non-versioned vault case: the test vault is
+// not a git repo, so the endpoint must truthfully report isGitRepo=false rather
+// than the old hard-coded "clean main" payload.
 func TestGitStatusEndpoint(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
 	defer database.Close()
@@ -487,14 +487,87 @@ func TestGitStatusEndpoint(t *testing.T) {
 		t.Fatalf("failed to decode: %v", err)
 	}
 
-	if body["status"] != "ok" {
-		t.Errorf("expected status=ok, got %v", body["status"])
+	if body["isGitRepo"] != false {
+		t.Errorf("expected isGitRepo=false for a non-repo vault, got %v", body["isGitRepo"])
 	}
-	if body["branch"] != "main" {
-		t.Errorf("expected branch=main, got %v", body["branch"])
+	if _, ok := body["modifiedFiles"].([]interface{}); !ok {
+		t.Errorf("expected modifiedFiles array, got %T", body["modifiedFiles"])
 	}
-	if body["clean"] != true {
-		t.Errorf("expected clean=true, got %v", body["clean"])
+	if _, ok := body["untrackedFiles"].([]interface{}); !ok {
+		t.Errorf("expected untrackedFiles array, got %T", body["untrackedFiles"])
+	}
+}
+
+// TestGitStatusEndpoint_WithRepo verifies the endpoint reflects real git state
+// from internal/git.Status — a dirty repo with one modified file.
+func TestGitStatusEndpoint_WithRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	// Initialize a git repo in the vault and create an initial commit.
+	run := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", vaultPath}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+	}
+	run("init")
+	run("config", "user.email", "test@test.com")
+	run("config", "user.name", "Test User")
+	tracked := filepath.Join(vaultPath, "tracked.md")
+	if err := os.WriteFile(tracked, []byte("original\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	run("add", "-A")
+	run("commit", "-m", "initial")
+
+	// Modify the tracked file so the working tree is dirty.
+	if err := os.WriteFile(tracked, []byte("changed\n"), 0644); err != nil {
+		t.Fatalf("failed to modify file: %v", err)
+	}
+
+	ts := newTestServer(t, vaultPath, database)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/git/status")
+	if err != nil {
+		t.Fatalf("failed to get git status: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+
+	if body["isGitRepo"] != true {
+		t.Errorf("expected isGitRepo=true, got %v", body["isGitRepo"])
+	}
+	if body["clean"] != false {
+		t.Errorf("expected clean=false for a dirty repo, got %v", body["clean"])
+	}
+	branch, _ := body["branch"].(string)
+	if branch == "" {
+		t.Errorf("expected a non-empty branch name, got %v", body["branch"])
+	}
+	modified, ok := body["modifiedFiles"].([]interface{})
+	if !ok || len(modified) != 1 {
+		t.Fatalf("expected 1 modified file, got %v", body["modifiedFiles"])
+	}
+	first, _ := modified[0].(map[string]interface{})
+	if first["path"] != "tracked.md" {
+		t.Errorf("expected modified path tracked.md, got %v", first["path"])
+	}
+	if first["status"] != "modified" {
+		t.Errorf("expected status=modified, got %v", first["status"])
 	}
 }
 
@@ -539,5 +612,59 @@ func TestAskEndpoint(t *testing.T) {
 	answer, ok := body["answer"].(string)
 	if !ok || answer == "" {
 		t.Errorf("expected non-empty answer, got %v", body["answer"])
+	}
+
+	if strings.Contains(answer, "not yet implemented") {
+		t.Errorf("expected real RAG response, got stub answer: %q", answer)
+	}
+
+	sources, ok := body["sources"].([]interface{})
+	if !ok {
+		t.Fatalf("expected sources array, got %T", body["sources"])
+	}
+	// When sources are present, each must carry the id and path the web,
+	// extension, and mobile clients navigate by (the /note/{id} route).
+	for i, s := range sources {
+		src, ok := s.(map[string]interface{})
+		if !ok {
+			t.Fatalf("source %d is not an object: %T", i, s)
+		}
+		if id, _ := src["id"].(string); id == "" {
+			t.Errorf("source %d missing id: %v", i, src)
+		}
+		if path, _ := src["path"].(string); path == "" {
+			t.Errorf("source %d missing path: %v", i, src)
+		}
+	}
+}
+
+func TestAskEndpoint_MissingQuestion(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	srv := NewServer(vaultPath, database)
+	srv.RegisterRoutes()
+
+	var handler http.Handler = srv.mux
+	handler = srv.authMiddleware(handler)
+	handler = srv.corsMiddleware(handler)
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/ask", bytes.NewReader([]byte(`{"question":"  "}`)))
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-AgentVault-Token", srv.AuthToken())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("failed to ask: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", resp.StatusCode)
 	}
 }

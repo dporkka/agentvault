@@ -31,6 +31,7 @@ export interface Note {
 }
 
 export interface Source {
+  id: string;
   path: string;
   title: string;
   excerpt: string;

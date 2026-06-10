@@ -19,19 +19,20 @@ type Pipeline struct {
 
 // Answer is a structured, source-grounded AI response.
 type Answer struct {
-	Answer           string
-	Sources          []Source
-	Confidence       string
-	Caveats          []string
-	MissingInfo      string
-	SuggestedActions []string
+	Answer           string   `json:"answer"`
+	Sources          []Source `json:"sources"`
+	Confidence       string   `json:"confidence"`
+	Caveats          []string `json:"caveats,omitempty"`
+	MissingInfo      string   `json:"missingInfo,omitempty"`
+	SuggestedActions []string `json:"suggestedActions,omitempty"`
 }
 
 // Source represents a single source document used in the answer.
 type Source struct {
-	Path    string
-	Title   string
-	Excerpt string
+	ID      string `json:"id"`
+	Path    string `json:"path"`
+	Title   string `json:"title"`
+	Excerpt string `json:"excerpt,omitempty"`
 }
 
 // New creates a new RAG pipeline.
@@ -71,6 +72,7 @@ func (p *Pipeline) Ask(ctx context.Context, question string) (*Answer, error) {
 	sources := make([]Source, 0, len(results))
 	for _, r := range results {
 		sources = append(sources, Source{
+			ID:      r.ID,
 			Path:    r.Path,
 			Title:   r.Title,
 			Excerpt: r.Snippet,
