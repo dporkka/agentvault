@@ -3,7 +3,6 @@ package chunker
 
 import (
 	"strings"
-	"unicode/utf8"
 )
 
 // Chunk represents a text chunk with position information.
@@ -46,9 +45,10 @@ func NewWithSize(chunkSize, overlap int) *Chunker {
 }
 
 // estimateTokenCount provides a rough token count estimate.
-// Uses ~4 characters per token as a heuristic.
+// Uses ~4 bytes per token as a heuristic for English text.
+// For non-English text or code, this may be inaccurate.
 func estimateTokenCount(text string) int {
-	return utf8.RuneCountInString(text) / 4
+	return len(text) / 4
 }
 
 // Split breaks text into overlapping chunks.

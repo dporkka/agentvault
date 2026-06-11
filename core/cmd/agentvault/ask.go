@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -183,7 +182,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	}
 
 	// 12. Parse response into structured Answer
-	answer := parseAnswer(rawAnswer, sources)
+	answer := rag.ParseAnswer(rawAnswer, sources)
 
 	// 13. Always include sources
 	answer.Sources = sources
@@ -222,71 +221,6 @@ func runAsk(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
-
-// parseAnswer extracts structured information from the AI's raw response.
-// If the response doesn't follow the expected format, we use the whole thing as the answer.
-func parseAnswer(raw string, sources []rag.Source) *rag.Answer {
-	ans := &rag.Answer{
-		Answer:     raw,
-		Confidence: "medium",
-		Sources:    sources,
-	}
-
-	// Try to extract confidence level
-	lower := strings.ToLower(raw)
-	if strings.Contains(lower, "confidence: high") || strings.Contains(lower, "**confidence: high**") {
-		ans.Confidence = "high"
-	} else if strings.Contains(lower, "confidence: low") || strings.Contains(lower, "**confidence: low**") {
-		ans.Confidence = "low"
-	}
-
-	// Try to extract caveats
-	if idx := strings.Index(lower, "caveats:"); idx >= 0 {
-		caveatSection := raw[idx:]
-		// Extract bullet points after caveats
-		lines := strings.Split(caveatSection, "\n")
-		for _, line := range lines[1:] {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "*") {
-				ans.Caveats = append(ans.Caveats, strings.TrimPrefix(strings.TrimPrefix(line, "-"), "*"))
-			} else if strings.Contains(line, ":") {
-				// Still in caveats section
-				continue
-			} else {
-				break
-			}
-		}
-	}
-
-	// Try to extract suggested actions
-	if idx := strings.Index(lower, "suggested next actions"); idx >= 0 {
-		actionSection := raw[idx:]
-		lines := strings.Split(actionSection, "\n")
-		for _, line := range lines[1:] {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			if listMarkerRe.MatchString(line) {
-				action := strings.TrimSpace(listMarkerRe.ReplaceAllString(line, ""))
-				ans.SuggestedActions = append(ans.SuggestedActions, action)
-			} else if strings.Contains(line, ":") && len(ans.SuggestedActions) == 0 {
-				continue
-			} else {
-				break
-			}
-		}
-	}
-
-	return ans
-}
-
-// listMarkerRe matches a leading list marker: a bullet ("-" or "*") or a
-// number followed by a dot (e.g. "1.", "12."), with trailing whitespace.
-var listMarkerRe = regexp.MustCompile(`^(?:[-*]|\d+\.)\s*`)
 
 func printAnswer(answer *rag.Answer) {
 	fmt.Println()

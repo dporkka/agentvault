@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -206,6 +207,29 @@ func (s *Server) handleCreateNote(args map[string]interface{}) (string, error) {
 	return s.createNote(noteType, title, project, tags)
 }
 
+// folderForType returns the full vault path for a given note type and project.
+func folderForType(noteType, project, vaultPath string) string {
+	m := map[string]string{
+		"note":     "10-notes",
+		"decision": "30-decisions",
+		"task":     "10-notes",
+		"meeting":  "20-projects",
+		"source":   "40-research",
+		"capture":  "00-inbox",
+	}
+	folder, ok := m[noteType]
+	if !ok {
+		folder = "10-notes"
+	}
+	if noteType == "meeting" && project != "" {
+		return filepath.Join(vaultPath, "20-projects", project)
+	}
+	if noteType == "decision" && project != "" {
+		return filepath.Join(vaultPath, "30-decisions")
+	}
+	return filepath.Join(vaultPath, folder)
+}
+
 // createNote is the shared implementation for creating notes.
 func (s *Server) createNote(noteType, title, project string, tags []string) (string, error) {
 	// Validate type
@@ -221,7 +245,7 @@ func (s *Server) createNote(noteType, title, project string, tags []string) (str
 	}
 
 	id := templates.GenerateID(noteType)
-	folder := folderForType(noteType, project, s.vaultPath)
+	folder := templates.FolderPathForType(noteType, project, s.vaultPath)
 
 	if err := os.MkdirAll(folder, 0755); err != nil {
 		return "", fmt.Errorf("create folder: %w", err)
@@ -382,13 +406,15 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 
 	// Also insert into captures table
 	tagsJSON, _ := json.Marshal(tags)
-	s.db.Exec(
+	if _, err := s.db.Exec(
 		`INSERT INTO captures (id, capture_type, title, source_url, project, tags_json, raw_payload_json, created_at)
 		 VALUES (?, 'capture', ?, ?, ?, ?, ?, ?)`,
 		id, title, sourceURL, project, string(tagsJSON),
 		fmt.Sprintf(`{"title":%q,"text":%q}`, title, text),
 		now,
-	)
+	); err != nil {
+		log.Printf("[MCP] failed to insert capture: %v", err)
+	}
 
 	relPath, _ := filepath.Rel(s.vaultPath, outPath)
 	return fmt.Sprintf("Captured to inbox: `%s`\n- **ID:** %s\n- **Path:** %s", relPath, id, relPath), nil
@@ -651,38 +677,14 @@ func (s *Server) handleLogAgentRun(args map[string]interface{}) (string, error) 
 		id, agentName, task, len(filesChanged)), nil
 }
 
-// --- Helper functions ---
-
-// folderForType determines the output folder based on note type and project.
-func folderForType(noteType, project, vaultPath string) string {
-	switch noteType {
-	case "note":
-		return filepath.Join(vaultPath, "10-notes")
-	case "decision":
-		return filepath.Join(vaultPath, "30-decisions")
-	case "task":
-		return filepath.Join(vaultPath, "10-notes")
-	case "meeting":
-		if project != "" {
-			return filepath.Join(vaultPath, "20-projects", project)
-		}
-		return filepath.Join(vaultPath, "10-notes")
-	case "source":
-		return filepath.Join(vaultPath, "40-research")
-	case "capture":
-		return filepath.Join(vaultPath, "00-inbox")
-	default:
-		return filepath.Join(vaultPath, "10-notes")
-	}
-}
-
 // sanitizeFilename creates a safe filename from a title.
+// Preserves Unicode letters and digits, replacing unsafe characters with hyphens.
 func sanitizeFilename(title string) string {
 	safe := strings.ToLower(title)
 	safe = strings.ReplaceAll(safe, " ", "-")
 	var result strings.Builder
 	for _, r := range safe {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || (r >= 0x80) {
 			result.WriteRune(r)
 		}
 	}
@@ -697,10 +699,14 @@ func sanitizeFilename(title string) string {
 	return safe
 }
 
-// stripHTMLTags removes HTML tags from a string.
+// stripHTMLTags removes HTML tags from a string for display purposes.
+// Note: This is a naive implementation for display-only use. It does not
+// handle HTML entities, comments, CDATA, or malformed HTML correctly.
+// For security-sensitive contexts, use golang.org/x/net/html instead.
 func stripHTMLTags(s string) string {
 	var result strings.Builder
 	inTag := false
+	inEntity := false
 	for _, c := range s {
 		if c == '<' {
 			inTag = true
@@ -710,7 +716,15 @@ func stripHTMLTags(s string) string {
 			inTag = false
 			continue
 		}
-		if !inTag {
+		if c == '&' {
+			inEntity = true
+			continue
+		}
+		if c == ';' && inEntity {
+			inEntity = false
+			continue
+		}
+		if !inTag && !inEntity {
 			result.WriteRune(c)
 		}
 	}
@@ -721,9 +735,11 @@ func stripHTMLTags(s string) string {
 func (s *Server) logWrite(operation, path string) {
 	// Best-effort logging - don't fail if this doesn't work
 	id := fmt.Sprintf("write_%d", time.Now().Unix())
-	s.db.Exec(
+	if _, err := s.db.Exec(
 		`INSERT INTO agent_runs (id, agent_name, task, files_changed_json, created_at)
 		 VALUES (?, 'agentvault_mcp', ?, ?, ?)`,
 		id, operation, fmt.Sprintf(`["%s"]`, path), currentTimestamp(),
-	)
+	); err != nil {
+		log.Printf("[MCP] failed to log write: %v", err)
+	}
 }

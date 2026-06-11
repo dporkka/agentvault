@@ -7,11 +7,13 @@ import (
 	"strings"
 
 	"github.com/agentvault/core/internal/db"
+	"github.com/agentvault/core/internal/embeddings"
 )
 
 // Searcher performs searches against the vault database.
 type Searcher struct {
-	db *db.DB
+	db         *db.DB
+	embedClient *embeddings.Client
 }
 
 // Query defines search parameters.
@@ -42,6 +44,11 @@ type Result struct {
 // New creates a new Searcher.
 func New(database *db.DB) *Searcher {
 	return &Searcher{db: database}
+}
+
+// SetEmbedClient sets the embedding client for vector search.
+func (s *Searcher) SetEmbedClient(client *embeddings.Client) {
+	s.embedClient = client
 }
 
 // Search performs a full-text search with optional filters.

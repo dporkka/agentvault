@@ -256,7 +256,7 @@ func TestParseAnswer(t *testing.T) {
 
 	t.Run("high confidence", func(t *testing.T) {
 		raw := "Answer here.\n\nConfidence: high"
-		ans := parseAnswer(raw, sources)
+		ans := ParseAnswer(raw, sources)
 		if ans.Confidence != "high" {
 			t.Errorf("expected high confidence, got %s", ans.Confidence)
 		}
@@ -264,7 +264,7 @@ func TestParseAnswer(t *testing.T) {
 
 	t.Run("low confidence", func(t *testing.T) {
 		raw := "Answer here.\n\nConfidence: low"
-		ans := parseAnswer(raw, sources)
+		ans := ParseAnswer(raw, sources)
 		if ans.Confidence != "low" {
 			t.Errorf("expected low confidence, got %s", ans.Confidence)
 		}
@@ -272,7 +272,7 @@ func TestParseAnswer(t *testing.T) {
 
 	t.Run("medium confidence (default)", func(t *testing.T) {
 		raw := "Answer here."
-		ans := parseAnswer(raw, sources)
+		ans := ParseAnswer(raw, sources)
 		if ans.Confidence != "medium" {
 			t.Errorf("expected medium confidence, got %s", ans.Confidence)
 		}
@@ -280,7 +280,7 @@ func TestParseAnswer(t *testing.T) {
 
 	t.Run("sources always preserved", func(t *testing.T) {
 		raw := "Just a simple answer."
-		ans := parseAnswer(raw, sources)
+		ans := ParseAnswer(raw, sources)
 		if len(ans.Sources) != 1 {
 			t.Errorf("expected 1 source, got %d", len(ans.Sources))
 		}

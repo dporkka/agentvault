@@ -462,6 +462,52 @@ func TestRecentEndpoint(t *testing.T) {
 	}
 }
 
+// TestStaleEndpoint proves the /stale response shape: a JSON array of results
+// carrying the same (currently PascalCase) fields as /search and /recent. The
+// seeded note's `updated` date is in 2024, so it is stale under the 30-day
+// default and must appear.
+func TestStaleEndpoint(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	ts := newTestServer(t, vaultPath, database)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/stale")
+	if err != nil {
+		t.Fatalf("failed to get stale: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var results []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+		t.Fatalf("failed to decode stale array: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Fatal("expected at least one stale note")
+	}
+
+	// Same shape as /search and /recent (exported/PascalCase keys today).
+	found := false
+	for _, r := range results {
+		if r["ID"] == "note_2024_01_15_123" {
+			found = true
+			if title, _ := r["Title"].(string); title != "Test Note" {
+				t.Errorf("expected Title='Test Note', got %v", r["Title"])
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected seeded note in stale results, got: %v", results)
+	}
+}
+
 // TestGitStatusEndpoint covers the non-versioned vault case: the test vault is
 // not a git repo, so the endpoint must truthfully report isGitRepo=false rather
 // than the old hard-coded "clean main" payload.

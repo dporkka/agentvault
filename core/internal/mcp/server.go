@@ -30,6 +30,7 @@ type Server struct {
 	searcher  *search.Searcher
 	indexer   *indexer.Indexer
 	tools     map[string]Tool
+	authToken string
 }
 
 // Tool represents an MCP tool.
@@ -103,6 +104,11 @@ func (s *Server) RegisterTools() {
 	s.registerListRecent()
 	s.registerGitStatus()
 	s.registerLogAgentRun()
+}
+
+// SetAuthToken sets the auth token for HTTP requests.
+func (s *Server) SetAuthToken(token string) {
+	s.authToken = token
 }
 
 // Handle processes a single JSON-RPC request and returns a response.
@@ -219,6 +225,9 @@ func (s *Server) handleToolsCall(req JSONRPCRequest) JSONRPCResponse {
 
 // ServeStdio runs the MCP server over stdin/stdout.
 func (s *Server) ServeStdio() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	fmt.Fprintln(os.Stderr, "AgentVault MCP server started (stdio)")
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
@@ -234,7 +243,7 @@ func (s *Server) ServeStdio() {
 			continue
 		}
 
-		resp := s.Handle(context.Background(), req)
+		resp := s.Handle(ctx, req)
 		writeResponse(resp)
 	}
 
@@ -248,6 +257,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
+	}
+
+	// Check auth token if set
+	if s.authToken != "" {
+		token := r.Header.Get("X-AgentVault-Token")
+		if token == "" {
+			token = r.Header.Get("Authorization")
+			if strings.HasPrefix(token, "Bearer ") {
+				token = strings.TrimPrefix(token, "Bearer ")
+			}
+		}
+		if token != s.authToken {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 	}
 
 	body, err := io.ReadAll(r.Body)

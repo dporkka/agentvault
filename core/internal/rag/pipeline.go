@@ -4,12 +4,15 @@ package rag
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/agentvault/core/internal/ai"
 	"github.com/agentvault/core/internal/search"
 )
+
+var listMarkerRe = regexp.MustCompile(`^(?:[-*]|\d+\.)\s*`)
 
 // Pipeline orchestrates search + AI generation for source-grounded answers.
 type Pipeline struct {
@@ -92,7 +95,7 @@ func (p *Pipeline) Ask(ctx context.Context, question string) (*Answer, error) {
 	}
 
 	// 6. Parse response into structured Answer
-	answer := parseAnswer(rawAnswer, sources)
+	answer := ParseAnswer(rawAnswer, sources)
 
 	// 7. Always include sources
 	answer.Sources = sources
@@ -100,9 +103,9 @@ func (p *Pipeline) Ask(ctx context.Context, question string) (*Answer, error) {
 	return answer, nil
 }
 
-// parseAnswer extracts structured information from the AI's raw response.
+// ParseAnswer extracts structured information from the AI's raw response.
 // If the response doesn't follow the expected format, we use the whole thing as the answer.
-func parseAnswer(raw string, sources []Source) *Answer {
+func ParseAnswer(raw string, sources []Source) *Answer {
 	ans := &Answer{
 		Answer:     raw,
 		Confidence: "medium",
@@ -147,9 +150,9 @@ func parseAnswer(raw string, sources []Source) *Answer {
 			if line == "" {
 				continue
 			}
-			if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "*") || strings.HasPrefix(line, "1.") || strings.HasPrefix(line, "2.") || strings.HasPrefix(line, "3.") {
-				ans.SuggestedActions = append(ans.SuggestedActions, strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(line, "-"), "*"), "1.")))
-				ans.SuggestedActions[len(ans.SuggestedActions)-1] = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(ans.SuggestedActions[len(ans.SuggestedActions)-1], "2."), "3."))
+			if listMarkerRe.MatchString(line) {
+				action := strings.TrimSpace(listMarkerRe.ReplaceAllString(line, ""))
+				ans.SuggestedActions = append(ans.SuggestedActions, action)
 			} else if strings.Contains(line, ":") && len(ans.SuggestedActions) == 0 {
 				continue
 			} else {

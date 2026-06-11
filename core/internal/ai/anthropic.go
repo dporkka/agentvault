@@ -1,27 +1,23 @@
 package ai
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 )
 
 // AnthropicProvider implements AIProvider for Anthropic's Claude API.
 type AnthropicProvider struct {
-	apiKey string
+	client *httpClient
 	model  string
-	client *http.Client
 }
 
 // anthropicMessageRequest is the request body for Anthropic's /v1/messages endpoint.
 type anthropicMessageRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	MaxTokens int      `json:"max_tokens"`
+	Model     string    `json:"model"`
+	Messages  []Message `json:"messages"`
+	MaxTokens int       `json:"max_tokens"`
 }
 
 // anthropicMessageResponse is the response body from Anthropic's /v1/messages endpoint.
@@ -52,10 +48,12 @@ func NewAnthropicProvider(apiKey, model string) *AnthropicProvider {
 	if model == "" {
 		model = "claude-3-5-sonnet-20241022"
 	}
+	client := newHTTPClient("https://api.anthropic.com/v1", apiKey, 0)
+	client.SetHeader("x-api-key", apiKey)
+	client.SetHeader("anthropic-version", "2023-06-01")
 	return &AnthropicProvider{
-		apiKey: apiKey,
+		client: client,
 		model:  model,
-		client: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -66,7 +64,7 @@ func (a *AnthropicProvider) Name() string {
 
 // Chat sends messages to Anthropic's API and returns the assistant's response.
 func (a *AnthropicProvider) Chat(ctx context.Context, messages []Message) (string, error) {
-	if a.apiKey == "" {
+	if a.client.apiKey == "" {
 		return "", fmt.Errorf("Anthropic API key not configured: set it in .agentvault/config.json or via the AGENTVAULT_API_KEY environment variable. Get a key at https://console.anthropic.com")
 	}
 
@@ -76,42 +74,9 @@ func (a *AnthropicProvider) Chat(ctx context.Context, messages []Message) (strin
 		MaxTokens: 4096,
 	}
 
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal chat request: %w", err)
-	}
-
-	url := "https://api.anthropic.com/v1/messages"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create chat request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", a.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to connect to Anthropic API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		var errResp anthropicMessageResponse
-		if json.Unmarshal(body, &errResp) == nil && errResp.Error != nil {
-			return "", fmt.Errorf("Anthropic API error (%d): %s", resp.StatusCode, errResp.Error.Message)
-		}
-		return "", fmt.Errorf("Anthropic API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var msgResp anthropicMessageResponse
-	if err := json.Unmarshal(body, &msgResp); err != nil {
-		return "", fmt.Errorf("failed to decode Anthropic response: %w", err)
+	if err := a.client.DoJSON(ctx, http.MethodPost, "/messages", reqBody, &msgResp); err != nil {
+		return "", err
 	}
 
 	if len(msgResp.Content) == 0 {
@@ -133,32 +98,22 @@ func (a *AnthropicProvider) Chat(ctx context.Context, messages []Message) (strin
 	return result, nil
 }
 
-// HealthCheck verifies the Anthropic API is reachable by calling /v1/models.
+// HealthCheck verifies the Anthropic API is reachable.
 func (a *AnthropicProvider) HealthCheck(ctx context.Context) error {
-	if a.apiKey == "" {
+	if a.client.apiKey == "" {
 		return fmt.Errorf("Anthropic API key not configured: set it in .agentvault/config.json or via the AGENTVAULT_API_KEY environment variable. Get a key at https://console.anthropic.com")
 	}
-
+	// Anthropic doesn't have a /models endpoint, so verify connectivity directly
 	healthClient := &http.Client{Timeout: 5 * time.Second}
-
-	url := "https://api.anthropic.com/v1/models"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.anthropic.com", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create health check request: %w", err)
 	}
-	req.Header.Set("x-api-key", a.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-
 	resp, err := healthClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("Anthropic API not reachable: %w", err)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Anthropic API health check returned status %d: %s", resp.StatusCode, string(body))
-	}
-
+	// Any response means the API is reachable
 	return nil
 }

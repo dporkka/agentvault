@@ -1,22 +1,16 @@
 package ai
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"time"
 )
 
 // OpenAIProvider implements AIProvider for OpenAI-compatible APIs.
 // Works with OpenAI, Groq, Together, and any other OpenAI-compatible endpoint.
 type OpenAIProvider struct {
-	baseURL string
-	apiKey  string
-	model   string
-	client  *http.Client
+	client *httpClient
+	model  string
 }
 
 // openAIChatRequest is the request body for OpenAI's /v1/chat/completions endpoint.
@@ -55,10 +49,8 @@ func NewOpenAIProvider(baseURL, apiKey, model string) *OpenAIProvider {
 		model = "gpt-4o-mini"
 	}
 	return &OpenAIProvider{
-		baseURL: baseURL,
-		apiKey:  apiKey,
-		model:   model,
-		client:  &http.Client{Timeout: 30 * time.Second},
+		client: newHTTPClient(baseURL, apiKey, 0),
+		model:  model,
 	}
 }
 
@@ -69,7 +61,7 @@ func (o *OpenAIProvider) Name() string {
 
 // Chat sends messages to an OpenAI-compatible API and returns the assistant's response.
 func (o *OpenAIProvider) Chat(ctx context.Context, messages []Message) (string, error) {
-	if o.apiKey == "" {
+	if o.client.apiKey == "" {
 		return "", fmt.Errorf("OpenAI API key not configured: set it in .agentvault/config.json or via the AGENTVAULT_API_KEY environment variable")
 	}
 
@@ -79,42 +71,9 @@ func (o *OpenAIProvider) Chat(ctx context.Context, messages []Message) (string, 
 		Temperature: 0.7,
 	}
 
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal chat request: %w", err)
-	}
-
-	url := o.baseURL + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create chat request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+o.apiKey)
-
-	resp, err := o.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to connect to OpenAI API at %s: %w", o.baseURL, err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		// Try to extract error message from response
-		var errResp openAIChatResponse
-		if json.Unmarshal(body, &errResp) == nil && errResp.Error != nil {
-			return "", fmt.Errorf("OpenAI API error (%d): %s", resp.StatusCode, errResp.Error.Message)
-		}
-		return "", fmt.Errorf("OpenAI API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var chatResp openAIChatResponse
-	if err := json.Unmarshal(body, &chatResp); err != nil {
-		return "", fmt.Errorf("failed to decode OpenAI response: %w", err)
+	if err := o.client.DoJSON(ctx, http.MethodPost, "/chat/completions", reqBody, &chatResp); err != nil {
+		return "", err
 	}
 
 	if len(chatResp.Choices) == 0 {
@@ -126,29 +85,8 @@ func (o *OpenAIProvider) Chat(ctx context.Context, messages []Message) (string, 
 
 // HealthCheck verifies the OpenAI API is reachable by calling /v1/models.
 func (o *OpenAIProvider) HealthCheck(ctx context.Context) error {
-	if o.apiKey == "" {
+	if o.client.apiKey == "" {
 		return fmt.Errorf("OpenAI API key not configured: set it in .agentvault/config.json or via the AGENTVAULT_API_KEY environment variable")
 	}
-
-	healthClient := &http.Client{Timeout: 5 * time.Second}
-
-	url := o.baseURL + "/models"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create health check request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+o.apiKey)
-
-	resp, err := healthClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("OpenAI API not reachable at %s: %w", o.baseURL, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("OpenAI API health check returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return o.client.DoHealthCheck(ctx, "/models")
 }

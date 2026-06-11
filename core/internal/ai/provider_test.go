@@ -494,16 +494,16 @@ func TestOllamaProvider_Name(t *testing.T) {
 
 func TestNewOllamaProvider_Defaults(t *testing.T) {
 	p := NewOllamaProvider("", "")
-	if p.baseURL != "http://localhost:11434" {
-		t.Errorf("baseURL = %q, want %q", p.baseURL, "http://localhost:11434")
+	if p.client.baseURL != "http://localhost:11434" {
+		t.Errorf("baseURL = %q, want %q", p.client.baseURL, "http://localhost:11434")
 	}
 	if p.chatModel != "llama3.1" {
 		t.Errorf("chatModel = %q, want %q", p.chatModel, "llama3.1")
 	}
 
 	p2 := NewOllamaProvider("http://custom:11434", "mistral")
-	if p2.baseURL != "http://custom:11434" {
-		t.Errorf("baseURL = %q, want %q", p2.baseURL, "http://custom:11434")
+	if p2.client.baseURL != "http://custom:11434" {
+		t.Errorf("baseURL = %q, want %q", p2.client.baseURL, "http://custom:11434")
 	}
 	if p2.chatModel != "mistral" {
 		t.Errorf("chatModel = %q, want %q", p2.chatModel, "mistral")
@@ -601,7 +601,7 @@ func TestOpenAIProvider_Chat(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
-		if err.Error() != "OpenAI API error (401): Invalid API key" {
+		if err.Error() != "API error (401): Invalid API key" {
 			t.Errorf("unexpected error message: %v", err)
 		}
 	})
@@ -713,8 +713,8 @@ func TestOpenAIProvider_Name(t *testing.T) {
 
 func TestNewOpenAIProvider_Defaults(t *testing.T) {
 	p := NewOpenAIProvider("", "", "")
-	if p.baseURL != "https://api.openai.com/v1" {
-		t.Errorf("baseURL = %q, want %q", p.baseURL, "https://api.openai.com/v1")
+	if p.client.baseURL != "https://api.openai.com/v1" {
+		t.Errorf("baseURL = %q, want %q", p.client.baseURL, "https://api.openai.com/v1")
 	}
 	if p.model != "gpt-4o-mini" {
 		t.Errorf("model = %q, want %q", p.model, "gpt-4o-mini")

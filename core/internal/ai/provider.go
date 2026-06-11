@@ -15,3 +15,12 @@ type AIProvider interface {
 	Chat(ctx context.Context, messages []Message) (string, error)
 	HealthCheck(ctx context.Context) error
 }
+
+// StreamCallback is called for each chunk of a streaming response.
+type StreamCallback func(chunk string) error
+
+// AIStreamProvider extends AIProvider with streaming support.
+type AIStreamProvider interface {
+	AIProvider
+	ChatStream(ctx context.Context, messages []Message, callback StreamCallback) error
+}

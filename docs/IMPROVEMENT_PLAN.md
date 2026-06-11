@@ -1,6 +1,6 @@
 # AgentVault Improvement Plan
 
-Last updated: 2026-06-09
+Last updated: 2026-06-10
 
 ## Goal
 
@@ -11,6 +11,7 @@ Make AgentVault dependable as a local-first knowledge app across CLI, desktop, w
 - `POST /ask` is wired to `internal/rag.Pipeline` with the configured AI provider and returns the structured `Answer` shape (JSON-tagged); API tests assert a real answer plus a `sources` array and reject the old stub.
 - `GET /projects` now returns a bare JSON `string[]`, matching the web, extension, and mobile clients and the other list endpoints; the API test asserts the array shape.
 - `GET /git/status` now reports real vault state via `internal/git.Status` (branch, clean flag, ahead/behind, modified and untracked files), including a truthful `isGitRepo: false` for non-versioned vaults; API tests cover both the repo and non-repo paths.
+- The full HTTP API surface is documented in [API_CONTRACT.md](API_CONTRACT.md) — every route's auth, request, and exact response shape, plus the remaining client casing drift to resolve in the type-sharing PR. A `/stale` shape test was added so every endpoint named in the Phase 0 exit criteria now has a shape assertion.
 
 ## Priority Backlog
 
@@ -35,8 +36,8 @@ Deliverables:
 - Done — `GET /projects` returns the bare `string[]` shape the clients already consume.
 - Done — `POST /ask` is covered by API tests and returns the structured RAG response shape.
 - Done — hard-coded `GET /git/status` replaced with `internal/git.Status`.
-- Done — API tests assert the exact JSON shapes for `/projects`, `/ask`, and `/git/status`.
-- Remaining — add a small shared API contract document under `docs/` or generate an OpenAPI file from handlers/tests.
+- Done — API tests assert the exact JSON shapes for `/projects`, `/ask`, `/git/status`, and `/stale`.
+- Done — added a shared API contract document at [API_CONTRACT.md](API_CONTRACT.md), derived from handlers, middleware, and tests.
 
 Exit criteria:
 
@@ -119,12 +120,12 @@ Exit criteria:
 
 ## Near-Term Suggested First PR
 
-The original contract-stabilization PR is now complete:
+The original contract-stabilization PR (Phase 0) is now complete:
 
 1. Done — `GET /projects` returns a bare `string[]` matching all clients and tests.
 2. Done — `POST /ask` is wired to the shared RAG pipeline.
 3. Done — `GET /git/status` is wired to `internal/git.Status`.
-4. Done — API response-shape tests cover `/projects`, `/ask`, and `/git/status`.
-5. Done — docs updated to reflect the endpoint shapes.
+4. Done — API response-shape tests cover `/projects`, `/ask`, `/git/status`, and `/stale`.
+5. Done — docs updated to reflect the endpoint shapes, including the full [API_CONTRACT.md](API_CONTRACT.md).
 
-Next suggested PR: consolidate the hand-written client API types into one shared or generated contract source so future endpoint changes cannot silently drift the web, extension, and mobile clients again.
+Next suggested PR: consolidate the hand-written client API types into one shared or generated contract source so future endpoint changes cannot silently drift the web, extension, and mobile clients again. [API_CONTRACT.md](API_CONTRACT.md) already specifies the exact targets — start with the three drifts in its "Known contract drift" section: camelCase `json` tags on `search.Result` (affects `/search`, `/recent`, `/stale`), the `/vault/status` `indexedAt` vs `version` field name, and camelCasing `IndexResult`.
