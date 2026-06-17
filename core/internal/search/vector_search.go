@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -174,6 +175,14 @@ func (s *Searcher) HybridSearch(ctx context.Context, vq VectorQuery) ([]Result, 
 		return nil, fmt.Errorf("both FTS and vector search failed: fts=%v, vector=%v", fts.err, vec.err)
 	}
 
+	// Log partial failures
+	if fts.err != nil {
+		log.Printf("[HybridSearch] FTS search failed: %v", fts.err)
+	}
+	if vec.err != nil {
+		log.Printf("[HybridSearch] Vector search failed: %v", vec.err)
+	}
+
 	// Combine results using the hybrid weight
 	return s.combineResults(fts.results, vec.results, vq.HybridWeight, vq.Limit)
 }
@@ -274,11 +283,13 @@ func (s *Searcher) loadChunkEmbeddings() ([]chunkEmbedding, error) {
 		var embeddingJSON string
 		err := rows.Scan(&ce.chunkID, &ce.noteID, &ce.text, &embeddingJSON)
 		if err != nil {
+			log.Printf("[vector_search] failed to scan chunk row: %v", err)
 			continue // Skip malformed rows
 		}
 
 		var embedding []float32
 		if err := json.Unmarshal([]byte(embeddingJSON), &embedding); err != nil {
+			log.Printf("[vector_search] failed to parse embedding JSON for chunk %s: %v", ce.chunkID, err)
 			continue // Skip rows with invalid JSON
 		}
 		if len(embedding) == 0 {
@@ -292,12 +303,13 @@ func (s *Searcher) loadChunkEmbeddings() ([]chunkEmbedding, error) {
 	return chunks, rows.Err()
 }
 
-// loadEmbedClient creates an embedding client from config.
-// Returns error if no AI config is available.
+// loadEmbedClient returns the configured embedding client.
+// Returns error if no embedding client has been set.
 func (s *Searcher) loadEmbedClient() (*embeddings.Client, error) {
-	// Try to load config from the database or use defaults
-	// Since we don't have direct access to vault path, try common defaults
-	return embeddings.NewClient("http://localhost:11434", "nomic-embed-text"), nil
+	if s.embedClient == nil {
+		return nil, fmt.Errorf("embedding client not configured")
+	}
+	return s.embedClient, nil
 }
 
 // SearchWithVector is a convenience method that performs hybrid search.

@@ -11,7 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/git"
 	"github.com/agentvault/core/internal/indexer"
+	"github.com/agentvault/core/internal/rag"
 	"github.com/agentvault/core/internal/search"
 	"github.com/agentvault/core/internal/templates"
 	"github.com/agentvault/core/internal/vault"
@@ -36,10 +38,14 @@ func (s *Server) handleVaultStatus(w http.ResponseWriter, r *http.Request) {
 	var indexedAt string
 	if isVault {
 		row := s.db.QueryRow("SELECT COUNT(*) FROM notes")
-		_ = row.Scan(&noteCount)
+		if err := row.Scan(&noteCount); err != nil {
+			noteCount = 0
+		}
 
 		row = s.db.QueryRow("SELECT MAX(indexed_at) FROM files")
-		_ = row.Scan(&indexedAt)
+		if err := row.Scan(&indexedAt); err != nil {
+			indexedAt = ""
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -56,7 +62,13 @@ func (s *Server) handleVaultIndex(w http.ResponseWriter, r *http.Request) {
 	var opts indexer.IndexOptions
 	if r.Body != nil && r.ContentLength > 0 {
 		// Parse optional JSON body for options
-		_ = readJSON(r, &opts)
+		if err := readJSON(r, &opts); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"error":  "invalid request body",
+				"detail": err.Error(),
+			})
+			return
+		}
 	}
 
 	result, err := s.indexer.Index(opts)
@@ -135,7 +147,13 @@ func (s *Server) handleNoteByPath(w http.ResponseWriter, r *http.Request) {
 
 	// Read actual file content
 	fullPath := filepath.Join(s.vaultPath, result.Path)
-	content, err := os.ReadFile(fullPath)
+	clean := filepath.Clean(fullPath)
+	vaultClean := filepath.Clean(s.vaultPath)
+	if !strings.HasPrefix(clean, vaultClean+string(filepath.Separator)) && clean != vaultClean {
+		writeJSON(w, http.StatusForbidden, map[string]interface{}{"error": "path traversal detected"})
+		return
+	}
+	content, err := os.ReadFile(clean)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "failed to read file",
@@ -206,7 +224,7 @@ func (s *Server) handleCreateNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine folder and filename
-	folder := noteTypeToFolder(req.Type)
+	folder := templates.FolderForType(req.Type)
 	if req.Project != "" {
 		folder = filepath.Join("20-projects", req.Project)
 	}
@@ -238,23 +256,6 @@ func (s *Server) handleCreateNote(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// noteTypeToFolder maps note types to default folders.
-func noteTypeToFolder(noteType string) string {
-	m := map[string]string{
-		"note":     "10-notes",
-		"decision": "30-decisions",
-		"task":     "10-notes",
-		"meeting":  "10-notes",
-		"source":   "40-research",
-		"project":  "20-projects",
-		"capture":  "00-inbox",
-	}
-	if f, ok := m[noteType]; ok {
-		return f
-	}
-	return "10-notes"
-}
-
 // ── Capture ─────────────────────────────────────────────────────────
 
 func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
@@ -278,47 +279,64 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		req.Title = "Untitled Capture"
 	}
 
+	// Find next available number using atomic file creation
+	inboxPath := filepath.Join(s.vaultPath, "00-inbox")
+	if err := os.MkdirAll(inboxPath, 0755); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "failed to create inbox directory",
+			"detail": err.Error(),
+		})
+		return
+	}
+
 	now := time.Now()
 	dateStr := now.Format("2006-01-02")
 	num := 1
 
-	// Find next available number
-	inboxPath := filepath.Join(s.vaultPath, "00-inbox")
-	_ = os.MkdirAll(inboxPath, 0755)
-	entries, _ := os.ReadDir(inboxPath)
-	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), dateStr+"_capture_") && strings.HasSuffix(entry.Name(), ".md") {
-			num++
-		}
-	}
-
-	// The count above can collide with an existing file if earlier captures
-	// were deleted (leaving gaps), so probe forward until the path is free.
 	var filename, relPath, fullPath string
 	for {
 		filename = fmt.Sprintf("%s_capture_%03d.md", dateStr, num)
 		relPath = filepath.Join("00-inbox", filename)
 		fullPath = filepath.Join(s.vaultPath, relPath)
-		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		f, err := os.OpenFile(fullPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+		if err == nil {
+			f.Close()
 			break
 		}
+		if !os.IsExist(err) {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"error":  "failed to create capture file",
+				"detail": err.Error(),
+			})
+			return
+		}
 		num++
+		if num > 999 {
+			writeJSON(w, http.StatusConflict, map[string]interface{}{
+				"error": "too many captures for today",
+			})
+			return
+		}
 	}
 
 	// Build capture content
 	var sb strings.Builder
 	sb.WriteString("---\n")
 	sb.WriteString(fmt.Sprintf("id: capture_%s_%03d\n", strings.ReplaceAll(dateStr, "-", "_"), num))
-	sb.WriteString(fmt.Sprintf("type: capture\n"))
-	sb.WriteString(fmt.Sprintf("title: %s\n", req.Title))
+	sb.WriteString("type: capture\n")
+	sb.WriteString(fmt.Sprintf("title: %q\n", req.Title))
 	if req.URL != "" {
-		sb.WriteString(fmt.Sprintf("source_url: %s\n", req.URL))
+		sb.WriteString(fmt.Sprintf("source_url: %q\n", req.URL))
 	}
 	if req.Project != "" {
-		sb.WriteString(fmt.Sprintf("project: %s\n", req.Project))
+		sb.WriteString(fmt.Sprintf("project: %q\n", req.Project))
 	}
 	if len(req.Tags) > 0 {
-		sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(req.Tags, ", ")))
+		quotedTags := make([]string, len(req.Tags))
+		for i, t := range req.Tags {
+			quotedTags[i] = fmt.Sprintf("%q", t)
+		}
+		sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(quotedTags, ", ")))
 	}
 	sb.WriteString(fmt.Sprintf("created: %s\n", now.UTC().Format(time.RFC3339)))
 	sb.WriteString("---\n\n")
@@ -344,7 +362,7 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ── Ask (AI stub) ───────────────────────────────────────────────────
+// ── Ask (source-grounded AI) ────────────────────────────────────────
 
 func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -357,11 +375,34 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	req.Question = strings.TrimSpace(req.Question)
+	if req.Question == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"error":  "missing question",
+			"detail": "question is required",
+		})
+		return
+	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"answer":  "AI integration not yet implemented. Question received: " + req.Question,
-		"sources": []string{},
-	})
+	provider, err := s.getAIProvider()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "failed to load AI provider",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	answer, err := rag.New(s.searcher, provider).Ask(r.Context(), req.Question)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]interface{}{
+			"error":  "AI provider failed",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, answer)
 }
 
 // ── Projects ────────────────────────────────────────────────────────
@@ -381,7 +422,10 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var projects []string
+	// Return a bare JSON array to match the clients (web, extension, mobile)
+	// and the other list endpoints (/search, /recent, /stale). Initialized as
+	// an empty slice so an empty result serializes to [] rather than null.
+	projects := []string{}
 	for rows.Next() {
 		var p string
 		if err := rows.Scan(&p); err != nil {
@@ -390,9 +434,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		projects = append(projects, p)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"projects": projects,
-	})
+	writeJSON(w, http.StatusOK, projects)
 }
 
 // ── Recent ──────────────────────────────────────────────────────────
@@ -438,10 +480,49 @@ func (s *Server) handleStale(w http.ResponseWriter, r *http.Request) {
 // ── Git Status ──────────────────────────────────────────────────────
 
 func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
+	// A vault that is not under version control is a normal, valid state —
+	// report it truthfully rather than erroring so clients can show it.
+	if !git.IsGitRepo(s.vaultPath) {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"isGitRepo":      false,
+			"branch":         "",
+			"clean":          true,
+			"aheadBehind":    "",
+			"modifiedFiles":  []interface{}{},
+			"untrackedFiles": []string{},
+		})
+		return
+	}
+
+	status, err := git.Status(s.vaultPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "git status failed",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	modified := make([]map[string]interface{}, 0, len(status.ModifiedFiles))
+	for _, f := range status.ModifiedFiles {
+		modified = append(modified, map[string]interface{}{
+			"path":   f.Path,
+			"status": f.Status,
+			"staged": f.Staged,
+		})
+	}
+	untracked := status.UntrackedFiles
+	if untracked == nil {
+		untracked = []string{}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status": "ok",
-		"branch": "main",
-		"clean":  true,
+		"isGitRepo":      true,
+		"branch":         status.Branch,
+		"clean":          status.IsClean,
+		"aheadBehind":    status.AheadBehind,
+		"modifiedFiles":  modified,
+		"untrackedFiles": untracked,
 	})
 }
 

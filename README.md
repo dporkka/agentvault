@@ -13,9 +13,8 @@ AgentVault is an early application with a working Go core, CLI, local HTTP API, 
 
 Important current gaps:
 
-- The CLI and desktop app have real AI/RAG paths, but the local HTTP `/ask` endpoint is still a stub.
-- The local API and frontend clients have a few contract mismatches that should be fixed before treating the web, extension, or mobile surfaces as stable.
-- Go verification could not be run in this shell because `go` is not on `PATH`; GitHub Actions is configured to run Go 1.23 tests, vet, and builds.
+- Frontend clients still hand-maintain their own API contracts; a shared/generated type source is not yet in place.
+- Go verification runs locally with a toolchain installed under `$HOME/.local/go`; GitHub Actions is configured to run Go 1.23 tests, vet, and builds.
 
 ## Features
 
@@ -130,11 +129,11 @@ The server prints an auth token at startup. `GET` endpoints are open locally; wr
 | `GET /notes/{id}` | Read a note |
 | `POST /notes` | Create a note |
 | `POST /capture` | Capture to inbox |
-| `POST /ask` | Currently returns a stub response |
-| `GET /projects` | List projects |
+| `POST /ask` | Ask a source-grounded question using the configured RAG provider |
+| `GET /projects` | List projects (returns a JSON `string[]`) |
 | `GET /recent` | Recent notes |
 | `GET /stale` | Stale notes |
-| `GET /git/status` | Currently returns a stub status |
+| `GET /git/status` | Real vault Git status from `internal/git` |
 
 ## MCP Server
 

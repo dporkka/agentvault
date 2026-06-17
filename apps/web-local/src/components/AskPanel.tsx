@@ -150,7 +150,7 @@ const AskPanel: React.FC = () => {
                     {msg.sources.map((source, i) => (
                       <button
                         key={i}
-                        onClick={() => navigate(`/note/${encodeURIComponent(source.path)}`)}
+                        onClick={() => navigate(`/note/${encodeURIComponent(source.id)}`)}
                         className="block w-full text-left text-xs text-vault-accent hover:underline truncate"
                       >
                         {source.title || source.path}

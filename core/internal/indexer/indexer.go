@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/agentvault/core/internal/chunker"
+	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/embeddings"
 	"github.com/agentvault/core/internal/markdown"
@@ -68,8 +69,8 @@ func (idx *Indexer) Index(opts IndexOptions) (*IndexResult, error) {
 	result := &IndexResult{}
 
 	if opts.Rebuild {
-		if err := idx.rebuildFTS(); err != nil {
-			return nil, fmt.Errorf("failed to rebuild indexes: %w", err)
+		if err := idx.clearFTS(); err != nil {
+			return nil, fmt.Errorf("failed to clear FTS index: %w", err)
 		}
 		if opts.Embed {
 			// Also clear chunks when rebuilding with embeddings
@@ -141,6 +142,11 @@ func (idx *Indexer) Index(opts IndexOptions) (*IndexResult, error) {
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Clean up database entries for files that no longer exist
+	if err := idx.cleanupDeletedFiles(); err != nil {
+		result.Errors = append(result.Errors, IndexError{Path: "cleanup", Error: err.Error()})
 	}
 
 	result.Duration = time.Since(start)
@@ -336,25 +342,9 @@ func (idx *Indexer) embedNote(noteID string, body string, embedCfg *EmbedConfig)
 
 // buildEmbedConfig creates an EmbedConfig by trying to load AI configuration.
 func (idx *Indexer) buildEmbedConfig() *EmbedConfig {
-	// Try to load config from vault
-	configPath := filepath.Join(idx.vaultPath, ".agentvault", "config.json")
-	data, err := os.ReadFile(configPath)
+	cfg, err := config.Load(idx.vaultPath)
 	if err != nil {
 		// No config - use defaults
-		return &EmbedConfig{
-			Enabled: true,
-			Client:  embeddings.NewClient("http://localhost:11434", "nomic-embed-text"),
-		}
-	}
-
-	// Parse config to get baseURL and model
-	var cfg struct {
-		AI *struct {
-			BaseURL        string `json:"baseUrl"`
-			EmbeddingModel string `json:"embeddingModel"`
-		} `json:"ai"`
-	}
-	if err := json.Unmarshal(data, &cfg); err != nil {
 		return &EmbedConfig{
 			Enabled: true,
 			Client:  embeddings.NewClient("http://localhost:11434", "nomic-embed-text"),
@@ -379,8 +369,36 @@ func (idx *Indexer) buildEmbedConfig() *EmbedConfig {
 	}
 }
 
-// rebuildFTS clears and rebuilds the FTS index.
-func (idx *Indexer) rebuildFTS() error {
+// cleanupDeletedFiles removes database entries for files that no longer exist in the vault.
+func (idx *Indexer) cleanupDeletedFiles() error {
+	rows, err := idx.db.Query("SELECT id, path FROM files")
+	if err != nil {
+		return fmt.Errorf("failed to query files: %w", err)
+	}
+	defer rows.Close()
+
+	var orphanedIDs []string
+	for rows.Next() {
+		var id, path string
+		if err := rows.Scan(&id, &path); err != nil {
+			continue
+		}
+		fullPath := filepath.Join(idx.vaultPath, path)
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			orphanedIDs = append(orphanedIDs, id)
+		}
+	}
+
+	for _, id := range orphanedIDs {
+		idx.db.Exec("DELETE FROM notes WHERE file_id = ?", id)
+		idx.db.Exec("DELETE FROM files WHERE id = ?", id)
+	}
+
+	return nil
+}
+
+// clearFTS clears the FTS index.
+func (idx *Indexer) clearFTS() error {
 	_, err := idx.db.Exec("DELETE FROM notes_fts")
 	return err
 }

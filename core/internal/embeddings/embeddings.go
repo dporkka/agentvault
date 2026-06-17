@@ -114,7 +114,8 @@ func (c *Client) GenerateBatch(ctx context.Context, texts []string) ([][]float32
 }
 
 // generateBatchOllama generates embeddings using Ollama's API.
-// Ollama's /api/embeddings endpoint accepts single input; we process one at a time.
+// Note: Ollama's /api/embeddings endpoint processes one input at a time.
+// TODO: Update to use batch endpoint when Ollama supports it.
 func (c *Client) generateBatchOllama(ctx context.Context, texts []string) ([][]float32, error) {
 	results := make([][]float32, 0, len(texts))
 
@@ -144,9 +145,9 @@ func (c *Client) generateBatchOllama(ctx context.Context, texts []string) ([][]f
 		if err != nil {
 			return nil, fmt.Errorf("embedding request failed: %w", err)
 		}
+		defer resp.Body.Close()
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read response body: %w", err)
 		}

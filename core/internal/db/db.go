@@ -4,8 +4,9 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"os"
+	"log"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -26,6 +27,12 @@ func Open(vaultPath string) (*DB, error) {
 	if err := conn.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
+
+	// Configure connection pool for better performance
+	conn.SetMaxOpenConns(1) // SQLite doesn't support concurrent writes
+	conn.SetMaxIdleConns(5)
+	conn.SetConnMaxLifetime(time.Hour)
+
 	return &DB{conn: conn, path: dbPath}, nil
 }
 
@@ -44,34 +51,9 @@ func (d *DB) Path() string {
 	return d.path
 }
 
-// RunMigrations executes the embedded migration SQL.
+// RunMigrations executes the inline migration SQL.
 func (d *DB) RunMigrations() error {
-	migrationPath := filepath.Join("..", "..", "migrations", "001_init.sql")
-	// Try to find migrations relative to working directory
-	if _, err := os.Stat(migrationPath); err != nil {
-		// Fallback: look in the migrations directory next to core/
-		migrationPath = "migrations/001_init.sql"
-	}
-
-	content, err := os.ReadFile(migrationPath)
-	if err != nil {
-		// Last resort: construct schema directly
-		return d.runInlineMigrations()
-	}
-
-	_, err = d.conn.Exec(string(content))
-	if err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
-	}
-
-	// Record migration
-	_, err = d.conn.Exec(
-		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, datetime('now'))`,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to record migration: %w", err)
-	}
-	return nil
+	return d.runInlineMigrations()
 }
 
 // runInlineMigrations creates the schema directly when migration files aren't found.
@@ -199,15 +181,37 @@ CREATE INDEX IF NOT EXISTS idx_captures_project ON captures(project);
 
 // Exec executes a query without returning rows.
 func (d *DB) Exec(query string, args ...interface{}) (sql.Result, error) {
-	return d.conn.Exec(query, args...)
+	start := time.Now()
+	result, err := d.conn.Exec(query, args...)
+	if dur := time.Since(start); dur > 100*time.Millisecond {
+		log.Printf("[DB] slow exec: %s (%v)", query[:min(len(query), 80)], dur)
+	}
+	return result, err
 }
 
 // Query executes a query that returns rows.
 func (d *DB) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	return d.conn.Query(query, args...)
+	start := time.Now()
+	rows, err := d.conn.Query(query, args...)
+	if dur := time.Since(start); dur > 100*time.Millisecond {
+		log.Printf("[DB] slow query: %s (%v)", query[:min(len(query), 80)], dur)
+	}
+	return rows, err
 }
 
 // QueryRow executes a query that returns a single row.
 func (d *DB) QueryRow(query string, args ...interface{}) *sql.Row {
-	return d.conn.QueryRow(query, args...)
+	start := time.Now()
+	row := d.conn.QueryRow(query, args...)
+	if dur := time.Since(start); dur > 100*time.Millisecond {
+		log.Printf("[DB] slow query row: %s (%v)", query[:min(len(query), 80)], dur)
+	}
+	return row
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

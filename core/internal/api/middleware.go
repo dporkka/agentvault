@@ -35,8 +35,7 @@ func isAllowedOrigin(origin string) bool {
 func generateAuthToken() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		// Fallback: use timestamp-based token
-		return fmt.Sprintf("%x", time.Now().UnixNano())
+		panic("crypto/rand failed: " + err.Error())
 	}
 	return hex.EncodeToString(b)
 }
@@ -127,6 +126,11 @@ func (rw *responseWriter) WriteHeader(code int) {
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[API] panic during JSON encode: %v", r)
+		}
+	}()
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		log.Printf("[API] failed to encode JSON response: %v", err)
 	}

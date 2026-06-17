@@ -286,13 +286,13 @@ func Log(vaultPath string, limit int) ([]GitCommit, error) {
 	format := "%H|%an|%ad|%s"
 	out, err := runGit(vaultPath, "log", "--pretty=format:"+format, "--date=short", fmt.Sprintf("-%d", limit))
 	if err != nil {
-		return nil, nil // empty repo or no commits
+		return []GitCommit{}, nil // empty repo or no commits
 	}
 	if out == "" {
-		return nil, nil
+		return []GitCommit{}, nil
 	}
 
-	var commits []GitCommit
+	commits := []GitCommit{}
 	lines := strings.Split(out, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)

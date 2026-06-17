@@ -160,7 +160,11 @@ func ParseFilesInDir(dir string) (map[string]*ParsedDocument, error) {
 		if err != nil {
 			return fmt.Errorf("failed to parse %s: %w", path, err)
 		}
-		results[path] = doc
+		relPath, err := filepath.Rel(dir, path)
+		if err != nil {
+			relPath = path
+		}
+		results[relPath] = doc
 		return nil
 	})
 	if err != nil {
