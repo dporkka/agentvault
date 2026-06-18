@@ -1,6 +1,6 @@
 # AgentVault Improvement Plan
 
-Last updated: 2026-06-15
+Last updated: 2026-06-17
 
 ## Goal
 
@@ -27,6 +27,27 @@ duplicate type files. Server-side, `core/internal/api/handlers.go` now uses
 the `/notes/{id}` and `/git/status` handlers, replacing the previous
 hand-written `map[string]interface{}` shapes.
 
+## Recently Completed (Phase 1)
+
+Phase 1's two highest-leverage P1 items landed alongside the contract work:
+
+- **One RAG service across all surfaces.** `agentvault ask` (CLI), `POST /ask`
+  (API), `AIService.Ask` (desktop), and `agentvault.ask` (MCP) all build
+  `rag.New(searcher, provider)` and call `pipeline.Ask`. Prompt construction and
+  answer parsing live in `internal/rag` alone — the CLI's former duplicate
+  search/prompt/parse flow is gone.
+- **Auto-index after writes.** The API `handleCreateNote`/`handleCapture` and
+  the MCP `createNote`/`handleCapture` paths kick off a non-blocking
+  `indexer.Index(IndexOptions{Path: relPath})` goroutine right after writing the
+  file, so a newly created note or capture is searchable without a manual
+  `agentvault index` step.
+- **One folder-resolution rule.** `templates.FolderRelForType` /
+  `FolderPathForType` is the single source for where a note is written; the
+  CLI, HTTP API, MCP server, and desktop app all route through it, replacing
+  three divergent `folderForType` copies. Only meetings file under
+  `20-projects/<project>`; for every other type the project is metadata, not a
+  file location. Covered by `templates/folders_test.go`.
+
 ## Recently Completed (Phase 0)
 
 - `POST /ask` is wired to `internal/rag.Pipeline` with the configured AI provider and returns the structured `Answer` shape (JSON-tagged); API tests assert a real answer plus a `sources` array and reject the old stub.
@@ -38,8 +59,6 @@ hand-written `map[string]interface{}` shapes.
 
 | Priority | Work | Why it matters | Evidence |
 | --- | --- | --- | --- |
-| P1 | Reuse one RAG/search service across CLI, API, desktop, and MCP | Avoids behavior drift and repeated prompt/parse logic. | API and core now use `internal/rag.Pipeline`; CLI still has duplicate search/prompt/parse flow. |
-| P1 | Auto-index or clearly queue indexing after writes | Created notes/captures should become searchable without confusing manual steps. | API/MCP write files separately from indexing. |
 | P1 | Expose vector/hybrid search consistently | The core has vector capabilities, but clients mostly expose plain FTS. | `index --embed` and search vector helpers exist. |
 | P1 | Improve token onboarding for local clients | Auth exists, but user setup is manual and easy to misconfigure. | Server prints token; clients store token in local storage/settings. |
 | P2 | Reduce desktop bundle size | Improves startup and packaging. | Desktop frontend build warns about a chunk over 500 kB. |
@@ -139,11 +158,12 @@ Exit criteria:
 
 ## Near-Term Suggested First PR
 
-The original contract-stabilization PR (Phase 0) and the shared-types
-consolidation (Phase 0+) are now complete.
+The contract-stabilization PR (Phase 0), the shared-types consolidation
+(Phase 0+), and the shared RAG service + auto-index-after-writes work
+(Phase 1) are all complete and landed on `phase0-contract-stabilization`.
 
-Next suggested PR: route the remaining `rag.Pipeline` callers through
-one shared service and start working on P1 (auto-indexing after writes
-and exposing vector/hybrid search consistently). The P1 items in the
-Priority Backlog are the next steps; pick the one with the largest
-payoff (auto-indexing) for the next "Phase 1" PR.
+Next suggested PR: expose vector/hybrid search consistently across the
+API and clients (the `SearchParams`/`RecentParams`/`StaleParams` knobs in
+`packages/contract` are already defined but unused), then improve token
+onboarding for local clients. Those two P1 items in the Priority Backlog
+are the next steps; vector/hybrid exposure is the larger payoff.

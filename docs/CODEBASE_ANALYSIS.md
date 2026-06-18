@@ -1,6 +1,6 @@
 # AgentVault Codebase Analysis
 
-Last reviewed: 2026-06-01
+Last reviewed: 2026-06-17
 
 ## Evidence Reviewed
 
@@ -94,18 +94,24 @@ AgentVault is a local-first Markdown vault with agent-facing retrieval and multi
      (snake_case keys, hard-coded base URLs, or non-matching client
      type imports).
 
-2. RAG behavior is duplicated.
-   - `internal/rag.Pipeline`, `cmd/agentvault/ask.go`, desktop `AIService`, and API `/ask` do not share one implementation path.
-   - This increases the chance that CLI, desktop, and web answers diverge.
+2. RAG behavior is now consolidated.
+   - `cmd/agentvault/ask.go` (CLI), `POST /ask` (API), `AIService.Ask`
+     (desktop), and `agentvault.ask` (MCP) all build `rag.New(searcher,
+     provider)` and call `pipeline.Ask`. Prompt construction and answer
+     parsing live in `internal/rag` alone; the CLI's former duplicate
+     search/prompt/parse flow is gone.
 
 3. Search capabilities are unevenly exposed.
    - CLI ask can use hybrid search when embeddings exist.
    - API search only exposes FTS filters.
    - Web/extension/mobile clients do not expose vector/hybrid search options.
 
-4. Write operations do not consistently refresh derived state.
-   - API and MCP create/capture flows write files, but indexing is a separate step.
-   - Users can create data that is not searchable until a manual index run.
+4. Write operations now refresh derived state.
+   - The API `handleCreateNote`/`handleCapture` and the MCP
+     `createNote`/`handleCapture` paths kick off a non-blocking
+     `indexer.Index(IndexOptions{Path: relPath})` goroutine right after
+     writing the file, so a newly created note or capture is searchable
+     without a manual `agentvault index` step.
 
 5. Frontend code is shared through one contract package.
    - Web, extension, mobile, and desktop each consume
@@ -139,6 +145,7 @@ both sides of the boundary (Go: `core/internal/contract/`; TypeScript:
 
 1. Done — make the HTTP API contract match clients and tests for `/projects`, `/ask`, `/git/status`, `/notes/{id}`, and `/vault/index`.
 2. Done — share one TypeScript contract source across all clients.
-3. Finish routing all AI ask behavior through one core RAG service (CLI still has a duplicate flow).
-4. Ensure writes become searchable predictably (auto-index or explicit "index needed" state).
-5. Then improve UX, packaging, and release readiness across the app surfaces.
+3. Done — route all AI ask behavior (CLI, API, desktop, MCP) through one core RAG service (`internal/rag.Pipeline`).
+4. Done — writes become searchable predictably (API and MCP auto-index after create/capture).
+5. Consolidate note→folder resolution into `templates.FolderRelForType`/`FolderPathForType` as the single source used by CLI, API, MCP, and desktop.
+6. Then improve UX, packaging, and release readiness across the app surfaces.
