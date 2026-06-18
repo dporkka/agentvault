@@ -99,3 +99,24 @@ jobs:
         working-directory: apps/desktop-wails
         # Ubuntu ships webkit2gtk 4.1, so the webkit2_41 build tag is required.
         run: go build -tags webkit2_41 ./...
+
+  contract:
+    name: Contract (shared client types)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install contract package dependencies
+        run: |
+          cd packages/contract
+          npm install --no-save typescript@5.4.5
+      - name: Install app dependencies for type-check
+        run: |
+          (cd apps/web-local && npm ci)
+          (cd apps/browser-extension && npm ci)
+          (cd apps/mobile-expo && npm ci)
+          (cd apps/desktop-wails/frontend && npm ci)
+      - name: Run contract check
+        run: make contract-check

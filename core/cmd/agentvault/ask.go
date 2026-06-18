@@ -125,69 +125,14 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	// 7. Create searcher
 	searcher := search.New(db)
 
-	// 8. Search for relevant notes - use hybrid search if embeddings available
-	var searchResults []search.Result
-	searchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	if searcher.HasEmbeddings() {
-		// Use hybrid search (FTS + vector) for better semantic relevance
-		searchResults, err = searcher.SearchWithVector(searchCtx, question, 10)
-		if err != nil {
-			// Fall back to regular FTS search
-			searchResults, err = searcher.Search(search.Query{Q: question, Limit: 10})
-			if err != nil {
-				return fmt.Errorf("search failed: %w", err)
-			}
-		}
-	} else {
-		// Use FTS5 only
-		searchResults, err = searcher.Search(search.Query{Q: question, Limit: 10})
-		if err != nil {
-			return fmt.Errorf("search failed: %w", err)
-		}
-	}
-
-	// 9. Build sources from search results
-	sources := make([]rag.Source, 0, len(searchResults))
-	for _, r := range searchResults {
-		sources = append(sources, rag.Source{
-			Path:    r.Path,
-			Title:   r.Title,
-			Excerpt: r.Snippet,
-		})
-	}
-
-	// 10. If no sources found, return early
-	if len(sources) == 0 {
-		fmt.Println()
-		color.Yellow("I couldn't find any relevant notes in your vault that answer this question.")
-		fmt.Println()
-		fmt.Println("Suggestions:")
-		fmt.Println("  - Try rephrasing your question")
-		fmt.Println("  - Run 'agentvault index --embed' to enable semantic search")
-		fmt.Println("  - Add notes related to this topic to your vault")
-		return nil
-	}
-
-	// 11. Build prompt with sources and call AI
-	messages := rag.BuildPrompt(sources, question)
-
-	askCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	rawAnswer, err := provider.Chat(askCtx, messages)
+	// 8. Use rag.Pipeline for search + AI
+	pipeline := rag.New(searcher, provider)
+	answer, err := pipeline.Ask(context.Background(), question)
 	if err != nil {
-		return fmt.Errorf("AI provider failed: %w", err)
+		return fmt.Errorf("query failed: %w", err)
 	}
 
-	// 12. Parse response into structured Answer
-	answer := rag.ParseAnswer(rawAnswer, sources)
-
-	// 13. Always include sources
-	answer.Sources = sources
-
-	// 14. Print formatted answer
+	// 9. Print formatted answer
 	printAnswer(answer)
 
 	// 11. Optionally commit vault changes

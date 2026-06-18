@@ -1,10 +1,31 @@
 # AgentVault Improvement Plan
 
-Last updated: 2026-06-10
+Last updated: 2026-06-15
 
 ## Goal
 
 Make AgentVault dependable as a local-first knowledge app across CLI, desktop, web, extension, mobile, and agent clients. The immediate focus should be correctness and contract stability, then UX completeness, then release readiness.
+
+## Recently Completed (Phase 0+)
+
+Phase 0+ was the "consolidate shared client types" PR. It introduces a single
+canonical contract on both sides of the boundary: `core/internal/contract/` for
+Go (imported by `core/internal/api`, `core/internal/search`, `core/internal/indexer`,
+`core/internal/rag`, and `apps/desktop-wails/app.go`) and `packages/contract/`
+for TypeScript (consumed by `apps/web-local`, `apps/browser-extension`,
+`apps/mobile-expo`, and `apps/desktop-wails/frontend` via path mappings plus
+Metro `watchFolders`). The shared types are the new `SearchResult`,
+`NoteDetail`, `IndexResult`, `IndexError`, `Answer`, `Source`, `VaultStatus`,
+`GitStatus`, and `GitModifiedFile`. The Wails desktop Go side now aliases the
+shared `VaultStatus` (using `isVault` rather than the previous `isOpen`),
+`Note` (now `content`, not `body`), and `SearchResult` (now carries `status`
+and `score`). CI enforces the contract with a new `make contract-check` job
+that runs `tsc --noEmit` on every client and greps for snake_case keys and
+hard-coded base URLs; the four web/mobile/desktop builds no longer ship
+duplicate type files. Server-side, `core/internal/api/handlers.go` now uses
+`contract.NoteDetail` and `contract.GitStatus`/`contract.GitModifiedFile` for
+the `/notes/{id}` and `/git/status` handlers, replacing the previous
+hand-written `map[string]interface{}` shapes.
 
 ## Recently Completed (Phase 0)
 
@@ -17,11 +38,9 @@ Make AgentVault dependable as a local-first knowledge app across CLI, desktop, w
 
 | Priority | Work | Why it matters | Evidence |
 | --- | --- | --- | --- |
-| P0 | Share or generate API TypeScript types from one contract source | Each client still hand-maintains its own request/response types, which is how the `/projects` drift happened. | Web, extension, and mobile each redeclare API shapes. |
 | P1 | Reuse one RAG/search service across CLI, API, desktop, and MCP | Avoids behavior drift and repeated prompt/parse logic. | API and core now use `internal/rag.Pipeline`; CLI still has duplicate search/prompt/parse flow. |
 | P1 | Auto-index or clearly queue indexing after writes | Created notes/captures should become searchable without confusing manual steps. | API/MCP write files separately from indexing. |
 | P1 | Expose vector/hybrid search consistently | The core has vector capabilities, but clients mostly expose plain FTS. | `index --embed` and search vector helpers exist. |
-| P1 | Generate or share API TypeScript types | Reduces cross-app drift and duplicated hand-written contracts. | Each client owns its API assumptions. |
 | P1 | Improve token onboarding for local clients | Auth exists, but user setup is manual and easy to misconfigure. | Server prints token; clients store token in local storage/settings. |
 | P2 | Reduce desktop bundle size | Improves startup and packaging. | Desktop frontend build warns about a chunk over 500 kB. |
 | P2 | Define release/install paths | Converts builds into usable distribution. | CI builds pieces but no release artifact flow is documented. |
@@ -120,12 +139,11 @@ Exit criteria:
 
 ## Near-Term Suggested First PR
 
-The original contract-stabilization PR (Phase 0) is now complete:
+The original contract-stabilization PR (Phase 0) and the shared-types
+consolidation (Phase 0+) are now complete.
 
-1. Done — `GET /projects` returns a bare `string[]` matching all clients and tests.
-2. Done — `POST /ask` is wired to the shared RAG pipeline.
-3. Done — `GET /git/status` is wired to `internal/git.Status`.
-4. Done — API response-shape tests cover `/projects`, `/ask`, `/git/status`, and `/stale`.
-5. Done — docs updated to reflect the endpoint shapes, including the full [API_CONTRACT.md](API_CONTRACT.md).
-
-Next suggested PR: consolidate the hand-written client API types into one shared or generated contract source so future endpoint changes cannot silently drift the web, extension, and mobile clients again. [API_CONTRACT.md](API_CONTRACT.md) already specifies the exact targets — start with the three drifts in its "Known contract drift" section: camelCase `json` tags on `search.Result` (affects `/search`, `/recent`, `/stale`), the `/vault/status` `indexedAt` vs `version` field name, and camelCasing `IndexResult`.
+Next suggested PR: route the remaining `rag.Pipeline` callers through
+one shared service and start working on P1 (auto-indexing after writes
+and exposing vector/hybrid search consistently). The P1 items in the
+Priority Backlog are the next steps; pick the one with the largest
+payoff (auto-indexing) for the next "Phase 1" PR.

@@ -1,52 +1,30 @@
-export interface VaultStatus {
-  path: string;
-  isOpen: boolean;
-  noteCount: number;
-  version: string;
-}
+// Canonical data types for the desktop frontend. Server-facing types
+// (SearchResult, Answer, Source) come from @agentvault/contract, which
+// mirrors the Go HTTP API shapes. Wails-specific shapes (VaultStatus,
+// Note, IndexingStatus) are the Go service shapes shared with the HTTP
+// contract via core/internal/contract.
 
-export interface Note {
-  id: string;
-  title: string;
-  path: string;
-  type: string;
-  project: string;
-  status: string;
-  tags: string[];
-  body: string;
-  updatedAt: string;
-}
+import type {
+  AskResponse,
+  AskSource,
+  NoteDetail,
+  SearchResult,
+  VaultStatus,
+} from '@agentvault/contract';
 
-export interface SearchResult {
-  id: string;
-  title: string;
-  path: string;
-  type: string;
-  project: string;
-  status?: string;
-  tags: string[];
-  snippet: string;
-  updatedAt: string;
-}
+export type { SearchResult, VaultStatus };
+export type Answer = AskResponse;
+export type Source = AskSource;
+
+// Wails-only types that have no HTTP equivalent. These mirror the
+// auto-generated Wails bridge types (the wails generate module output)
+// so the frontend and the Go struct stay aligned. Note is aliased
+// from the HTTP contract's NoteDetail.
+export type Note = NoteDetail;
 
 export interface IndexingStatus {
   isIndexing: boolean;
   noteCount: number;
-}
-
-export interface Answer {
-  answer: string;
-  sources: Source[];
-  confidence: string;
-  caveats: string[];
-  missingInfo: string;
-  suggestedActions: string[];
-}
-
-export interface Source {
-  path: string;
-  title: string;
-  excerpt: string;
 }
 
 export type ViewName =

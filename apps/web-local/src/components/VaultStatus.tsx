@@ -1,5 +1,5 @@
 import React from 'react';
-import type { VaultStatus as VaultStatusType } from '@/api/types';
+import type { VaultStatus as VaultStatusType } from '@agentvault/contract';
 
 interface VaultStatusProps {
   status: VaultStatusType | null;

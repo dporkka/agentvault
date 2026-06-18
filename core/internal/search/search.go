@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/embeddings"
 )
@@ -27,19 +28,10 @@ type Query struct {
 	Offset  int
 }
 
-// Result is a single search result.
-type Result struct {
-	ID        string
-	Title     string
-	Path      string
-	Type      string
-	Project   string
-	Status    string
-	Tags      []string
-	Snippet   string
-	Score     float64
-	UpdatedAt string
-}
+// Result is a single search result. It is an alias of contract.SearchResult
+// so existing call sites (and the HTTP handlers that re-export this name)
+// keep working unchanged.
+type Result = contract.SearchResult
 
 // New creates a new Searcher.
 func New(database *db.DB) *Searcher {
@@ -328,29 +320,45 @@ func (s *Searcher) loadTags(noteID string) ([]string, error) {
 }
 
 // scanResults scans multiple search results from rows.
+//
+// IMPORTANT: loadTags issues a nested query on the same DB. With
+// MaxOpenConns(1) (required for SQLite write serialization), a nested
+// query issued while the parent *sql.Rows is still being iterated would
+// deadlock — the parent holds the only connection. To avoid that, we
+// fully drain and close the parent rows first, then load tags.
 func (s *Searcher) scanResults(rows *sql.Rows) ([]Result, error) {
-	var results []Result
+	type rawResult struct {
+		r       Result
+		snippet sql.NullString
+	}
+	var raws []rawResult
 	for rows.Next() {
-		var r Result
-		var snippet sql.NullString
-		err := rows.Scan(&r.ID, &r.Title, &r.Path, &r.Type, &r.Project, &r.Status, &r.UpdatedAt, &snippet, &r.Score)
+		var raw rawResult
+		err := rows.Scan(&raw.r.ID, &raw.r.Title, &raw.r.Path, &raw.r.Type, &raw.r.Project, &raw.r.Status, &raw.r.UpdatedAt, &raw.snippet, &raw.r.Score)
 		if err != nil {
 			return nil, fmt.Errorf("scan failed: %w", err)
 		}
-		if snippet.Valid {
-			r.Snippet = snippet.String
-		}
+		raws = append(raws, raw)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
 
-		// Load tags for this result
+	results := make([]Result, 0, len(raws))
+	for _, raw := range raws {
+		r := raw.r
+		if raw.snippet.Valid {
+			r.Snippet = raw.snippet.String
+		}
 		tags, err := s.loadTags(r.ID)
 		if err != nil {
 			return nil, err
 		}
 		r.Tags = tags
-
 		results = append(results, r)
 	}
-	return results, rows.Err()
+	return results, nil
 }
 
 // scanSingle scans a single result from a row.

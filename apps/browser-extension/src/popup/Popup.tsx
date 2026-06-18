@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { checkHealth, getToken, setToken } from '@shared/api';
-import type { PageData } from '@shared/types';
+import { checkHealth, getToken, setToken, API_BASE } from '@shared/api';
+import type { PageData } from '@shared/local';
 import { StatusBar } from './components/StatusBar';
 import { ClipForm } from './components/ClipForm';
 import { SearchPanel } from './components/SearchPanel';
 import './popup.css';
 
-const API_BASE = 'http://127.0.0.1:47321';
 type Tab = 'clip' | 'search';
 
 export function Popup() {

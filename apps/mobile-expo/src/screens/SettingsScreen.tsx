@@ -9,6 +9,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { DEFAULT_BASE_URL } from '@agentvault/contract';
 import { getSettings, saveSettings, clearInbox, getUnsyncedCaptures, markAsSynced } from '../storage/localInbox';
 import { sendCapture } from '../api/agentvault';
 import { checkHealth } from '../api/agentvault';
@@ -16,7 +17,7 @@ import type { AppSettings } from '../types';
 
 export default function SettingsScreen() {
   const [settings, setSettingsState] = useState<AppSettings>({
-    serverUrl: 'http://127.0.0.1:47321',
+    serverUrl: DEFAULT_BASE_URL,
     defaultProject: '',
     token: '',
   });
@@ -100,7 +101,7 @@ export default function SettingsScreen() {
           style={styles.input}
           value={settings.serverUrl}
           onChangeText={(v) => update({ serverUrl: v })}
-          placeholder="http://127.0.0.1:47321"
+          placeholder={DEFAULT_BASE_URL}
           placeholderTextColor="#6b7280"
           autoCapitalize="none"
           keyboardType="url"

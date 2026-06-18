@@ -1,4 +1,4 @@
-import type { PageData } from '@shared/types';
+import type { PageData } from '@shared/local';
 
 interface ContextMenuInfo {
   menuItemId: string | number;

@@ -169,7 +169,7 @@ export default function AIPanel({ onClose, onOpenNote }: Props) {
                       </span>
                     </div>
 
-                    {msg.answer.caveats.length > 0 && (
+                    {msg.answer.caveats && msg.answer.caveats.length > 0 && (
                       <div className="mt-1.5 text-[10px] text-[var(--text-muted)]">
                         {msg.answer.caveats.join(', ')}
                       </div>

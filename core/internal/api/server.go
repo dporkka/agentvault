@@ -129,6 +129,9 @@ func (s *Server) RegisterRoutes() {
 	// Health check (no auth required)
 	s.mux.HandleFunc("GET /health", s.handleHealth)
 
+	// Auth verify (no auth required)
+	s.mux.HandleFunc("GET /auth/verify", s.handleAuthVerify)
+
 	// Vault status
 	s.mux.HandleFunc("GET /vault/status", s.handleVaultStatus)
 	s.mux.HandleFunc("POST /vault/index", s.handleVaultIndex)

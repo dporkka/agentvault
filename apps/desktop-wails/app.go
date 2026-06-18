@@ -10,8 +10,10 @@ import (
 
 	"github.com/agentvault/core/internal/ai"
 	"github.com/agentvault/core/internal/config"
+	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/indexer"
+	"github.com/agentvault/core/internal/rag"
 	"github.com/agentvault/core/internal/search"
 	"github.com/agentvault/core/internal/templates"
 	"github.com/agentvault/core/internal/vault"
@@ -65,13 +67,12 @@ type VaultService struct {
 	app *App
 }
 
-// VaultStatus represents the current vault state
-type VaultStatus struct {
-	Path      string `json:"path"`
-	IsOpen    bool   `json:"isOpen"`
-	NoteCount int    `json:"noteCount"`
-	Version   string `json:"version"`
-}
+// VaultStatus is the shape of the Wails VaultService.GetStatus() return. It
+// is aliased from the HTTP contract so the desktop and HTTP clients share
+// one definition; the desktop reuses the HTTP semantics where the path is
+// treated as a valid vault and the vault state is reported via
+// IsVault.
+type VaultStatus = contract.VaultStatus
 
 // GetVaultPath returns the current vault path
 func (s *VaultService) GetVaultPath() string {
@@ -125,7 +126,7 @@ func (s *VaultService) OpenVault(path string) error {
 // GetStatus returns the current vault status
 func (s *VaultService) GetStatus() VaultStatus {
 	if s.app.db == nil || s.app.vaultPath == "" {
-		return VaultStatus{IsOpen: false, Version: "0.1.0"}
+		return VaultStatus{IsVault: false, Version: "0.1.0"}
 	}
 
 	var count int
@@ -133,7 +134,7 @@ func (s *VaultService) GetStatus() VaultStatus {
 
 	return VaultStatus{
 		Path:      s.app.vaultPath,
-		IsOpen:    true,
+		IsVault:   true,
 		NoteCount: count,
 		Version:   "0.1.0",
 	}
@@ -153,30 +154,16 @@ type NoteService struct {
 	app *App
 }
 
-// Note represents a note in the vault
-type Note struct {
-	ID        string   `json:"id"`
-	Title     string   `json:"title"`
-	Path      string   `json:"path"`
-	Type      string   `json:"type"`
-	Project   string   `json:"project"`
-	Status    string   `json:"status"`
-	Tags      []string `json:"tags"`
-	Body      string   `json:"body"`
-	UpdatedAt string   `json:"updatedAt"`
-}
+// Note is the shape returned by NoteService.GetNote. It is aliased from the
+// HTTP contract's NoteDetail so the Wails desktop and the HTTP clients
+// share one definition.
+type Note = contract.NoteDetail
 
-// SearchResult represents a search result
-type SearchResult struct {
-	ID        string   `json:"id"`
-	Title     string   `json:"title"`
-	Path      string   `json:"path"`
-	Type      string   `json:"type"`
-	Project   string   `json:"project"`
-	Tags      []string `json:"tags"`
-	Snippet   string   `json:"snippet"`
-	UpdatedAt string   `json:"updatedAt"`
-}
+// SearchResult is the shape returned by NoteService.Search/Recent/etc. It
+// is aliased from the HTTP contract so the desktop and HTTP clients share
+// the full set of fields (including status/score that the desktop used to
+// drop).
+type SearchResult = contract.SearchResult
 
 // Search performs a full-text search
 func (s *NoteService) Search(query string, noteType string, project string) ([]SearchResult, error) {
@@ -212,7 +199,9 @@ func (s *NoteService) Search(query string, noteType string, project string) ([]S
 	return out, nil
 }
 
-// GetNote returns a note by ID
+// GetNote returns a note by ID. It first reads the full file content
+// from disk so Content carries the complete note body, not just the
+// search snippet. Path-traversal is checked against the vault root.
 func (s *NoteService) GetNote(id string) (*Note, error) {
 	if s.app.searcher == nil {
 		return nil, fmt.Errorf("no vault is open")
@@ -223,16 +212,30 @@ func (s *NoteService) GetNote(id string) (*Note, error) {
 		return nil, err
 	}
 
+	fullPath := filepath.Join(s.app.vaultPath, result.Path)
+	clean := filepath.Clean(fullPath)
+	vaultClean := filepath.Clean(s.app.vaultPath)
+	var content string
+	if strings.HasPrefix(clean, vaultClean+string(filepath.Separator)) || clean == vaultClean {
+		if data, readErr := os.ReadFile(clean); readErr == nil {
+			content = string(data)
+		} else {
+			content = result.Snippet
+			_ = content // suppress unused when fallback used
+		}
+	} else {
+		content = result.Snippet
+	}
+
 	return &Note{
-		ID:        result.ID,
-		Title:     result.Title,
-		Path:      result.Path,
-		Type:      result.Type,
-		Project:   result.Project,
-		Status:    result.Status,
-		Tags:      result.Tags,
-		Body:      result.Snippet, // GetByID returns the note body in Snippet
-		UpdatedAt: result.UpdatedAt,
+		ID:      result.ID,
+		Title:   result.Title,
+		Path:    result.Path,
+		Type:    result.Type,
+		Project: result.Project,
+		Status:  result.Status,
+		Tags:    result.Tags,
+		Content: content,
 	}, nil
 }
 
@@ -282,19 +285,10 @@ func (s *NoteService) CreateNote(noteType string, title string, project string) 
 		return "", err
 	}
 
-	var folder string
-	switch noteType {
-	case "decision":
-		folder = "30-decisions"
-	case "source":
-		folder = "40-research"
-	default:
-		folder = "10-notes"
-	}
-
-	if project != "" && noteType == "meeting" {
-		folder = filepath.Join("20-projects", project)
-	}
+	// Folder resolution is shared with the CLI, HTTP API, and MCP server via
+	// templates.FolderRelForType so every write surface files notes in the
+	// same place.
+	folder := templates.FolderRelForType(noteType, project)
 
 	safeTitle := strings.ToLower(title)
 	safeTitle = strings.ReplaceAll(safeTitle, " ", "-")
@@ -440,25 +434,8 @@ type AIService struct {
 	app *App
 }
 
-// Answer represents an AI-generated answer
-type Answer struct {
-	Answer           string   `json:"answer"`
-	Sources          []Source `json:"sources"`
-	Confidence       string   `json:"confidence"`
-	Caveats          []string `json:"caveats"`
-	MissingInfo      string   `json:"missingInfo"`
-	SuggestedActions []string `json:"suggestedActions"`
-}
-
-// Source represents a source citation
-type Source struct {
-	Path    string `json:"path"`
-	Title   string `json:"title"`
-	Excerpt string `json:"excerpt"`
-}
-
 // Ask queries the AI with source-grounded retrieval
-func (s *AIService) Ask(question string) (*Answer, error) {
+func (s *AIService) Ask(question string) (*rag.Answer, error) {
 	if s.app.searcher == nil {
 		return nil, fmt.Errorf("no vault is open")
 	}
@@ -473,51 +450,8 @@ func (s *AIService) Ask(question string) (*Answer, error) {
 		return nil, fmt.Errorf("AI not configured: %w", err)
 	}
 
-	// Simple RAG: search → build context → ask
-	results, err := s.app.searcher.Search(search.Query{Q: question, Limit: 10})
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) == 0 {
-		return &Answer{
-			Answer:      "I couldn't find any relevant notes in your vault. Try adding some notes or rephrasing your question.",
-			Confidence:  "low",
-			MissingInfo: "No sources found in the vault.",
-		}, nil
-	}
-
-	var contextParts []string
-	var sources []Source
-	for _, r := range results {
-		contextParts = append(contextParts, fmt.Sprintf("[%s] %s: %s", r.Path, r.Title, r.Snippet))
-		sources = append(sources, Source{
-			Path:    r.Path,
-			Title:   r.Title,
-			Excerpt: r.Snippet,
-		})
-	}
-
-	context := fmt.Sprintf("Based on the following notes from the vault:\n\n%s\n\nAnswer the question: %s",
-		strings.Join(contextParts, "\n\n"), question)
-
-	messages := []ai.Message{
-		{Role: "system", Content: "You are AgentVault AI. Answer based ONLY on the provided sources. Never invent information. If sources are insufficient, say so. Keep answers concise and actionable."},
-		{Role: "user", Content: context},
-	}
-
-	response, err := provider.Chat(s.app.ctx, messages)
-	if err != nil {
-		return nil, fmt.Errorf("AI query failed: %w", err)
-	}
-
-	return &Answer{
-		Answer:           response,
-		Sources:          sources,
-		Confidence:       "medium",
-		Caveats:          []string{"Answer based on retrieved notes only"},
-		SuggestedActions: []string{"Read the source notes for more detail"},
-	}, nil
+	pipeline := rag.New(s.app.searcher, provider)
+	return pipeline.Ask(s.app.ctx, question)
 }
 
 // IsAIEnabled checks if AI is configured

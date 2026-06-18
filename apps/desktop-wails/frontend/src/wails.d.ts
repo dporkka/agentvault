@@ -1,4 +1,19 @@
-// Type declarations for Wails runtime bindings
+// Type declarations for Wails runtime bindings.
+//
+// Data types (VaultStatus, Note, SearchResult, Answer, Source,
+// IndexingStatus) live in `src/types/index.ts` so they can be shared
+// with the HTTP clients via @agentvault/contract. The data type
+// declarations used to live here as duplicate global interfaces;
+// that drift is resolved in the contract-consolidation PR. The
+// service bindings (method signatures on the Go bridge) stay here.
+
+import type {
+  VaultStatus,
+  Note,
+  SearchResult,
+  Answer,
+  IndexingStatus,
+} from './types';
 
 declare global {
   interface Window {
@@ -43,57 +58,6 @@ interface IndexServiceBindings {
 interface AIServiceBindings {
   Ask(question: string): Promise<Answer>;
   IsAIEnabled(): Promise<boolean>;
-}
-
-// Data types
-interface VaultStatus {
-  path: string;
-  isOpen: boolean;
-  noteCount: number;
-  version: string;
-}
-
-interface Note {
-  id: string;
-  title: string;
-  path: string;
-  type: string;
-  project: string;
-  status: string;
-  tags: string[];
-  body: string;
-  updatedAt: string;
-}
-
-interface SearchResult {
-  id: string;
-  title: string;
-  path: string;
-  type: string;
-  project: string;
-  tags: string[];
-  snippet: string;
-  updatedAt: string;
-}
-
-interface IndexingStatus {
-  isIndexing: boolean;
-  noteCount: number;
-}
-
-interface Answer {
-  answer: string;
-  sources: Source[];
-  confidence: string;
-  caveats: string[];
-  missingInfo: string;
-  suggestedActions: string[];
-}
-
-interface Source {
-  path: string;
-  title: string;
-  excerpt: string;
 }
 
 export {};

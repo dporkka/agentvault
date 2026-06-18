@@ -30,6 +30,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@shared': resolve(__dirname, 'src/shared'),
+      '@agentvault/contract': resolve(__dirname, '../../packages/contract/src'),
     },
   },
   publicDir: 'public',

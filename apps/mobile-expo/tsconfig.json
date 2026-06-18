@@ -1,1 +1,11 @@
-{ "extends": "expo/tsconfig.base" }
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@agentvault/contract": ["../../packages/contract/src"],
+      "@agentvault/contract/*": ["../../packages/contract/src/*"]
+    }
+  }
+}

@@ -158,6 +158,7 @@ Registered tools:
 - `agentvault.list_recent`
 - `agentvault.git_status`
 - `agentvault.log_agent_run`
+- `agentvault.ask`
 
 ## Architecture
 

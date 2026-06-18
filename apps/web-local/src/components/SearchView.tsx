@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/api/client';
 import { useDebounce } from '@/hooks/useDebounce';
-import type { SearchResult } from '@/api/types';
+import type { SearchResult } from '@agentvault/contract';
 
 const TYPE_FILTERS = ['all', 'note', 'decision', 'task', 'meeting', 'source'] as const;
 type TypeFilter = (typeof TYPE_FILTERS)[number];
@@ -45,7 +45,7 @@ const SearchView: React.FC = () => {
       setError(null);
       try {
         const type = typeFilter === 'all' ? undefined : typeFilter;
-        const res = await api.search(debouncedQuery, type);
+        const res = await api.search({ q: debouncedQuery, type });
         if (!cancelled) {
           setResults(res);
           setSelectedIndex(-1);

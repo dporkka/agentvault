@@ -3,7 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import VaultStatus from './VaultStatus';
 import { api } from '@/api/client';
-import type { VaultStatus as VaultStatusType } from '@/api/types';
+import type { VaultStatus as VaultStatusType } from '@agentvault/contract';
 
 const POLL_INTERVAL = 10000; // 10 seconds
 

@@ -13,7 +13,7 @@ function App() {
       setVaultStatus(status);
     } catch (err) {
       console.error('Failed to get vault status:', err);
-      setVaultStatus({ path: '', isOpen: false, noteCount: 0, version: '0.1.0' });
+      setVaultStatus({ path: '', isVault: false, noteCount: 0, version: '0.1.0' });
     } finally {
       setLoading(false);
     }
@@ -36,7 +36,7 @@ function App() {
     );
   }
 
-  if (!vaultStatus?.isOpen) {
+  if (!vaultStatus?.isVault) {
     return <VaultPicker onVaultOpened={handleVaultOpened} />;
   }
 

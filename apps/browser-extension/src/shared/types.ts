@@ -1,27 +1,9 @@
-export interface CapturePayload {
-  type: 'webpage' | 'selection';
-  title: string;
-  url: string;
-  text?: string;
-  selectedText?: string;
-  project?: string;
-  tags?: string[];
-  capturedAt: string;
-}
+// Shared types for the browser extension. Server-facing shapes come
+// from @agentvault/contract; the popup, content script, and background
+// service worker share those types directly. Local UI/messaging types
+// (CapturePayload, PageData) are re-exported from `./local`.
 
-export interface SearchResult {
-  id: string;
-  title: string;
-  path: string;
-  type: string;
-  snippet: string;
-}
+export type { SearchResult } from '@agentvault/contract';
+export { ApiError, type ApiClient, DEFAULT_BASE_URL } from '@agentvault/contract';
 
-export interface PageData {
-  title: string;
-  url: string;
-  selectedText: string;
-  author?: string;
-  description?: string;
-  publishedDate?: string;
-}
+export type { CapturePayload, PageData } from './local';

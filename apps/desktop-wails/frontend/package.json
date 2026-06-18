@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@agentvault/contract": "file:../../../packages/contract",
     "@codemirror/lang-markdown": "^6.2.5",
     "@codemirror/state": "^6.4.1",
     "@codemirror/view": "^6.26.3",
