@@ -7,6 +7,7 @@ import {
   createClient,
   type ApiClient,
   type AuthVerifyResponse,
+  type SearchParams,
   type SearchResult,
   DEFAULT_BASE_URL,
 } from '@agentvault/contract';
@@ -94,11 +95,17 @@ export async function sendCapture(
   });
 }
 
-export async function searchVault(query: string, url?: string): Promise<SearchResult[]> {
+export async function searchVault(
+  query: string | (SearchParams & { q?: string }),
+  url?: string,
+): Promise<SearchResult[]> {
   if (url) client.setBaseUrl(url);
   else await resolveBaseUrl();
-  if (!query.trim()) return [];
-  return client.search({ q: query });
+
+  const params: SearchParams = typeof query === 'string' ? { q: query } : query;
+  const q = params.q ?? '';
+  if (!String(q).trim()) return [];
+  return client.search(params);
 }
 
 export async function getProjects(url?: string): Promise<string[]> {

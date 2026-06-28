@@ -316,7 +316,7 @@ func TestStale(t *testing.T) {
 	s := New(database)
 
 	// All test data is from 2024, so with days=1 everything should be stale
-	results, err := s.Stale(1)
+	results, err := s.Stale(1, 100)
 	if err != nil {
 		t.Fatalf("Stale failed: %v", err)
 	}

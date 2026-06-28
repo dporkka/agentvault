@@ -124,6 +124,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 
 	// 7. Create searcher
 	searcher := search.New(db)
+	searcher.ConfigureEmbeddings(vp)
 
 	// 8. Use rag.Pipeline for search + AI
 	pipeline := rag.New(searcher, provider)

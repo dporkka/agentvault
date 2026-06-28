@@ -8,19 +8,26 @@ export function SearchPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searched, setSearched] = useState(false);
+  const [vectorEnabled, setVectorEnabled] = useState(false);
+  const [hybridWeight, setHybridWeight] = useState(0.5);
 
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return;
     setLoading(true); setError(''); setSearched(true);
     try {
-      setResults(await searchVault(query));
+      const params = {
+        q: query,
+        vector: vectorEnabled || undefined,
+        hybridWeight: vectorEnabled ? hybridWeight : undefined,
+      };
+      setResults(await searchVault(params));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
       setResults([]);
     } finally {
       setLoading(false);
     }
-  }, [query]);
+  }, [query, vectorEnabled, hybridWeight]);
 
   return (
     <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -33,6 +40,31 @@ export function SearchPanel() {
           style={{ padding: '8px 14px', background: '#4f7cff', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600 }}>
           {loading ? '...' : 'Search'}
         </button>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12px', color: '#9ca3af' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={vectorEnabled}
+            onChange={(e) => setVectorEnabled(e.target.checked)}
+          />
+          Vector search
+        </label>
+        {vectorEnabled && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>Hybrid weight</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.1}
+              value={hybridWeight}
+              onChange={(e) => setHybridWeight(parseFloat(e.target.value))}
+              style={{ width: '96px' }}
+            />
+            <span style={{ fontFamily: 'monospace', minWidth: '28px' }}>{hybridWeight.toFixed(1)}</span>
+          </div>
+        )}
       </div>
       {error && (
         <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ef4444', fontSize: '12px' }}>{error}</div>
