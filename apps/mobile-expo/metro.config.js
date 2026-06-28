@@ -15,10 +15,13 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   contractRoot,
 ];
+
 // Metro doesn't honor tsconfig 'paths' aliases for monorepo packages.
 // Disable hierarchical lookup so `@agentvault/contract` resolves to the
-// bare file: dep declared in package.json instead of being shadowed by
-// a parent node_modules folder.
+// shared package instead of being shadowed by a parent node_modules folder.
+// This is intentional and required for the AgentVault monorepo layout;
+// expo-doctor flags it as a warning but the app will not resolve the contract
+// package without it.
 config.resolver.disableHierarchicalLookup = true;
 
 module.exports = config;

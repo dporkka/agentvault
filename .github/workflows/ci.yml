@@ -55,7 +55,7 @@ jobs:
         run: npm run build # runs `tsc && vite build`
 
   mobile:
-    name: Mobile (Expo type-check)
+    name: Mobile (Expo type-check and bundle)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -70,7 +70,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Type-check
-        run: npx tsc --noEmit
+        run: npm run typecheck
+      - name: Bundle iOS with Metro
+        run: npx expo export --platform ios
 
   desktop:
     name: Desktop (Wails build)

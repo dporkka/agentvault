@@ -3,8 +3,28 @@
   "name": "AgentVault",
   "version": "0.1.0",
   "description": "Clip web pages to your AgentVault knowledge base",
-  "permissions": ["activeTab", "storage", "contextMenus"],
-  "host_permissions": ["http://127.0.0.1:47321/*"],
+  "permissions": ["activeTab", "storage", "contextMenus", "alarms"],
+  "host_permissions": [
+    "http://127.0.0.1:47321/*",
+    "http://127.0.0.1:*/*",
+    "http://localhost:*/*"
+  ],
+  "commands": {
+    "clip-page": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+A",
+        "mac": "Command+Shift+A"
+      },
+      "description": "Clip the current page to AgentVault"
+    },
+    "clip-selection": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Clip the current selection to AgentVault"
+    }
+  },
   "action": {
     "default_popup": "popup/index.html",
     "default_icon": {

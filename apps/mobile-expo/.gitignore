@@ -1,0 +1,40 @@
+# Expo
+.expo/
+.expo-shared/
+
+# Build artifacts
+dist/
+dist-test-ios/
+android/
+ios/
+*.apk
+*.aab
+*.ipa
+
+# Credentials
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# macOS
+.DS_Store
+
+# WSL/Windows metadata
+*:Zone.Identifier

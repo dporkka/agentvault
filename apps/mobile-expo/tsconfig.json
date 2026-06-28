@@ -7,5 +7,6 @@
       "@agentvault/contract": ["../../packages/contract/src"],
       "@agentvault/contract/*": ["../../packages/contract/src/*"]
     }
-  }
+  },
+  "exclude": ["node_modules", "**/__tests__/**", "**/__mocks__/**", "dist", ".expo"]
 }
