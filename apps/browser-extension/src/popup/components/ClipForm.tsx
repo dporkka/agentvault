@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { sendCapture, getProjects } from '@shared/api';
-import type { CapturePayload } from '@shared/types';
+import { getProjects } from '@shared/api';
+import { sendOrQueueCapture, retryQueuedCaptures, getPendingCount } from '@shared/capture-queue';
+import type { CapturePayload, CaptureResult } from '@shared/types';
 
 interface ClipFormProps {
   initialTitle: string;
@@ -16,14 +17,18 @@ export function ClipForm({ initialTitle, initialUrl, initialSelectedText, onSend
   const [project, setProject] = useState('');
   const [projects, setProjects] = useState<string[]>([]);
   const [tagsInput, setTagsInput] = useState('');
-  const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
+  const [status, setStatus] = useState<CaptureResult['state']>('unsynced');
+  const [result, setResult] = useState<CaptureResult | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => { setTitle(initialTitle); }, [initialTitle]);
   useEffect(() => { getProjects().then(setProjects).catch(() => setProjects([])); }, []);
+  useEffect(() => {
+    getPendingCount().then(setPendingCount);
+  }, [status]);
 
   const handleSend = useCallback(async () => {
-    setStatus('sending'); setErrorMsg('');
+    setStatus('syncing'); setResult(null);
     const payload: CapturePayload = {
       type: selectedText ? 'selection' : 'webpage',
       title: title || 'Untitled', url,
@@ -33,13 +38,29 @@ export function ClipForm({ initialTitle, initialUrl, initialSelectedText, onSend
       tags: tagsInput.split(',').map(t => t.trim()).filter(Boolean),
       capturedAt: new Date().toISOString(),
     };
-    try {
-      await sendCapture(payload);
-      setStatus('success'); onSend?.(); setTimeout(() => setStatus('idle'), 3000);
-    } catch (err) {
-      setStatus('error'); setErrorMsg(err instanceof Error ? err.message : 'Failed to send');
+    const res = await sendOrQueueCapture(payload);
+    setResult(res);
+    setStatus(res.state);
+    if (res.state === 'synced') {
+      onSend?.();
+      setTimeout(() => setStatus('unsynced'), 3000);
     }
   }, [title, url, selectedText, project, tagsInput, onSend]);
+
+  const handleRetry = useCallback(async () => {
+    setStatus('syncing');
+    await retryQueuedCaptures();
+    const remaining = await getPendingCount();
+    setPendingCount(remaining);
+    if (remaining === 0) {
+      setStatus('synced');
+      setResult({ state: 'synced' });
+      setTimeout(() => setStatus('unsynced'), 3000);
+    } else {
+      setStatus('failed');
+      setResult({ state: 'failed', error: `${remaining} capture${remaining === 1 ? '' : 's'} still pending` });
+    }
+  }, []);
 
   const hasSelection = !!selectedText;
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' };
@@ -72,15 +93,24 @@ export function ClipForm({ initialTitle, initialUrl, initialSelectedText, onSend
         <label style={labelStyle}>Tags</label>
         <input type="text" value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="tag1, tag2, tag3" style={inputStyle} />
       </div>
-      <button onClick={handleSend} disabled={status === 'sending'}
-        style={{ marginTop: '4px', padding: '10px 16px', background: '#4f7cff', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '14px', fontWeight: 600, cursor: status === 'sending' ? 'wait' : 'pointer', opacity: status === 'sending' ? 0.7 : 1 }}>
-        {status === 'sending' ? 'Sending...' : 'Send to Vault'}
+      <button onClick={handleSend} disabled={status === 'syncing'}
+        style={{ marginTop: '4px', padding: '10px 16px', background: '#4f7cff', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '14px', fontWeight: 600, cursor: status === 'syncing' ? 'wait' : 'pointer', opacity: status === 'syncing' ? 0.7 : 1 }}>
+        {status === 'syncing' ? 'Sending...' : 'Send to Vault'}
       </button>
-      {status === 'success' && (
-        <div style={{ padding: '8px 12px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '6px', color: '#22c55e', fontSize: '13px', textAlign: 'center' }}>Sent to AgentVault!</div>
+      {status === 'synced' && (
+        <div style={{ padding: '8px 12px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '6px', color: '#22c55e', fontSize: '13px', textAlign: 'center' }}>Sent to AgentVault!{result?.path && <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.9 }}>{result.path}</div>}</div>
       )}
-      {status === 'error' && (
-        <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ef4444', fontSize: '12px' }}>{errorMsg}</div>
+      {(status === 'unsynced' || status === 'failed') && result?.error && (
+        <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ef4444', fontSize: '12px' }}>
+          {result.error}
+          {result.queued && <span> Saved offline.</span>}
+        </div>
+      )}
+      {pendingCount > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', color: '#f59e0b', fontSize: '12px' }}>
+          <span>{pendingCount} pending capture{pendingCount === 1 ? '' : 's'}</span>
+          <button onClick={handleRetry} disabled={status === 'syncing'} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #f59e0b', borderRadius: '4px', color: '#f59e0b', fontSize: '11px', cursor: 'pointer' }}>Retry</button>
+        </div>
       )}
     </div>
   );
