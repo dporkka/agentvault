@@ -6,6 +6,7 @@
 import {
   createClient,
   type ApiClient,
+  type AuthVerifyResponse,
   type SearchResult,
   DEFAULT_BASE_URL,
 } from '@agentvault/contract';
@@ -104,4 +105,15 @@ export async function getProjects(url?: string): Promise<string[]> {
   if (url) client.setBaseUrl(url);
   else await resolveBaseUrl();
   return client.getProjects();
+}
+
+export async function verifyToken(url?: string): Promise<AuthVerifyResponse | null> {
+  if (url) client.setBaseUrl(url);
+  else await resolveBaseUrl();
+  await refreshToken();
+  try {
+    return await client.verifyAuth();
+  } catch {
+    return null;
+  }
 }

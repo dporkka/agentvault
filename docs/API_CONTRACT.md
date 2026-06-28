@@ -38,6 +38,21 @@ contract check (`make contract-check`) will fail if a client ships a
 hard-coded base URL or a snake_case key, so future drift is caught at
 CI time.
 
+## Connecting clients
+
+When `agentvault serve` starts it prints an auth token to the terminal. Local
+clients store this token and send it on every write request via the
+`X-AgentVault-Token` header or `Authorization: Bearer <token>`.
+
+Clients can check a stored token without making a write operation by calling
+`GET /auth/verify`. The response includes:
+
+- `hasToken`: whether the client sent a token header.
+- `tokenValid`: whether the sent token matches the server's current token.
+
+A missing or incorrect token on a write endpoint returns `401` with
+`{"error":"unauthorized","detail":"Valid X-AgentVault-Token header required"}`.
+
 ## Conventions
 
 - **Base URL:** `http://127.0.0.1:47321` by default (`agentvault serve` binds

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import VaultStatus from './VaultStatus';
+import ConnectionModal from './ConnectionModal';
 import { api } from '@/api/client';
 import type { VaultStatus as VaultStatusType } from '@agentvault/contract';
 
@@ -13,13 +14,14 @@ const Layout: React.FC = () => {
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const [vaultStatus, setVaultStatus] = useState<VaultStatusType | null>(null);
   const [connected, setConnected] = useState(false);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(true);
+  const [showConnectionModal, setShowConnectionModal] = useState(false);
 
   const checkConnection = async () => {
     try {
       const health = await api.checkHealth();
       setConnected(true);
-      // Also fetch vault status
       try {
         const status = await api.getVaultStatus();
         setVaultStatus(status);
@@ -31,9 +33,18 @@ const Layout: React.FC = () => {
           version: health.version,
         });
       }
+
+      // Check whether the stored token is still valid (non-fatal).
+      try {
+        const verify = await api.verifyAuth();
+        setAuthenticated(verify.tokenValid);
+      } catch {
+        setAuthenticated(null);
+      }
     } catch {
       setConnected(false);
       setVaultStatus(null);
+      setAuthenticated(null);
     } finally {
       setChecking(false);
     }
@@ -53,6 +64,14 @@ const Layout: React.FC = () => {
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
+
+  // Show the connection modal on first launch if the server is reachable but
+  // the user has not configured a valid token yet.
+  useEffect(() => {
+    if (!checking && connected && authenticated === false) {
+      setShowConnectionModal(true);
+    }
+  }, [checking, connected, authenticated]);
 
   return (
     <div className="h-full flex bg-vault-bg-primary">
@@ -84,7 +103,17 @@ const Layout: React.FC = () => {
           </button>
 
           {/* Connection status */}
-          <VaultStatus status={vaultStatus} connected={connected} loading={checking} />
+          <button
+            onClick={() => setShowConnectionModal(true)}
+            className="outline-none focus-visible:ring-2 focus-visible:ring-vault-accent rounded"
+          >
+            <VaultStatus
+              status={vaultStatus}
+              connected={connected}
+              loading={checking}
+              authenticated={authenticated}
+            />
+          </button>
 
           {/* Right side: Create note button */}
           <button
@@ -103,8 +132,16 @@ const Layout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+
+      <ConnectionModal
+        open={showConnectionModal}
+        onClose={() => {
+          setShowConnectionModal(false);
+          checkConnection();
+        }}
+      />
     </div>
   );
-};
+}
 
 export default Layout;

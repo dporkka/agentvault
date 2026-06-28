@@ -5,6 +5,7 @@
 import {
   createClient,
   type ApiClient,
+  type AuthVerifyResponse,
   type CaptureRequest,
   type CaptureResponse,
   type SearchResult,
@@ -57,15 +58,20 @@ const client: ApiClient = createClient({
 // after setting the token from the popup so the cached value is up to
 // date before the next HTTP request.
 export async function refreshToken(): Promise<void> {
-  const result = await new Promise<Record<string, unknown>>((resolve) => {
-    try {
-      chrome.storage.local.get(TOKEN_KEY, (r) => resolve(r || {}));
-    } catch {
-      resolve({});
-    }
-  });
-  const token = (result?.[TOKEN_KEY] as string) || '';
+  const token = await getToken();
   client.setToken(token);
+}
+
+// checkAuth returns the server's verifyAuth response, or null if the
+// server is unreachable. Use this to show "token valid / missing / invalid"
+// status in the popup without performing a write.
+export async function checkAuth(): Promise<AuthVerifyResponse | null> {
+  await refreshToken();
+  try {
+    return await client.verifyAuth();
+  } catch {
+    return null;
+  }
 }
 
 // getToken reads the saved auth token from extension storage.

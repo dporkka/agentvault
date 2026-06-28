@@ -124,6 +124,18 @@ Exit criteria:
 - Client errors distinguish "server unavailable", "unauthorized", "vault not indexed", and "no results".
 - Desktop build no longer emits the large-chunk warning, or the warning is intentionally budgeted.
 
+## Phase 2 Progress
+
+- Web: `ConnectionModal` automatically prompts for server URL + token when the
+  server is reachable but the stored token is invalid/missing. `VaultStatus`
+  shows "Not authenticated" and opens the modal when clicked.
+- Extension: Popup shows token status (valid / invalid / missing) and explains
+  how to obtain the token from `agentvault serve`.
+- Mobile: Settings screen has a "Verify Token" button that uses `/auth/verify`
+  and reports the result.
+- Docs: `API_CONTRACT.md` documents `/auth/verify` as the supported token-check
+  mechanism.
+
 ## Phase 3 - Vault Lifecycle And Data Quality
 
 Target: 1-2 weeks after Phase 2.
