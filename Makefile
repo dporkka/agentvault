@@ -1,4 +1,4 @@
-.PHONY: build test lint dev-core clean install help desktop desktop-dev
+.PHONY: build test lint dev-core clean install help desktop desktop-dev contract-check contract-list-snake
 
 VAULT := ./test-vault
 CORE := ./core
@@ -40,3 +40,29 @@ index-test: build ## Index the test vault
 
 search-test: build ## Search the test vault
 	$(CORE)/../bin/agentvault search "test" --vault $(VAULT)
+
+contract-check: ## Verify @agentvault/contract is the only source of API types in clients
+	@echo "Checking @agentvault/contract usage..."
+	@cd packages/contract && npx --yes -p typescript@5.4.5 tsc --noEmit
+	@cd apps/web-local && npx --yes tsc --noEmit
+	@cd apps/browser-extension && npx --yes tsc --noEmit
+	@cd apps/mobile-expo && npx --yes tsc --noEmit
+	@cd apps/desktop-wails/frontend && npx --yes tsc --noEmit
+	@echo "Checking for snake_case fields in client code (server emits camelCase)..."
+	@SNAKE_RE=$$(scripts/contract-snake-list.sh core/internal/contract/contract.go | paste -sd'|' -); \
+	if [ -n "$$SNAKE_RE" ]; then \
+	  HITS=$$(grep -RInE "$$SNAKE_RE" apps/web-local/src apps/browser-extension/src apps/mobile-expo/src apps/desktop-wails/frontend/src \
+	    --include='*.ts' --include='*.tsx' | head -20); \
+	  if [ -n "$$HITS" ]; then \
+	    printf '%s\n' "$$HITS"; \
+	    echo "Found snake_case keys; server emits camelCase."; \
+	    exit 1; \
+	  fi; \
+	fi
+	@echo "Checking for hard-coded API base URLs outside of @agentvault/contract..."
+	@! grep -RIn 'http://127.0.0.1:47321' apps/web-local/src apps/browser-extension/src apps/mobile-expo/src apps/desktop-wails/frontend/src \
+	  --include='*.ts' --include='*.tsx' | grep -v 'contract/src' || (echo "Found hard-coded base URL; use @agentvault/contract client." && exit 1)
+	@echo "Contract check passed."
+
+contract-list-snake: ## Print the snake_case JSON field list derived from Go struct tags
+	@scripts/contract-snake-list.sh core/internal/contract/contract.go

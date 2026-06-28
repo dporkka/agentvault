@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      '@agentvault/contract': resolve(__dirname, '../../packages/contract/src'),
     },
   },
   server: {

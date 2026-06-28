@@ -62,27 +62,6 @@ func init() {
 	newCmd.Flags().BoolVar(&newCommit, "commit", false, "Automatically git-commit the new note")
 }
 
-// folderForType determines the output folder based on note type and project.
-func folderForType(noteType, project, vaultPath string) string {
-	switch noteType {
-	case "note":
-		return filepath.Join(vaultPath, "10-notes")
-	case "decision":
-		return filepath.Join(vaultPath, "30-decisions")
-	case "task":
-		return filepath.Join(vaultPath, "10-notes")
-	case "meeting":
-		if project != "" {
-			return filepath.Join(vaultPath, "20-projects", project)
-		}
-		return filepath.Join(vaultPath, "10-notes")
-	case "source":
-		return filepath.Join(vaultPath, "40-research")
-	default:
-		return filepath.Join(vaultPath, "10-notes")
-	}
-}
-
 // sanitizeFilename creates a safe filename from a title.
 func sanitizeFilename(title string) string {
 	// Convert to lowercase and replace spaces/special chars with hyphens
@@ -146,9 +125,11 @@ func runNew(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Generate ID and determine output path
+	// Generate ID and determine output path. Folder resolution is shared
+	// with the HTTP API and MCP server via templates.FolderPathForType so a
+	// note written from any surface lands in the same place.
 	id := templates.GenerateID(noteType)
-	folder := folderForType(noteType, newProject, vp)
+	folder := templates.FolderPathForType(noteType, newProject, vp)
 
 	// Create folder (and subfolder for project if needed)
 	if err := os.MkdirAll(folder, 0755); err != nil {

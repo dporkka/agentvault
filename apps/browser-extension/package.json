@@ -8,6 +8,7 @@
     "dev": "vite"
   },
   "dependencies": {
+    "@agentvault/contract": "file:../../packages/contract",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

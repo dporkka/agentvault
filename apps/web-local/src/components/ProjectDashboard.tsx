@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/api/client';
 import { useApi } from '@/hooks/useApi';
-import type { SearchResult } from '@/api/types';
+import type { SearchResult } from '@agentvault/contract';
 
 const ProjectDashboard: React.FC = () => {
   const { data: projects, loading: projectsLoading, error: projectsError } = useApi(
@@ -31,7 +31,7 @@ const ProjectDashboard: React.FC = () => {
     async function loadNotes() {
       try {
         // We search with empty query but project filter to get all notes in the project
-        const results = await api.search('', undefined, selectedProject!, 100);
+        const results = await api.search({ q: '', project: selectedProject!, limit: 100 });
         if (!cancelled) {
           setNotes(results);
         }

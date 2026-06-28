@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/agentvault/core/internal/ai"
+	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/search"
 )
 
-var listMarkerRe = regexp.MustCompile(`^(?:[-*]|\d+\.)\s*`)
+var listMarkerRe = regexp.MustCompile(`^(?:[-*]|\d+\.)\s+`)
 
 // Pipeline orchestrates search + AI generation for source-grounded answers.
 type Pipeline struct {
@@ -20,23 +21,14 @@ type Pipeline struct {
 	provider ai.AIProvider
 }
 
-// Answer is a structured, source-grounded AI response.
-type Answer struct {
-	Answer           string   `json:"answer"`
-	Sources          []Source `json:"sources"`
-	Confidence       string   `json:"confidence"`
-	Caveats          []string `json:"caveats,omitempty"`
-	MissingInfo      string   `json:"missingInfo,omitempty"`
-	SuggestedActions []string `json:"suggestedActions,omitempty"`
-}
+// Answer is a structured, source-grounded AI response. It is an alias of
+// contract.Answer so the HTTP handler, the Wails desktop bridge, and any
+// other Go consumer share one type.
+type Answer = contract.Answer
 
-// Source represents a single source document used in the answer.
-type Source struct {
-	ID      string `json:"id"`
-	Path    string `json:"path"`
-	Title   string `json:"title"`
-	Excerpt string `json:"excerpt,omitempty"`
-}
+// Source represents a single source document used in the answer. It is an
+// alias of contract.Source for the same reason as Answer above.
+type Source = contract.Source
 
 // New creates a new RAG pipeline.
 func New(searcher *search.Searcher, provider ai.AIProvider) *Pipeline {
@@ -51,9 +43,25 @@ func (p *Pipeline) Ask(ctx context.Context, question string) (*Answer, error) {
 	// 1. Search the vault for relevant notes
 	// Sanitize question: strip trailing punctuation that confuses FTS5
 	searchQuery := strings.TrimRight(question, "?!")
-	results, err := p.searcher.Search(search.Query{Q: searchQuery, Limit: 10})
-	if err != nil {
-		return nil, fmt.Errorf("search failed: %w", err)
+
+	var results []search.Result
+	var err error
+
+	// Use vector search if embeddings are available, with FTS fallback
+	if p.searcher.HasEmbeddings() {
+		results, err = p.searcher.SearchWithVector(ctx, searchQuery, 10)
+		if err != nil || len(results) == 0 {
+			// Fallback to FTS
+			results, err = p.searcher.Search(search.Query{Q: searchQuery, Limit: 10})
+			if err != nil {
+				return nil, fmt.Errorf("search failed: %w", err)
+			}
+		}
+	} else {
+		results, err = p.searcher.Search(search.Query{Q: searchQuery, Limit: 10})
+		if err != nil {
+			return nil, fmt.Errorf("search failed: %w", err)
+		}
 	}
 
 	// 2. If no results, return a helpful "no information" answer

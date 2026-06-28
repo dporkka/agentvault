@@ -1,10 +1,52 @@
 # AgentVault Improvement Plan
 
-Last updated: 2026-06-10
+Last updated: 2026-06-17
 
 ## Goal
 
 Make AgentVault dependable as a local-first knowledge app across CLI, desktop, web, extension, mobile, and agent clients. The immediate focus should be correctness and contract stability, then UX completeness, then release readiness.
+
+## Recently Completed (Phase 0+)
+
+Phase 0+ was the "consolidate shared client types" PR. It introduces a single
+canonical contract on both sides of the boundary: `core/internal/contract/` for
+Go (imported by `core/internal/api`, `core/internal/search`, `core/internal/indexer`,
+`core/internal/rag`, and `apps/desktop-wails/app.go`) and `packages/contract/`
+for TypeScript (consumed by `apps/web-local`, `apps/browser-extension`,
+`apps/mobile-expo`, and `apps/desktop-wails/frontend` via path mappings plus
+Metro `watchFolders`). The shared types are the new `SearchResult`,
+`NoteDetail`, `IndexResult`, `IndexError`, `Answer`, `Source`, `VaultStatus`,
+`GitStatus`, and `GitModifiedFile`. The Wails desktop Go side now aliases the
+shared `VaultStatus` (using `isVault` rather than the previous `isOpen`),
+`Note` (now `content`, not `body`), and `SearchResult` (now carries `status`
+and `score`). CI enforces the contract with a new `make contract-check` job
+that runs `tsc --noEmit` on every client and greps for snake_case keys and
+hard-coded base URLs; the four web/mobile/desktop builds no longer ship
+duplicate type files. Server-side, `core/internal/api/handlers.go` now uses
+`contract.NoteDetail` and `contract.GitStatus`/`contract.GitModifiedFile` for
+the `/notes/{id}` and `/git/status` handlers, replacing the previous
+hand-written `map[string]interface{}` shapes.
+
+## Recently Completed (Phase 1)
+
+Phase 1's two highest-leverage P1 items landed alongside the contract work:
+
+- **One RAG service across all surfaces.** `agentvault ask` (CLI), `POST /ask`
+  (API), `AIService.Ask` (desktop), and `agentvault.ask` (MCP) all build
+  `rag.New(searcher, provider)` and call `pipeline.Ask`. Prompt construction and
+  answer parsing live in `internal/rag` alone — the CLI's former duplicate
+  search/prompt/parse flow is gone.
+- **Auto-index after writes.** The API `handleCreateNote`/`handleCapture` and
+  the MCP `createNote`/`handleCapture` paths kick off a non-blocking
+  `indexer.Index(IndexOptions{Path: relPath})` goroutine right after writing the
+  file, so a newly created note or capture is searchable without a manual
+  `agentvault index` step.
+- **One folder-resolution rule.** `templates.FolderRelForType` /
+  `FolderPathForType` is the single source for where a note is written; the
+  CLI, HTTP API, MCP server, and desktop app all route through it, replacing
+  three divergent `folderForType` copies. Only meetings file under
+  `20-projects/<project>`; for every other type the project is metadata, not a
+  file location. Covered by `templates/folders_test.go`.
 
 ## Recently Completed (Phase 0)
 
@@ -17,11 +59,7 @@ Make AgentVault dependable as a local-first knowledge app across CLI, desktop, w
 
 | Priority | Work | Why it matters | Evidence |
 | --- | --- | --- | --- |
-| P0 | Share or generate API TypeScript types from one contract source | Each client still hand-maintains its own request/response types, which is how the `/projects` drift happened. | Web, extension, and mobile each redeclare API shapes. |
-| P1 | Reuse one RAG/search service across CLI, API, desktop, and MCP | Avoids behavior drift and repeated prompt/parse logic. | API and core now use `internal/rag.Pipeline`; CLI still has duplicate search/prompt/parse flow. |
-| P1 | Auto-index or clearly queue indexing after writes | Created notes/captures should become searchable without confusing manual steps. | API/MCP write files separately from indexing. |
 | P1 | Expose vector/hybrid search consistently | The core has vector capabilities, but clients mostly expose plain FTS. | `index --embed` and search vector helpers exist. |
-| P1 | Generate or share API TypeScript types | Reduces cross-app drift and duplicated hand-written contracts. | Each client owns its API assumptions. |
 | P1 | Improve token onboarding for local clients | Auth exists, but user setup is manual and easy to misconfigure. | Server prints token; clients store token in local storage/settings. |
 | P2 | Reduce desktop bundle size | Improves startup and packaging. | Desktop frontend build warns about a chunk over 500 kB. |
 | P2 | Define release/install paths | Converts builds into usable distribution. | CI builds pieces but no release artifact flow is documented. |
@@ -62,6 +100,10 @@ Exit criteria:
 - One service owns RAG behavior.
 - Tests cover no-result, provider-error, source-citation, vector fallback, and timeout paths.
 - Newly created notes become searchable through the expected user flow.
+- Vector/hybrid search is wired end-to-end: the API searcher has an embedding
+  client, the TypeScript contract emits the correct `hybrid_weight` query key,
+  the CLI exposes `--vector`/`--hybrid-weight`/`--topk`, and the web UI has a
+  vector toggle.
 
 ## Phase 2 - Client Reliability And UX
 
@@ -81,6 +123,18 @@ Exit criteria:
 - A new user can start `agentvault serve`, paste/store the token, capture a page, and find it in search without reading source code.
 - Client errors distinguish "server unavailable", "unauthorized", "vault not indexed", and "no results".
 - Desktop build no longer emits the large-chunk warning, or the warning is intentionally budgeted.
+
+## Phase 2 Progress
+
+- Web: `ConnectionModal` automatically prompts for server URL + token when the
+  server is reachable but the stored token is invalid/missing. `VaultStatus`
+  shows "Not authenticated" and opens the modal when clicked.
+- Extension: Popup shows token status (valid / invalid / missing) and explains
+  how to obtain the token from `agentvault serve`.
+- Mobile: Settings screen has a "Verify Token" button that uses `/auth/verify`
+  and reports the result.
+- Docs: `API_CONTRACT.md` documents `/auth/verify` as the supported token-check
+  mechanism.
 
 ## Phase 3 - Vault Lifecycle And Data Quality
 
@@ -120,12 +174,12 @@ Exit criteria:
 
 ## Near-Term Suggested First PR
 
-The original contract-stabilization PR (Phase 0) is now complete:
+The contract-stabilization PR (Phase 0), the shared-types consolidation
+(Phase 0+), and the shared RAG service + auto-index-after-writes work
+(Phase 1) are all complete and landed on `phase0-contract-stabilization`.
 
-1. Done — `GET /projects` returns a bare `string[]` matching all clients and tests.
-2. Done — `POST /ask` is wired to the shared RAG pipeline.
-3. Done — `GET /git/status` is wired to `internal/git.Status`.
-4. Done — API response-shape tests cover `/projects`, `/ask`, `/git/status`, and `/stale`.
-5. Done — docs updated to reflect the endpoint shapes, including the full [API_CONTRACT.md](API_CONTRACT.md).
-
-Next suggested PR: consolidate the hand-written client API types into one shared or generated contract source so future endpoint changes cannot silently drift the web, extension, and mobile clients again. [API_CONTRACT.md](API_CONTRACT.md) already specifies the exact targets — start with the three drifts in its "Known contract drift" section: camelCase `json` tags on `search.Result` (affects `/search`, `/recent`, `/stale`), the `/vault/status` `indexedAt` vs `version` field name, and camelCasing `IndexResult`.
+Next suggested PR: expose vector/hybrid search consistently across the
+API and clients (the `SearchParams`/`RecentParams`/`StaleParams` knobs in
+`packages/contract` are already defined but unused), then improve token
+onboarding for local clients. Those two P1 items in the Priority Backlog
+are the next steps; vector/hybrid exposure is the larger payoff.

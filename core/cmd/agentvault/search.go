@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -10,18 +11,23 @@ import (
 )
 
 var (
-	searchType    string
-	searchProject string
-	searchTag     string
-	searchStatus  string
-	searchLimit   int
+	searchType         string
+	searchProject      string
+	searchTag          string
+	searchStatus       string
+	searchLimit        int
+	searchVector       bool
+	searchHybridWeight float64
+	searchTopK         int
 )
 
 var searchCmd = &cobra.Command{
 	Use:   "search <query>",
 	Short: "Search the vault",
-	Long:  "Full-text search across all notes in the AgentVault using SQLite FTS5.",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Full-text search across all notes in the AgentVault using SQLite FTS5.
+Use --vector to enable semantic/hybrid search when embeddings have been generated
+(via "agentvault index --embed").`,
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vp := mustRequireVault()
 		database, err := openDB(vp)
@@ -30,17 +36,44 @@ var searchCmd = &cobra.Command{
 		}
 		defer database.Close()
 
-		query := search.Query{
-			Q:       strings.Join(args, " "),
-			Type:    searchType,
-			Project: searchProject,
-			Tag:     searchTag,
-			Status:  searchStatus,
-			Limit:   searchLimit,
-		}
-
+		queryText := strings.Join(args, " ")
 		s := search.New(database)
-		results, err := s.Search(query)
+		s.ConfigureEmbeddings(vp)
+
+		var results []search.Result
+		if searchVector {
+			vq := search.VectorQuery{
+				Query: search.Query{
+					Q:       queryText,
+					Type:    searchType,
+					Project: searchProject,
+					Tag:     searchTag,
+					Status:  searchStatus,
+					Limit:   searchLimit,
+				},
+				VectorSearch: true,
+				QueryText:    queryText,
+				TopK:         searchTopK,
+				HybridWeight: searchHybridWeight,
+			}
+			if vq.TopK <= 0 {
+				vq.TopK = searchLimit * 3
+				if vq.TopK < 10 {
+					vq.TopK = 10
+				}
+			}
+			results, err = s.HybridSearch(context.Background(), vq)
+		} else {
+			query := search.Query{
+				Q:       queryText,
+				Type:    searchType,
+				Project: searchProject,
+				Tag:     searchTag,
+				Status:  searchStatus,
+				Limit:   searchLimit,
+			}
+			results, err = s.Search(query)
+		}
 		if err != nil {
 			return fmt.Errorf("search failed: %w", err)
 		}
@@ -128,5 +161,8 @@ func init() {
 	searchCmd.Flags().StringVar(&searchTag, "tag", "", "Filter by tag")
 	searchCmd.Flags().StringVar(&searchStatus, "status", "", "Filter by status")
 	searchCmd.Flags().IntVar(&searchLimit, "limit", 20, "Maximum number of results")
+	searchCmd.Flags().BoolVar(&searchVector, "vector", false, "Enable semantic/hybrid search (requires embeddings)")
+	searchCmd.Flags().Float64Var(&searchHybridWeight, "hybrid-weight", 0.5, "Weight for vector vs FTS (0=FTS only, 1=vector only)")
+	searchCmd.Flags().IntVar(&searchTopK, "topk", 0, "Number of vector candidates to fetch (default limit*3, min 10)")
 	rootCmd.AddCommand(searchCmd)
 }

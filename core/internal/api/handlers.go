@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/git"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/rag"
@@ -52,7 +53,7 @@ func (s *Server) handleVaultStatus(w http.ResponseWriter, r *http.Request) {
 		"path":      s.vaultPath,
 		"isVault":   isVault,
 		"noteCount": noteCount,
-		"indexedAt": indexedAt,
+		"version": indexedAt,
 	})
 }
 
@@ -105,7 +106,38 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	results, err := s.searcher.Search(q)
+	vectorParam := r.URL.Query().Get("vector")
+	useVector := vectorParam == "true" || vectorParam == "1"
+
+	var results []search.Result
+	var err error
+
+	if useVector {
+		vq := search.VectorQuery{
+			Query:        q,
+			VectorSearch: true,
+			QueryText:    q.Q,
+			TopK:         q.Limit * 3,
+			HybridWeight: 0.5,
+		}
+		if vq.TopK < 10 {
+			vq.TopK = 10
+		}
+		if tk := r.URL.Query().Get("topk"); tk != "" {
+			if n, err := strconv.Atoi(tk); err == nil && n > 0 {
+				vq.TopK = n
+			}
+		}
+		if hw := r.URL.Query().Get("hybrid_weight"); hw != "" {
+			if f, err := strconv.ParseFloat(hw, 64); err == nil && f >= 0 && f <= 1 {
+				vq.HybridWeight = f
+			}
+		}
+		results, err = s.searcher.HybridSearch(r.Context(), vq)
+	} else {
+		results, err = s.searcher.Search(q)
+	}
+
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "search failed",
@@ -162,15 +194,15 @@ func (s *Server) handleNoteByPath(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"id":      result.ID,
-		"title":   result.Title,
-		"path":    result.Path,
-		"type":    result.Type,
-		"project": result.Project,
-		"status":  result.Status,
-		"tags":    result.Tags,
-		"content": string(content),
+	writeJSON(w, http.StatusOK, contract.NoteDetail{
+		ID:      result.ID,
+		Title:   result.Title,
+		Path:    result.Path,
+		Type:    result.Type,
+		Project: result.Project,
+		Status:  result.Status,
+		Tags:    result.Tags,
+		Content: string(content),
 	})
 }
 
@@ -223,11 +255,10 @@ func (s *Server) handleCreateNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine folder and filename
-	folder := templates.FolderForType(req.Type)
-	if req.Project != "" {
-		folder = filepath.Join("20-projects", req.Project)
-	}
+	// Determine folder (vault-relative) and filename. Folder resolution is
+	// shared with the CLI and MCP server via templates.FolderRelForType so
+	// every write surface files notes in the same place.
+	folder := templates.FolderRelForType(req.Type, req.Project)
 	filename := fmt.Sprintf("%s.md", id)
 	relPath := filepath.Join(folder, filename)
 	fullPath := filepath.Join(s.vaultPath, relPath)
@@ -249,6 +280,11 @@ func (s *Server) handleCreateNote(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Auto-index the newly created note (non-blocking)
+	go func() {
+		_, _ = s.indexer.Index(indexer.IndexOptions{Path: relPath})
+	}()
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"path": relPath,
@@ -357,6 +393,11 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Auto-index the newly created capture (non-blocking)
+	go func() {
+		_, _ = s.indexer.Index(indexer.IndexOptions{Path: relPath})
+	}()
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"path": relPath,
 	})
@@ -445,7 +486,25 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 		limit = n
 	}
 
-	results, err := s.searcher.Recent(limit)
+	vectorParam := r.URL.Query().Get("vector")
+	useVector := vectorParam == "true" || vectorParam == "1"
+
+	var results []search.Result
+	var err error
+
+	if useVector {
+		vq := search.VectorQuery{
+			Query:        search.Query{Limit: limit},
+			VectorSearch: true,
+			QueryText:    "",
+			TopK:         limit * 3,
+			HybridWeight: 0.5,
+		}
+		results, err = s.searcher.HybridSearch(r.Context(), vq)
+	} else {
+		results, err = s.searcher.Recent(limit)
+	}
+
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "query failed",
@@ -465,7 +524,25 @@ func (s *Server) handleStale(w http.ResponseWriter, r *http.Request) {
 		days = d
 	}
 
-	results, err := s.searcher.Stale(days)
+	vectorParam := r.URL.Query().Get("vector")
+	useVector := vectorParam == "true" || vectorParam == "1"
+
+	var results []search.Result
+	var err error
+
+	if useVector {
+		vq := search.VectorQuery{
+			Query:        search.Query{Limit: 20},
+			VectorSearch: true,
+			QueryText:    "",
+			TopK:         60,
+			HybridWeight: 0.5,
+		}
+		results, err = s.searcher.HybridSearch(r.Context(), vq)
+	} else {
+		results, err = s.searcher.Stale(days)
+	}
+
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "query failed",
@@ -483,13 +560,13 @@ func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 	// A vault that is not under version control is a normal, valid state —
 	// report it truthfully rather than erroring so clients can show it.
 	if !git.IsGitRepo(s.vaultPath) {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"isGitRepo":      false,
-			"branch":         "",
-			"clean":          true,
-			"aheadBehind":    "",
-			"modifiedFiles":  []interface{}{},
-			"untrackedFiles": []string{},
+		writeJSON(w, http.StatusOK, contract.GitStatus{
+			IsGitRepo:      false,
+			Branch:         "",
+			Clean:          true,
+			AheadBehind:    "",
+			ModifiedFiles:  []contract.GitModifiedFile{},
+			UntrackedFiles: []string{},
 		})
 		return
 	}
@@ -503,12 +580,12 @@ func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	modified := make([]map[string]interface{}, 0, len(status.ModifiedFiles))
+	modified := make([]contract.GitModifiedFile, 0, len(status.ModifiedFiles))
 	for _, f := range status.ModifiedFiles {
-		modified = append(modified, map[string]interface{}{
-			"path":   f.Path,
-			"status": f.Status,
-			"staged": f.Staged,
+		modified = append(modified, contract.GitModifiedFile{
+			Path:   f.Path,
+			Status: f.Status,
+			Staged: f.Staged,
 		})
 	}
 	untracked := status.UntrackedFiles
@@ -516,13 +593,33 @@ func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 		untracked = []string{}
 	}
 
+	writeJSON(w, http.StatusOK, contract.GitStatus{
+		IsGitRepo:      true,
+		Branch:         status.Branch,
+		Clean:          status.IsClean,
+		AheadBehind:    status.AheadBehind,
+		ModifiedFiles:  modified,
+		UntrackedFiles: untracked,
+	})
+}
+
+// ── Auth Verify ─────────────────────────────────────────────────────
+
+func (s *Server) handleAuthVerify(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("X-AgentVault-Token")
+	if token == "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"isGitRepo":      true,
-		"branch":         status.Branch,
-		"clean":          status.IsClean,
-		"aheadBehind":    status.AheadBehind,
-		"modifiedFiles":  modified,
-		"untrackedFiles": untracked,
+		"status":     "ok",
+		"server":     "agentvault",
+		"version":    Version,
+		"hasToken":   token != "",
+		"tokenValid": token == s.authToken,
 	})
 }
 

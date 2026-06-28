@@ -15,7 +15,9 @@
     "types": ["chrome"],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@agentvault/contract": ["../../packages/contract/src"],
+      "@agentvault/contract/*": ["../../packages/contract/src/*"]
     }
   },
   "include": ["src/**/*"],

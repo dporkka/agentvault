@@ -1,13 +1,14 @@
 import React from 'react';
-import type { VaultStatus as VaultStatusType } from '@/api/types';
+import type { VaultStatus as VaultStatusType } from '@agentvault/contract';
 
 interface VaultStatusProps {
   status: VaultStatusType | null;
   connected: boolean;
   loading: boolean;
+  authenticated?: boolean | null;
 }
 
-const VaultStatus: React.FC<VaultStatusProps> = ({ status, connected, loading }) => {
+const VaultStatus: React.FC<VaultStatusProps> = ({ status, connected, loading, authenticated }) => {
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-vault-text-muted animate-pulse">
@@ -29,14 +30,19 @@ const VaultStatus: React.FC<VaultStatusProps> = ({ status, connected, loading })
     );
   }
 
+  const authLabel = authenticated === false ? 'Not authenticated' : 'Connected';
+  const authColorClass = authenticated === false ? 'text-vault-warning' : 'text-vault-success';
+  const dotColorClass = authenticated === false ? 'bg-amber-500' : 'bg-vault-success';
+  const pingColorClass = authenticated === false ? 'bg-amber-400' : 'bg-emerald-400';
+
   return (
     <div className="flex items-center gap-3">
       <div className="flex items-center gap-2">
         <span className="relative flex h-2 w-2">
-          <span className="animate-pulse-dot absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-vault-success" />
+          <span className={`animate-pulse-dot absolute inline-flex h-full w-full rounded-full opacity-75 ${pingColorClass}`} />
+          <span className={`relative inline-flex rounded-full h-2 w-2 ${dotColorClass}`} />
         </span>
-        <span className="text-sm text-vault-success font-medium">Connected</span>
+        <span className={`text-sm font-medium ${authColorClass}`}>{authLabel}</span>
       </div>
       {status && (
         <>

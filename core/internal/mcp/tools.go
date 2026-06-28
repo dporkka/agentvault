@@ -11,7 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/ai"
+	"github.com/agentvault/core/internal/config"
+	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
+	"github.com/agentvault/core/internal/rag"
 	"github.com/agentvault/core/internal/search"
 	"github.com/agentvault/core/internal/templates"
 )
@@ -207,29 +211,6 @@ func (s *Server) handleCreateNote(args map[string]interface{}) (string, error) {
 	return s.createNote(noteType, title, project, tags)
 }
 
-// folderForType returns the full vault path for a given note type and project.
-func folderForType(noteType, project, vaultPath string) string {
-	m := map[string]string{
-		"note":     "10-notes",
-		"decision": "30-decisions",
-		"task":     "10-notes",
-		"meeting":  "20-projects",
-		"source":   "40-research",
-		"capture":  "00-inbox",
-	}
-	folder, ok := m[noteType]
-	if !ok {
-		folder = "10-notes"
-	}
-	if noteType == "meeting" && project != "" {
-		return filepath.Join(vaultPath, "20-projects", project)
-	}
-	if noteType == "decision" && project != "" {
-		return filepath.Join(vaultPath, "30-decisions")
-	}
-	return filepath.Join(vaultPath, folder)
-}
-
 // createNote is the shared implementation for creating notes.
 func (s *Server) createNote(noteType, title, project string, tags []string) (string, error) {
 	// Validate type
@@ -281,6 +262,12 @@ func (s *Server) createNote(noteType, title, project string, tags []string) (str
 	s.logWrite("create_note", outPath)
 
 	relPath, _ := filepath.Rel(s.vaultPath, outPath)
+
+	// Auto-index the newly created file (non-blocking)
+	go func() {
+		_, _ = s.indexer.Index(indexer.IndexOptions{Path: relPath})
+	}()
+
 	return fmt.Sprintf("Created note: `%s`\n- **Path:** %s\n- **ID:** %s\n- **Type:** %s", relPath, relPath, id, noteType), nil
 }
 
@@ -417,6 +404,12 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 	}
 
 	relPath, _ := filepath.Rel(s.vaultPath, outPath)
+
+	// Auto-index the newly created file (non-blocking)
+	go func() {
+		_, _ = s.indexer.Index(indexer.IndexOptions{Path: relPath})
+	}()
+
 	return fmt.Sprintf("Captured to inbox: `%s`\n- **ID:** %s\n- **Path:** %s", relPath, id, relPath), nil
 }
 
@@ -742,4 +735,67 @@ func (s *Server) logWrite(operation, path string) {
 	); err != nil {
 		log.Printf("[MCP] failed to log write: %v", err)
 	}
+}
+
+// --- Tool: agentvault.ask ---
+
+func (s *Server) registerAsk() {
+	s.tools["agentvault.ask"] = Tool{
+		Name:        "agentvault.ask",
+		Description: "Ask a question using the vault's indexed notes as source material. Returns a structured answer with sources, confidence, and suggested actions.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"question": schemaString("The question to ask the AI about your vault's notes"),
+		}, []string{"question"}),
+		Handler: s.handleAsk,
+	}
+}
+
+func (s *Server) handleAsk(args map[string]interface{}) (string, error) {
+	question := stringArg(args, "question")
+	if question == "" {
+		return "", fmt.Errorf("question is required")
+	}
+
+	cfg, err := config.Load(s.vaultPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to load config: %w", err)
+	}
+
+	provider, err := ai.LoadProvider(cfg.AI)
+	if err != nil {
+		return "", fmt.Errorf("AI not configured: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pipeline := rag.New(s.searcher, provider)
+	answer, err := pipeline.Ask(ctx, question)
+	if err != nil {
+		return "", fmt.Errorf("query failed: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(answer.Answer)
+	sb.WriteString("\n\n**Sources:**\n")
+	for _, src := range answer.Sources {
+		sb.WriteString(fmt.Sprintf("- [%s](%s)\n", src.Title, src.Path))
+	}
+	if answer.Confidence != "" {
+		sb.WriteString(fmt.Sprintf("\n*Confidence: %s*", answer.Confidence))
+	}
+	if len(answer.Caveats) > 0 {
+		sb.WriteString("\n\n**Caveats:**\n")
+		for _, c := range answer.Caveats {
+			sb.WriteString(fmt.Sprintf("- %s\n", c))
+		}
+	}
+	if len(answer.SuggestedActions) > 0 {
+		sb.WriteString("\n**Suggested Actions:**\n")
+		for _, a := range answer.SuggestedActions {
+			sb.WriteString(fmt.Sprintf("- %s\n", a))
+		}
+	}
+
+	return sb.String(), nil
 }

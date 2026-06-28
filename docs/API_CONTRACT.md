@@ -1,20 +1,57 @@
 # AgentVault Local HTTP API Contract
 
-Last updated: 2026-06-10
+Last updated: 2026-06-15
 
 This is the single source of truth for the local HTTP API exposed by
 `agentvault serve` (package `core/internal/api`). It documents every route, its
 auth requirement, request shape, and the **exact JSON the server emits today**.
-Where a shipped client expects a different shape, that mismatch is called out in
-[Known contract drift](#known-contract-drift) rather than hidden — aligning the
-clients to this contract is the next planned step (see
-[IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md), "shared/generated API types").
+The same shapes are enforced by the `core/internal/contract` Go package
+(imported by `core/internal/api` and by `apps/desktop-wails`) and by the
+`@agentvault/contract` TypeScript package (imported by all four clients via
+path mappings). The CI gate `make contract-check` fails if any client
+re-introduces snake_case keys or hard-codes the API base URL.
 
 The field names below are derived directly from the handlers
 (`core/internal/api/handlers.go`), middleware (`middleware.go`), and the shape
-assertions in `server_test.go`. When a handler serializes a Go struct that has
-no `json` tags, Go emits the **exported (PascalCase)** field names verbatim;
-this is noted per-endpoint because it is the main source of client drift.
+assertions in `server_test.go`. All structs now carry explicit camelCase `json`
+tags for consistent serialization across server and clients.
+
+## Shared client types
+
+The TypeScript clients (`apps/web-local`, `apps/browser-extension`,
+`apps/mobile-expo`) and the Wails desktop frontend all import their request
+and response types from `packages/contract/`, which is the canonical TS
+contract. The package has no runtime dependencies and is consumed via
+TypeScript path mappings (Vite, Metro `watchFolders`) and Metro config.
+
+| Source file | What it holds |
+| --- | --- |
+| `packages/contract/src/types.ts` | The TypeScript types for every endpoint's request and response body. |
+| `packages/contract/src/endpoints.ts` | A typed `routes` constant plus a `Endpoint<M, P>` helper. |
+| `packages/contract/src/client.ts` | A zero-dependency `createClient` factory and a `defaultClient` that web apps use directly. |
+| `core/internal/contract/contract.go` | The matching Go structs, imported by `core/internal/api` and `apps/desktop-wails/app.go`. |
+
+To add a new endpoint, add the types to `packages/contract/src/types.ts`,
+add a route entry to `packages/contract/src/endpoints.ts`, and add a method
+to the `ApiClient` interface in `packages/contract/src/client.ts`. The
+contract check (`make contract-check`) will fail if a client ships a
+hard-coded base URL or a snake_case key, so future drift is caught at
+CI time.
+
+## Connecting clients
+
+When `agentvault serve` starts it prints an auth token to the terminal. Local
+clients store this token and send it on every write request via the
+`X-AgentVault-Token` header or `Authorization: Bearer <token>`.
+
+Clients can check a stored token without making a write operation by calling
+`GET /auth/verify`. The response includes:
+
+- `hasToken`: whether the client sent a token header.
+- `tokenValid`: whether the sent token matches the server's current token.
+
+A missing or incorrect token on a write endpoint returns `401` with
+`{"error":"unauthorized","detail":"Valid X-AgentVault-Token header required"}`.
 
 ## Conventions
 
@@ -45,16 +82,17 @@ this is noted per-endpoint because it is the main source of client drift.
 | Method | Path | Auth | Success | Body casing |
 | --- | --- | --- | --- | --- |
 | GET | `/health` | no | 200 | camelCase |
+| GET | `/auth/verify` | no | 200 | camelCase |
 | GET | `/vault/status` | no | 200 | camelCase |
-| POST | `/vault/index` | yes | 200 | **PascalCase** (`IndexResult`) |
-| GET | `/search` | no | 200 | **PascalCase** (`[]search.Result`) |
+| POST | `/vault/index` | yes | 200 | camelCase (`IndexResult`) |
+| GET | `/search` | no | 200 | camelCase (`[]search.Result`) |
 | GET | `/notes/{id}` | no | 200 / 400 / 404 | camelCase |
 | POST | `/notes` | yes | 200 | camelCase |
 | POST | `/capture` | yes | 200 | camelCase |
 | POST | `/ask` | yes | 200 / 400 / 502 | camelCase (`rag.Answer`) |
 | GET | `/projects` | no | 200 | bare `string[]` |
-| GET | `/recent` | no | 200 | **PascalCase** (`[]search.Result`) |
-| GET | `/stale` | no | 200 | **PascalCase** (`[]search.Result`) |
+| GET | `/recent` | no | 200 | camelCase (`[]search.Result`) |
+| GET | `/stale` | no | 200 | camelCase (`[]search.Result`) |
 | GET | `/git/status` | no | 200 | camelCase |
 
 ---
@@ -67,71 +105,97 @@ No auth. Liveness + identity probe.
 { "status": "ok", "vault": "/abs/path/to/vault", "version": "0.1.0" }
 ```
 
+## GET /auth/verify
+
+No auth. Allows clients to check whether their stored token is still valid
+without making a write operation. Returns the server's current token validity
+status:
+
+```json
+{
+  "status": "ok",
+  "server": "agentvault",
+  "version": "0.1.0",
+  "hasToken": true,
+  "tokenValid": true
+}
+```
+
+- `hasToken`: whether the client sent a token header
+- `tokenValid`: whether the sent token matches the server's current token
+
 ## GET /vault/status
 
-No auth. `noteCount` and `indexedAt` are only populated when the path is a vault.
+No auth. `noteCount` and `version` are only populated when the path is a vault.
 
 ```json
 {
   "path": "/abs/path/to/vault",
   "isVault": true,
   "noteCount": 42,
-  "indexedAt": "2026-06-10T11:00:00Z"
+  "version": "2026-06-10T11:00:00Z"
 }
 ```
-
-> Drift: the web client's `VaultStatus` type declares `version` instead of
-> `indexedAt`. See [Known contract drift](#known-contract-drift).
 
 ## POST /vault/index
 
 Auth required. Optional JSON body of index options; all fields optional:
 
 ```json
-{ "Force": false, "Rebuild": false, "Path": "", "Embed": false }
+{ "force": false, "rebuild": false, "path": "", "embed": false }
 ```
 
-Returns the `indexer.IndexResult` struct **verbatim (PascalCase, no `json`
-tags)**:
+Returns the `indexer.IndexResult` struct with camelCase `json` tags:
 
 ```json
 {
-  "Scanned": 10, "Added": 2, "Updated": 1, "Removed": 0, "Skipped": 7,
-  "Errors": [ { "Path": "10-notes/bad.md", "Error": "..." } ],
-  "ChunksAdded": 14, "EmbedErrors": 0, "Duration": 12345678
+  "scanned": 10, "added": 2, "updated": 1, "removed": 0, "skipped": 7,
+  "errors": [ { "path": "10-notes/bad.md", "error": "..." } ],
+  "chunksAdded": 14, "embedErrors": 0, "duration": 12345678
 }
 ```
 
-`Duration` is a Go `time.Duration` (integer nanoseconds). `Errors` is `null`
+`duration` is a Go `time.Duration` (integer nanoseconds). `errors` is `null`
 when empty.
 
 ## GET /search
 
 No auth. Query params (all optional except that an empty `q` returns recent-style
 results): `q`, `type`, `project`, `tag`, `status`, `limit` (default 20),
-`offset`. Returns a JSON **array** of `search.Result` serialized **verbatim
-(PascalCase, no `json` tags)**:
+`offset`. Returns a JSON **array** of `search.Result` serialized with camelCase `json` tags:
+
+Query parameters (all optional):
+- `q`: search text
+- `type`: filter by note type
+- `project`: filter by project
+- `tag`: filter by tag
+- `status`: filter by status
+- `limit`: max results (default 20)
+- `offset`: pagination offset
+- `vector`: enable vector/hybrid search (`true` or `1`)
+- `hybrid_weight`: weight for vector vs FTS (0=FTS only, 1=vector only, default 0.5)
+- `topk`: number of vector candidates to fetch (default limit*3)
+
+The `@agentvault/contract` TypeScript client exposes these as camelCase
+(`vector`, `hybridWeight`, `topk`) and translates `hybridWeight` to the
+server's `hybrid_weight` query key before sending the request.
 
 ```json
 [
   {
-    "ID": "note_2024_01_15_123",
-    "Title": "Test Note",
-    "Path": "10-notes/test-note.md",
-    "Type": "note",
-    "Project": "test-project",
-    "Status": "",
-    "Tags": ["go", "api"],
-    "Snippet": "…matched excerpt…",
-    "Score": -1.23,
-    "UpdatedAt": "2024-01-15T12:00:00Z"
+    "id": "note_2024_01_15_123",
+    "title": "Test Note",
+    "path": "10-notes/test-note.md",
+    "type": "note",
+    "project": "test-project",
+    "status": "",
+    "tags": ["go", "api"],
+    "snippet": "…matched excerpt…",
+    "score": -1.23,
+    "updatedAt": "2024-01-15T12:00:00Z"
   }
 ]
 ```
-
-> Drift: every shipped client declares these fields in camelCase
-> (`id`, `title`, `path`, `snippet`, `updatedAt`, …) and does **not** read
-> `Status`/`Score`. See [Known contract drift](#known-contract-drift).
 
 ## GET /notes/{id}
 
@@ -225,13 +289,26 @@ result serializes to `[]`, never `null`:
 
 ## GET /recent
 
-No auth. `limit` query param (default 10). Same **PascalCase** `[]search.Result`
+No auth. `limit` query param (default 10). Same camelCase `[]search.Result`
 shape as [`/search`](#get-search).
+
+Query parameters (all optional):
+- `limit`: max results (default 10)
+- `vector`: enable vector/hybrid search (`true` or `1`)
+- `hybrid_weight`: weight for vector vs FTS (0=FTS only, 1=vector only, default 0.5)
+- `topk`: number of vector candidates to fetch (default limit*3)
 
 ## GET /stale
 
 No auth. `days` query param (default 30) — notes not updated within that window.
-Same **PascalCase** `[]search.Result` shape as [`/search`](#get-search).
+Same camelCase `[]search.Result` shape as [`/search`](#get-search).
+
+Query parameters (all optional):
+- `days`: staleness window in days (default 30)
+- `limit`: max results (default 20)
+- `vector`: enable vector/hybrid search (`true` or `1`)
+- `hybrid_weight`: weight for vector vs FTS (0=FTS only, 1=vector only, default 0.5)
+- `topk`: number of vector candidates to fetch (default 60)
 
 ## GET /git/status
 
@@ -257,29 +334,38 @@ arrays are empty (never `null`).
 
 ## Known contract drift
 
-These are the places where the server's current output does **not** match what a
-shipped client expects. They are documented here so the next PR (consolidating
-client types onto one shared/generated source) has an exact target. None are
-blockers for Phase 0, but the first two cause fields to read as `undefined` in
-the web client at runtime.
+This document is now enforced by the shared `@agentvault/contract`
+package and the `make contract-check` CI gate. The drift items below
+are all resolved; the contract in the rest of this document is what
+every client and the server now produce.
 
-1. **`/search`, `/recent`, `/stale` casing.** The server serializes
-   `search.Result` with no `json` tags → PascalCase (`Title`, `Snippet`,
-   `UpdatedAt`, `ID`, …). The web client's `SearchResult` type
-   (`apps/web-local/src/api/types.ts`) declares camelCase
-   (`title`, `snippet`, `updatedAt`, `id`, …), so those fields are `undefined`
-   at runtime. **Recommended fix:** add camelCase `json` tags to `search.Result`
-   and update the `server_test.go` shape assertions (currently `r["Title"]`,
-   `r["ID"]`) accordingly. Note: the desktop Wails app binds the same struct, so
-   its generated TS models must be re-checked when tags change.
+**Resolved:**
+- `/search`, `/recent`, `/stale` serialize `search.Result` with camelCase
+  `json` tags (`id`, `title`, `path`, `type`, `project`, `status`, `tags`,
+  `snippet`, `score`, `updatedAt`). — Types now live in
+  `packages/contract/src/types.ts` and `core/internal/contract/contract.go`.
+- `/vault/index` serializes `indexer.IndexResult` with camelCase `json`
+  tags (`scanned`, `added`, `updated`, `removed`, `skipped`, `errors`,
+  `chunksAdded`, `embedErrors`, `duration`). The nested `IndexError` also uses
+  camelCase (`path`, `error`). — Same shared source.
+- `/vault/status` returns `version` instead of `indexedAt`. — Same.
+- `/notes/{id}` returns the full note body under `content` and uses
+  `contract.NoteDetail` for the response shape. — New `contract.NoteDetail`.
+- `/git/status` returns the `contract.GitStatus` shape with
+  `isGitRepo`/`branch`/`clean`/`aheadBehind`/`modifiedFiles`/`untrackedFiles`
+  instead of a hand-written `map[string]interface{}`. — New
+  `contract.GitStatus` and `contract.GitModifiedFile`.
+- `/auth/verify` is wired and typed in the contract package even though
+  no client (besides the optional `verifyAuth()` helper) calls it.
+- Web, extension, mobile, and Wails desktop all import
+  `SearchResult`/`Answer`/`Source` from `@agentvault/contract`, so the
+  `decision.status || 'active'` line in the Wails DecisionDashboard now
+  reads real status data (previously the Wails SearchResult lacked
+  `status`).
+- The Wails desktop `VaultStatus` now uses the shared
+  `contract.VaultStatus` (`isVault`, not `isOpen`) and the Wails
+  frontend checks `vaultStatus?.isVault`.
 
-2. **`/vault/status` field name.** Server emits `indexedAt`; the web
-   `VaultStatus` type declares `version`. Pick one name in the shared contract.
-
-3. **`/vault/index` casing.** Returns `IndexResult` PascalCase. No client reads
-   it field-by-field today, but it should be camelCased for consistency when the
-   shared contract lands.
-
-The endpoints already aligned across server, tests, and clients are
-`/health`, `/notes/{id}`, `/notes` (POST), `/capture`, `/ask`, `/projects`, and
-`/git/status`.
+All endpoints are now aligned across server, tests, and clients:
+`/health`, `/vault/status`, `/vault/index`, `/search`, `/notes/{id}`, `/notes`
+(POST), `/capture`, `/ask`, `/projects`, `/recent`, `/stale`, and `/git/status`.

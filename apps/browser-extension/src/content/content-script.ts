@@ -1,4 +1,4 @@
-import type { PageData } from '@shared/types';
+import type { PageData } from '@shared/local';
 
 function extractPageData(): PageData {
   const selectedText = window.getSelection()?.toString().trim() || '';

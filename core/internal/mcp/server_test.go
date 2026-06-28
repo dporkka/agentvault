@@ -193,6 +193,7 @@ func TestHandleToolsList(t *testing.T) {
 		"agentvault.list_recent",
 		"agentvault.git_status",
 		"agentvault.log_agent_run",
+		"agentvault.ask",
 	}
 
 	if len(tools) != len(expectedTools) {

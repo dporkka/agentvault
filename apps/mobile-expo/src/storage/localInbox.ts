@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DEFAULT_BASE_URL } from '@agentvault/contract';
 import type { Capture, AppSettings } from '../types';
 
 const INBOX_KEY = 'agentvault_inbox';
@@ -59,12 +60,12 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
 export async function getSettings(): Promise<AppSettings> {
   const data = await AsyncStorage.getItem(SETTINGS_KEY);
   if (!data) {
-    return { serverUrl: 'http://127.0.0.1:47321', defaultProject: '', token: '' };
+    return { serverUrl: DEFAULT_BASE_URL, defaultProject: '', token: '' };
   }
   try {
     return JSON.parse(data) as AppSettings;
   } catch {
-    return { serverUrl: 'http://127.0.0.1:47321', defaultProject: '', token: '' };
+    return { serverUrl: DEFAULT_BASE_URL, defaultProject: '', token: '' };
   }
 }
 

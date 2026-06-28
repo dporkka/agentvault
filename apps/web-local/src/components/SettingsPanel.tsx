@@ -1,30 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import type { HealthResponse } from '@/api/types';
+import { DEFAULT_BASE_URL, type HealthResponse } from '@agentvault/contract';
 
 const SettingsPanel: React.FC = () => {
-  const [serverUrl, setServerUrl] = useState(api.baseUrl);
-  const [token, setToken] = useState(api.token);
+  const [serverUrl, setServerUrl] = useState(api.getBaseUrl());
+  const [token, setToken] = useState(api.getToken());
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [vaultInfo, setVaultInfo] = useState<HealthResponse | null>(null);
 
   // Load saved values on mount
   useEffect(() => {
-    setServerUrl(api.baseUrl);
-    setToken(api.token);
+    setServerUrl(api.getBaseUrl());
+    setToken(api.getToken());
   }, []);
 
   const handleSave = () => {
-    api.baseUrl = serverUrl;
-    api.token = token;
+    api.setBaseUrl(serverUrl);
+    api.setToken(token);
     setTestResult(null);
   };
 
   const handleTest = async () => {
     // Save current values first
-    api.baseUrl = serverUrl;
-    api.token = token;
+    api.setBaseUrl(serverUrl);
+    api.setToken(token);
     setTesting(true);
     setTestResult(null);
 
@@ -47,10 +47,10 @@ const SettingsPanel: React.FC = () => {
   };
 
   const handleClear = () => {
-    setServerUrl('http://127.0.0.1:47321');
+    setServerUrl(DEFAULT_BASE_URL);
     setToken('');
-    api.baseUrl = 'http://127.0.0.1:47321';
-    api.token = '';
+    api.setBaseUrl(DEFAULT_BASE_URL);
+    api.setToken('');
     setTestResult(null);
     setVaultInfo(null);
   };
@@ -74,7 +74,7 @@ const SettingsPanel: React.FC = () => {
               type="text"
               value={serverUrl}
               onChange={(e) => { setServerUrl(e.target.value); setTestResult(null); }}
-              placeholder="http://127.0.0.1:47321"
+              placeholder={DEFAULT_BASE_URL}
               className="w-full bg-vault-bg-tertiary border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text-primary placeholder-vault-text-muted focus:border-vault-accent focus:ring-1 focus:ring-vault-accent transition-colors outline-none font-mono"
             />
             <p className="text-xs text-vault-text-muted mt-1.5">

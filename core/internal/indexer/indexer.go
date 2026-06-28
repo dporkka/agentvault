@@ -13,6 +13,7 @@ import (
 
 	"github.com/agentvault/core/internal/chunker"
 	"github.com/agentvault/core/internal/config"
+	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/embeddings"
 	"github.com/agentvault/core/internal/markdown"
@@ -39,24 +40,14 @@ type IndexOptions struct {
 	Embed   bool   // generate embeddings during index
 }
 
-// IndexResult holds the outcome of an indexing run.
-type IndexResult struct {
-	Scanned     int
-	Added       int
-	Updated     int
-	Removed     int
-	Skipped     int
-	Errors      []IndexError
-	ChunksAdded int
-	EmbedErrors int
-	Duration    time.Duration
-}
+// IndexResult holds the outcome of an indexing run. It is an alias of
+// contract.IndexResult so the HTTP handler and the Wails desktop service
+// share a single canonical shape.
+type IndexResult = contract.IndexResult
 
-// IndexError records a file that failed to index.
-type IndexError struct {
-	Path  string
-	Error string
-}
+// IndexError records a file that failed to index. It is an alias of
+// contract.IndexError for the same reason as IndexResult above.
+type IndexError = contract.IndexError
 
 // New creates a new Indexer.
 func New(database *db.DB, vaultPath string) *Indexer {

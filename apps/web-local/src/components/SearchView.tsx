@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/api/client';
 import { useDebounce } from '@/hooks/useDebounce';
-import type { SearchResult } from '@/api/types';
+import type { SearchResult } from '@agentvault/contract';
 
 const TYPE_FILTERS = ['all', 'note', 'decision', 'task', 'meeting', 'source'] as const;
 type TypeFilter = (typeof TYPE_FILTERS)[number];
@@ -21,6 +21,8 @@ const typeBadgeClass = (type: string): string => {
 const SearchView: React.FC = () => {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [vectorEnabled, setVectorEnabled] = useState(false);
+  const [hybridWeight, setHybridWeight] = useState(0.5);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +47,13 @@ const SearchView: React.FC = () => {
       setError(null);
       try {
         const type = typeFilter === 'all' ? undefined : typeFilter;
-        const res = await api.search(debouncedQuery, type);
+        const params: import('@agentvault/contract').SearchParams = {
+          q: debouncedQuery,
+          type,
+          vector: vectorEnabled || undefined,
+          hybridWeight: vectorEnabled ? hybridWeight : undefined,
+        };
+        const res = await api.search(params);
         if (!cancelled) {
           setResults(res);
           setSelectedIndex(-1);
@@ -62,7 +70,7 @@ const SearchView: React.FC = () => {
     doSearch();
 
     return () => { cancelled = true; };
-  }, [debouncedQuery, typeFilter]);
+  }, [debouncedQuery, typeFilter, vectorEnabled, hybridWeight]);
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -152,6 +160,34 @@ const SearchView: React.FC = () => {
               {t}
             </button>
           ))}
+        </div>
+
+        {/* Vector search toggle */}
+        <div className="mt-3 flex items-center gap-4">
+          <label className="flex items-center gap-2 text-xs text-vault-text-secondary cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={vectorEnabled}
+              onChange={(e) => setVectorEnabled(e.target.checked)}
+              className="rounded border-vault-border bg-vault-bg-tertiary text-vault-accent focus:ring-vault-accent"
+            />
+            Vector search
+          </label>
+          {vectorEnabled && (
+            <div className="flex items-center gap-2 text-xs text-vault-text-secondary">
+              <span>Hybrid weight</span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.1}
+                value={hybridWeight}
+                onChange={(e) => setHybridWeight(parseFloat(e.target.value))}
+                className="w-24 accent-vault-accent"
+              />
+              <span className="font-mono w-8">{hybridWeight.toFixed(1)}</span>
+            </div>
+          )}
         </div>
       </div>
 

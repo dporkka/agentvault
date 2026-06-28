@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import type { Note } from '@/api/types';
+import type { NoteDetail } from '@agentvault/contract';
 
 interface NoteViewerProps {
-  note: Note;
+  note: NoteDetail;
 }
 
 const typeBadgeClass = (type: string): string => {

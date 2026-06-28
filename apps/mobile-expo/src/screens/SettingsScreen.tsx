@@ -9,18 +9,20 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { DEFAULT_BASE_URL } from '@agentvault/contract';
 import { getSettings, saveSettings, clearInbox, getUnsyncedCaptures, markAsSynced } from '../storage/localInbox';
-import { sendCapture } from '../api/agentvault';
-import { checkHealth } from '../api/agentvault';
+import { sendCapture, checkHealth, verifyToken } from '../api/agentvault';
 import type { AppSettings } from '../types';
 
 export default function SettingsScreen() {
   const [settings, setSettingsState] = useState<AppSettings>({
-    serverUrl: 'http://127.0.0.1:47321',
+    serverUrl: DEFAULT_BASE_URL,
     defaultProject: '',
     token: '',
   });
   const [health, setHealth] = useState<boolean | null>(null);
+  const [tokenStatus, setTokenStatus] = useState<'unknown' | 'missing' | 'invalid' | 'valid'>('unknown');
+  const [verifying, setVerifying] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
@@ -48,6 +50,29 @@ export default function SettingsScreen() {
     Alert.alert(ok ? 'Connected' : 'Unreachable', ok
       ? 'Server is responding.'
       : 'Could not reach the server. Check the URL and network.');
+  };
+
+  const handleVerifyToken = async () => {
+    setVerifying(true);
+    const result = await verifyToken(settings.serverUrl);
+    setVerifying(false);
+    if (!result) {
+      setTokenStatus('unknown');
+      Alert.alert('Unreachable', 'Could not contact the server to verify the token.');
+      return;
+    }
+    if (!result.hasToken) {
+      setTokenStatus('missing');
+      Alert.alert('Token Missing', 'No token was sent. Enter the token printed by agentvault serve.');
+      return;
+    }
+    if (!result.tokenValid) {
+      setTokenStatus('invalid');
+      Alert.alert('Invalid Token', 'The server rejected this token. Copy the token printed by agentvault serve.');
+      return;
+    }
+    setTokenStatus('valid');
+    Alert.alert('Token Valid', 'Your token is accepted by the server.');
   };
 
   const handleSyncAll = async () => {
@@ -100,7 +125,7 @@ export default function SettingsScreen() {
           style={styles.input}
           value={settings.serverUrl}
           onChangeText={(v) => update({ serverUrl: v })}
-          placeholder="http://127.0.0.1:47321"
+          placeholder={DEFAULT_BASE_URL}
           placeholderTextColor="#6b7280"
           autoCapitalize="none"
           keyboardType="url"
@@ -114,7 +139,12 @@ export default function SettingsScreen() {
             <Text style={styles.testBtnText}>Test</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.label}>Auth Token</Text>
+        <Text style={styles.label}>
+          Auth Token
+          {tokenStatus === 'valid' && <Text style={{ color: '#22c55e' }}> • valid</Text>}
+          {tokenStatus === 'invalid' && <Text style={{ color: '#ef4444' }}> • invalid</Text>}
+          {tokenStatus === 'missing' && <Text style={{ color: '#f59e0b' }}> • missing</Text>}
+        </Text>
         <TextInput
           style={styles.input}
           value={settings.token}
@@ -125,6 +155,15 @@ export default function SettingsScreen() {
           autoCorrect={false}
           secureTextEntry
         />
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.actionBtnSecondary]}
+          onPress={handleVerifyToken}
+          disabled={verifying}
+        >
+          <Text style={styles.actionBtnTextSecondary}>
+            {verifying ? 'Verifying...' : 'Verify Token'}
+          </Text>
+        </TouchableOpacity>
         <Text style={styles.hint}>Required to sync captures to the server.</Text>
       </View>
 
@@ -266,6 +305,11 @@ const styles = StyleSheet.create({
   actionBtnPrimary: {
     backgroundColor: '#4f7cff',
   },
+  actionBtnSecondary: {
+    backgroundColor: '#1a1d27',
+    borderWidth: 1,
+    borderColor: '#4f7cff',
+  },
   actionBtnDanger: {
     backgroundColor: '#ef444422',
     borderWidth: 1,
@@ -273,6 +317,11 @@ const styles = StyleSheet.create({
   },
   actionBtnTextPrimary: {
     color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  actionBtnTextSecondary: {
+    color: '#4f7cff',
     fontSize: 15,
     fontWeight: '700',
   },

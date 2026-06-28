@@ -1,29 +1,50 @@
 import { useState, useEffect } from 'react';
-import { checkHealth, getToken, setToken } from '@shared/api';
-import type { PageData } from '@shared/types';
+import { checkHealth, checkAuth, getToken, setToken, API_BASE } from '@shared/api';
+import type { PageData } from '@shared/local';
 import { StatusBar } from './components/StatusBar';
 import { ClipForm } from './components/ClipForm';
 import { SearchPanel } from './components/SearchPanel';
 import './popup.css';
 
-const API_BASE = 'http://127.0.0.1:47321';
 type Tab = 'clip' | 'search';
+type AuthState = 'unknown' | 'missing' | 'invalid' | 'valid';
 
 export function Popup() {
   const [activeTab, setActiveTab] = useState<Tab>('clip');
   const [connected, setConnected] = useState(false);
+  const [authState, setAuthState] = useState<AuthState>('unknown');
   const [pageData, setPageData] = useState<PageData>({ title: '', url: '', selectedText: '' });
   const [showSettings, setShowSettings] = useState(false);
   const [token, setTokenState] = useState('');
 
+  const refreshAuth = async () => {
+    const health = await checkHealth().catch(() => false);
+    setConnected(health);
+    if (!health) {
+      setAuthState('unknown');
+      return;
+    }
+    const verify = await checkAuth();
+    if (!verify) {
+      setAuthState('unknown');
+    } else if (!verify.hasToken) {
+      setAuthState('missing');
+    } else if (!verify.tokenValid) {
+      setAuthState('invalid');
+    } else {
+      setAuthState('valid');
+    }
+  };
+
   useEffect(() => {
-    checkHealth().then(setConnected).catch(() => setConnected(false));
+    refreshAuth();
     getToken().then(setTokenState);
   }, []);
 
-  const saveToken = (value: string) => {
+  const saveToken = async (value: string) => {
     setTokenState(value);
-    setToken(value);
+    await setToken(value);
+    await refreshAuth();
   };
 
   useEffect(() => {
@@ -81,6 +102,9 @@ export function Popup() {
         <div style={{ padding: '10px 14px', background: '#14161d', borderBottom: '1px solid #2a2d3a' }}>
           <label style={{ display: 'block', fontSize: '11px', color: '#9ca3af', fontWeight: 600, marginBottom: '4px' }}>
             Auth Token
+            {authState === 'valid' && <span style={{ color: '#22c55e', marginLeft: 6 }}>• valid</span>}
+            {authState === 'invalid' && <span style={{ color: '#ef4444', marginLeft: 6 }}>• invalid</span>}
+            {authState === 'missing' && <span style={{ color: '#f59e0b', marginLeft: 6 }}>• missing</span>}
           </label>
           <input
             type="password"
@@ -90,7 +114,7 @@ export function Popup() {
             style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', background: '#0f1117', color: '#e4e6eb', border: '1px solid #2a2d3a', borderRadius: '6px', fontSize: '12px' }}
           />
           <span style={{ display: 'block', fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>
-            Required to clip pages to your vault.
+            Run <code style={{ color: '#9ca3af' }}>agentvault serve</code> and paste the printed token here to clip pages.
           </span>
         </div>
       )}

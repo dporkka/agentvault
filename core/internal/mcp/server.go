@@ -104,6 +104,7 @@ func (s *Server) RegisterTools() {
 	s.registerListRecent()
 	s.registerGitStatus()
 	s.registerLogAgentRun()
+	s.registerAsk()
 }
 
 // SetAuthToken sets the auth token for HTTP requests.

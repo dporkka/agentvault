@@ -73,10 +73,12 @@ type Server struct {
 // NewServer creates a new API server.
 func NewServer(vaultPath string, database *db.DB) *Server {
 	mux := http.NewServeMux()
+	searcher := search.New(database)
+	searcher.ConfigureEmbeddings(vaultPath)
 	return &Server{
 		vaultPath:   vaultPath,
 		db:          database,
-		searcher:    search.New(database),
+		searcher:    searcher,
 		indexer:     indexer.New(database, vaultPath),
 		mux:         mux,
 		authToken:   generateAuthToken(),
@@ -128,6 +130,9 @@ func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
 func (s *Server) RegisterRoutes() {
 	// Health check (no auth required)
 	s.mux.HandleFunc("GET /health", s.handleHealth)
+
+	// Auth verify (no auth required)
+	s.mux.HandleFunc("GET /auth/verify", s.handleAuthVerify)
 
 	// Vault status
 	s.mux.HandleFunc("GET /vault/status", s.handleVaultStatus)

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/api/client';
-import type { AskResponse } from '@/api/types';
+import type { AskResponse } from '@agentvault/contract';
 
 interface ChatMessage {
   id: string;
@@ -58,7 +58,7 @@ const AskPanel: React.FC = () => {
     setError(null);
 
     try {
-      const result = await api.ask(q);
+      const result = await api.ask({ question: q });
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',

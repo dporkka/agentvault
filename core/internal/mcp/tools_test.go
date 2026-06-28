@@ -440,31 +440,6 @@ func TestSanitizeFilename(t *testing.T) {
 	}
 }
 
-func TestFolderForType(t *testing.T) {
-	cases := []struct {
-		noteType string
-		project  string
-		expected string
-	}{
-		{"note", "", "10-notes"},
-		{"decision", "p1", "30-decisions"},
-		{"task", "", "10-notes"},
-		{"meeting", "proj", "20-projects/proj"},
-		{"meeting", "", "10-notes"},
-		{"source", "", "40-research"},
-		{"capture", "", "00-inbox"},
-		{"unknown", "", "10-notes"},
-	}
-
-	for _, c := range cases {
-		result := folderForType(c.noteType, c.project, "/vault")
-		expected := filepath.Join("/vault", c.expected)
-		if result != expected {
-			t.Errorf("folderForType(%q, %q) = %q, want %q", c.noteType, c.project, result, expected)
-		}
-	}
-}
-
 func TestSchemaHelpers(t *testing.T) {
 	// Test schemaString
 	s := schemaString("A description")

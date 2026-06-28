@@ -17,7 +17,9 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@agentvault/contract": ["../../../packages/contract/src"],
+      "@agentvault/contract/*": ["../../../packages/contract/src/*"]
     }
   },
   "include": ["src"],

@@ -1,6 +1,6 @@
 # AgentVault Codebase Analysis
 
-Last reviewed: 2026-06-01
+Last reviewed: 2026-06-17
 
 ## Evidence Reviewed
 
@@ -40,7 +40,7 @@ AgentVault is a local-first Markdown vault with agent-facing retrieval and multi
 - `indexer`, `search`, `chunker`, `embeddings`, `vectors`: indexing, FTS5 search, chunking, embeddings, vector and hybrid search.
 - `ai`, `rag`: provider abstraction and source-grounded answer pipeline.
 - `api`: local HTTP API with auth middleware and CORS for local clients/extensions.
-- `mcp`: MCP protocol handling and 11 tools.
+- `mcp`: MCP protocol handling and 12 tools.
 - `git`: wrapper around the system Git CLI.
 - `doctor`: vault validation checks.
 
@@ -74,28 +74,50 @@ AgentVault is a local-first Markdown vault with agent-facing retrieval and multi
 
 ### Drift And Risk
 
-1. API and client contracts are now aligned for the core endpoints, with remaining type-sharing work.
-   - `GET /projects` now returns a bare `string[]`, matching the web, extension, and mobile clients and the other list endpoints (`/search`, `/recent`, `/stale`).
-   - `POST /ask` uses the core RAG pipeline and returns the structured `Answer` shape; API tests assert a real (non-stub) answer plus a `sources` array.
-   - `GET /git/status` now reports real vault state via `internal/git.Status`, including the not-a-repo case.
-   - Clients still hand-maintain their TypeScript contracts; a shared or generated type source remains the next contract-stability step.
+1. API and client contracts are now unified under a single source on both
+   sides of the boundary.
+   - The Go server, the Wails desktop Go bridge, and the four TypeScript
+     clients all share the `SearchResult`, `NoteDetail`, `IndexResult`,
+     `IndexError`, `Answer`, `Source`, `VaultStatus`, `GitStatus`, and
+     `GitModifiedFile` types from `core/internal/contract/` and
+     `packages/contract/`. There are no longer hand-written duplicates in
+     any of the four clients.
+   - `GET /projects` returns a bare `string[]`, matching the web,
+     extension, and mobile clients and the other list endpoints
+     (`/search`, `/recent`, `/stale`).
+   - `POST /ask` uses the core RAG pipeline and returns the structured
+     `Answer` shape; API tests assert a real (non-stub) answer plus a
+     `sources` array.
+   - `GET /git/status` reports real vault state via `internal/git.Status`,
+     including the not-a-repo case.
+   - The `make contract-check` CI gate fails on any future drift
+     (snake_case keys, hard-coded base URLs, or non-matching client
+     type imports).
 
-2. RAG behavior is duplicated.
-   - `internal/rag.Pipeline`, `cmd/agentvault/ask.go`, desktop `AIService`, and API `/ask` do not share one implementation path.
-   - This increases the chance that CLI, desktop, and web answers diverge.
+2. RAG behavior is now consolidated.
+   - `cmd/agentvault/ask.go` (CLI), `POST /ask` (API), `AIService.Ask`
+     (desktop), and `agentvault.ask` (MCP) all build `rag.New(searcher,
+     provider)` and call `pipeline.Ask`. Prompt construction and answer
+     parsing live in `internal/rag` alone; the CLI's former duplicate
+     search/prompt/parse flow is gone.
 
 3. Search capabilities are unevenly exposed.
    - CLI ask can use hybrid search when embeddings exist.
    - API search only exposes FTS filters.
    - Web/extension/mobile clients do not expose vector/hybrid search options.
 
-4. Write operations do not consistently refresh derived state.
-   - API and MCP create/capture flows write files, but indexing is a separate step.
-   - Users can create data that is not searchable until a manual index run.
+4. Write operations now refresh derived state.
+   - The API `handleCreateNote`/`handleCapture` and the MCP
+     `createNote`/`handleCapture` paths kick off a non-blocking
+     `indexer.Index(IndexOptions{Path: relPath})` goroutine right after
+     writing the file, so a newly created note or capture is searchable
+     without a manual `agentvault index` step.
 
-5. Frontend code is duplicated by surface.
-   - Web, extension, mobile, and desktop each carry their own local API/service assumptions.
-   - There is no generated API schema or shared TypeScript contract package.
+5. Frontend code is shared through one contract package.
+   - Web, extension, mobile, and desktop each consume
+     `@agentvault/contract` via TypeScript path mappings (and Metro
+     `watchFolders` for mobile). The package is a zero-dependency,
+     source-of-truth for every server-facing type.
 
 6. Documentation was stale before this pass.
    - README listed completed areas as upcoming.
@@ -117,10 +139,13 @@ AgentVault is a local-first Markdown vault with agent-facing retrieval and multi
 
 ## Recommended Engineering Direction
 
-Contract stability for the core endpoints is now in place (`/projects`, `/ask`, `/git/status` match clients and have shape tests). The next highest-leverage path is:
+Contract stability for the core endpoints is now enforced in one place on
+both sides of the boundary (Go: `core/internal/contract/`; TypeScript:
+`packages/contract/`). The next highest-leverage path is:
 
-1. Done — make the HTTP API contract match clients and tests for `/projects`, `/ask`, and `/git/status`.
-2. Finish routing all AI ask behavior through one core RAG service (CLI still has a duplicate flow).
-3. Ensure writes become searchable predictably (auto-index or explicit "index needed" state).
-4. Consolidate shared API types so clients stop hand-maintaining contracts.
-5. Then improve UX, packaging, and release readiness across the app surfaces.
+1. Done — make the HTTP API contract match clients and tests for `/projects`, `/ask`, `/git/status`, `/notes/{id}`, and `/vault/index`.
+2. Done — share one TypeScript contract source across all clients.
+3. Done — route all AI ask behavior (CLI, API, desktop, MCP) through one core RAG service (`internal/rag.Pipeline`).
+4. Done — writes become searchable predictably (API and MCP auto-index after create/capture).
+5. Consolidate note→folder resolution into `templates.FolderRelForType`/`FolderPathForType` as the single source used by CLI, API, MCP, and desktop.
+6. Then improve UX, packaging, and release readiness across the app surfaces.

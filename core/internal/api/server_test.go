@@ -158,20 +158,87 @@ func TestSearchEndpoint(t *testing.T) {
 		t.Error("expected at least one search result")
 	}
 
-	// Check first result has expected fields (keys are capitalized = exported)
+	// Check first result has expected fields (camelCase JSON keys)
 	found := false
 	for _, r := range results {
-		title, ok := r["Title"].(string)
+		title, ok := r["title"].(string)
 		if ok && strings.Contains(title, "Test") {
 			found = true
-			if r["ID"] != "note_2024_01_15_123" {
-				t.Errorf("expected ID=note_2024_01_15_123, got %v", r["ID"])
+			if r["id"] != "note_2024_01_15_123" {
+				t.Errorf("expected id=note_2024_01_15_123, got %v", r["id"])
 			}
 			break
 		}
 	}
 	if !found {
 		t.Errorf("expected to find 'Test Note' in results, got: %v", results)
+	}
+}
+
+func TestSearchEndpoint_VectorParams(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	ts := newTestServer(t, vaultPath, database)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/search?q=test&vector=true&hybrid_weight=0.5&topk=10")
+	if err != nil {
+		t.Fatalf("failed to search with vector params: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var results []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Error("expected at least one search result")
+	}
+
+	// The test vault has no embeddings, so the server should gracefully fall
+	// back to FTS and still return the expected note shape.
+	found := false
+	for _, r := range results {
+		if r["id"] == "note_2024_01_15_123" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected seeded note in vector-param results, got: %v", results)
+	}
+}
+
+func TestSearchEndpoint_WeightIgnoredWithoutVector(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	ts := newTestServer(t, vaultPath, database)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/search?q=test&hybrid_weight=1.0")
+	if err != nil {
+		t.Fatalf("failed to search: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var results []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Error("expected FTS results even when vector is not enabled")
 	}
 }
 
@@ -463,7 +530,7 @@ func TestRecentEndpoint(t *testing.T) {
 }
 
 // TestStaleEndpoint proves the /stale response shape: a JSON array of results
-// carrying the same (currently PascalCase) fields as /search and /recent. The
+// carrying the same camelCase fields as /search and /recent. The
 // seeded note's `updated` date is in 2024, so it is stale under the 30-day
 // default and must appear.
 func TestStaleEndpoint(t *testing.T) {
@@ -492,13 +559,13 @@ func TestStaleEndpoint(t *testing.T) {
 		t.Fatal("expected at least one stale note")
 	}
 
-	// Same shape as /search and /recent (exported/PascalCase keys today).
+	// Same shape as /search and /recent (camelCase JSON keys).
 	found := false
 	for _, r := range results {
-		if r["ID"] == "note_2024_01_15_123" {
+		if r["id"] == "note_2024_01_15_123" {
 			found = true
-			if title, _ := r["Title"].(string); title != "Test Note" {
-				t.Errorf("expected Title='Test Note', got %v", r["Title"])
+			if title, _ := r["title"].(string); title != "Test Note" {
+				t.Errorf("expected title='Test Note', got %v", r["title"])
 			}
 			break
 		}
@@ -712,5 +779,101 @@ func TestAskEndpoint_MissingQuestion(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected status 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestAuthVerifyEndpoint(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	srv := NewServer(vaultPath, database)
+	srv.RegisterRoutes()
+
+	var handler http.Handler = srv.mux
+	handler = srv.authMiddleware(handler)
+	handler = srv.corsMiddleware(handler)
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	// Without token - should report hasToken=false
+	resp, err := http.Get(ts.URL + "/auth/verify")
+	if err != nil {
+		t.Fatalf("failed to verify auth: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+
+	if body["status"] != "ok" {
+		t.Errorf("expected status=ok, got %v", body["status"])
+	}
+	if body["hasToken"] != false {
+		t.Errorf("expected hasToken=false, got %v", body["hasToken"])
+	}
+	if body["tokenValid"] != false {
+		t.Errorf("expected tokenValid=false without token, got %v", body["tokenValid"])
+	}
+
+	// With correct token - should report tokenValid=true
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/auth/verify", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("X-AgentVault-Token", srv.AuthToken())
+
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("failed to verify auth with token: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200 with token, got %d", resp.StatusCode)
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+
+	if body["hasToken"] != true {
+		t.Errorf("expected hasToken=true, got %v", body["hasToken"])
+	}
+	if body["tokenValid"] != true {
+		t.Errorf("expected tokenValid=true with correct token, got %v", body["tokenValid"])
+	}
+
+	// With wrong token - should report tokenValid=false
+	req, err = http.NewRequest(http.MethodGet, ts.URL+"/auth/verify", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("X-AgentVault-Token", "wrong-token")
+
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("failed to verify auth with wrong token: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200 with wrong token, got %d", resp.StatusCode)
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+
+	if body["hasToken"] != true {
+		t.Errorf("expected hasToken=true, got %v", body["hasToken"])
+	}
+	if body["tokenValid"] != false {
+		t.Errorf("expected tokenValid=false with wrong token, got %v", body["tokenValid"])
 	}
 }
