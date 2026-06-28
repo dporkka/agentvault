@@ -10,13 +10,8 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { Capture } from '../types';
-import {
-  getCaptures,
-  getUnsyncedCaptures,
-  markAsSynced,
-  deleteCapture,
-} from '../storage/localInbox';
-import { sendCapture } from '../api/agentvault';
+import { getCaptures, deleteCapture } from '../storage/localInbox';
+import { syncCaptures, formatSyncResult, isSyncable } from '../storage/sync';
 import CaptureCard from '../components/CaptureCard';
 import ConnectionBadge from '../components/ConnectionBadge';
 
@@ -60,23 +55,7 @@ export default function InboxScreen() {
 
   const handleSync = async () => {
     setRefreshing(true);
-    const unsynced = await getUnsyncedCaptures();
-    let sent = 0;
-    for (const cap of unsynced) {
-      try {
-        await sendCapture({
-          type: cap.type,
-          title: cap.title,
-          text: cap.text,
-          project: cap.project,
-          tags: cap.tags,
-        });
-        await markAsSynced(cap.id);
-        sent++;
-      } catch {
-        break;
-      }
-    }
+    await syncCaptures({ continueOnError: true });
     await load();
     setRefreshing(false);
   };
@@ -96,20 +75,12 @@ export default function InboxScreen() {
   };
 
   const handleSyncOne = async (cap: Capture) => {
-    if (cap.synced) return;
-    try {
-      await sendCapture({
-        type: cap.type,
-        title: cap.title,
-        text: cap.text,
-        project: cap.project,
-        tags: cap.tags,
-      });
-      await markAsSynced(cap.id);
-      load();
-    } catch {
-      Alert.alert('Error', 'Could not sync. Server unreachable?');
+    if (!isSyncable(cap)) return;
+    const result = await syncCaptures({ captureId: cap.id, continueOnError: false });
+    if (result.failed > 0) {
+      Alert.alert('Error', formatSyncResult(result));
     }
+    load();
   };
 
   return (

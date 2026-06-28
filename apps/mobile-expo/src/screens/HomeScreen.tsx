@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { Capture } from '../types';
-import { addCapture, getCaptures, getUnsyncedCaptures, markAsSynced, deleteCapture } from '../storage/localInbox';
-import { sendCapture } from '../api/agentvault';
+import { addCapture, getCaptures, deleteCapture } from '../storage/localInbox';
+import { syncCaptures, formatSyncResult } from '../storage/sync';
 import CaptureCard from '../components/CaptureCard';
 import ConnectionBadge from '../components/ConnectionBadge';
 
@@ -59,26 +59,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
   const handleSync = async () => {
     setSyncing(true);
-    const unsynced = await getUnsyncedCaptures();
-    let sent = 0;
-    for (const cap of unsynced) {
-      try {
-        await sendCapture({
-          type: cap.type,
-          title: cap.title,
-          text: cap.text,
-          project: cap.project,
-          tags: cap.tags,
-        });
-        await markAsSynced(cap.id);
-        sent++;
-      } catch {
-        // stop on first error, will retry later
-        break;
-      }
-    }
+    const result = await syncCaptures({ continueOnError: true });
     setSyncing(false);
-    showMessage(sent > 0 ? `Synced ${sent} captures` : 'Nothing to sync');
+    showMessage(formatSyncResult(result));
     load();
   };
 

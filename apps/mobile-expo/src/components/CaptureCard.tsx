@@ -14,6 +14,13 @@ const TYPE_LABELS: Record<string, string> = {
   photo: 'Cam',
 };
 
+const STATUS_COLORS: Record<string, string> = {
+  synced: '#22c55e',
+  syncing: '#4f7cff',
+  failed: '#ef4444',
+  unsynced: '#f59e0b',
+};
+
 export default function CaptureCard({ capture, onPress, onDelete }: CaptureCardProps) {
   const date = new Date(capture.createdAt).toLocaleDateString('en-US', {
     month: 'short',
@@ -21,6 +28,9 @@ export default function CaptureCard({ capture, onPress, onDelete }: CaptureCardP
     hour: '2-digit',
     minute: '2-digit',
   });
+
+  const status = capture.synced ? 'synced' : (capture.syncStatus ?? 'unsynced');
+  const statusColor = STATUS_COLORS[status] ?? STATUS_COLORS.unsynced;
 
   return (
     <TouchableOpacity
@@ -39,7 +49,7 @@ export default function CaptureCard({ capture, onPress, onDelete }: CaptureCardP
         <View
           style={[
             styles.syncIndicator,
-            { backgroundColor: capture.synced ? '#22c55e' : '#f59e0b' },
+            { backgroundColor: statusColor },
           ]}
         />
       </View>

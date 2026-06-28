@@ -9,9 +9,10 @@ import {
   StyleSheet,
 } from 'react-native';
 import { DEFAULT_BASE_URL } from '@agentvault/contract';
-import { clearInbox, getUnsyncedCaptures, markAsSynced } from '../storage/localInbox';
+import { clearInbox } from '../storage/localInbox';
 import { useSettings } from '../context/SettingsContext';
-import { sendCapture, checkHealth, verifyToken } from '../api/agentvault';
+import { syncCaptures, formatSyncResult } from '../storage/sync';
+import { checkHealth, verifyToken } from '../api/agentvault';
 import type { AppSettings } from '../types';
 
 export default function SettingsScreen() {
@@ -85,27 +86,9 @@ export default function SettingsScreen() {
 
   const handleSyncAll = async () => {
     setSyncing(true);
-    const unsynced = await getUnsyncedCaptures();
-    let sent = 0;
-    for (const cap of unsynced) {
-      try {
-        await sendCapture({
-          type: cap.type,
-          title: cap.title,
-          text: cap.text,
-          project: cap.project,
-          tags: cap.tags,
-        });
-        await markAsSynced(cap.id);
-        sent++;
-      } catch {
-        break;
-      }
-    }
+    const result = await syncCaptures({ continueOnError: true });
     setSyncing(false);
-    Alert.alert('Sync Complete', sent > 0
-      ? `Synced ${sent} of ${unsynced.length} captures.`
-      : 'Nothing to sync or server unreachable.');
+    Alert.alert('Sync Complete', formatSyncResult(result));
   };
 
   const handleClear = () => {
