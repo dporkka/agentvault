@@ -100,6 +100,10 @@ Exit criteria:
 - One service owns RAG behavior.
 - Tests cover no-result, provider-error, source-citation, vector fallback, and timeout paths.
 - Newly created notes become searchable through the expected user flow.
+- Vector/hybrid search is wired end-to-end: the API searcher has an embedding
+  client, the TypeScript contract emits the correct `hybrid_weight` query key,
+  the CLI exposes `--vector`/`--hybrid-weight`/`--topk`, and the web UI has a
+  vector toggle.
 
 ## Phase 2 - Client Reliability And UX
 

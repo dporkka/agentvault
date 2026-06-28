@@ -17,8 +17,10 @@ import type {
   IndexResult,
   NoteDetail,
   Projects,
+  RecentParams,
   SearchResult,
   SearchParams,
+  StaleParams,
   VaultStatus,
 } from './types';
 
@@ -48,8 +50,8 @@ export const routes: {
   readonly capture: EndpointDef<CaptureRequest, CaptureResponse>;
   readonly ask: EndpointDef<AskRequest, AskResponse>;
   readonly projects: EndpointDef<NoRequest, Projects>;
-  readonly recent: EndpointDef<NoRequest, SearchResult[]>;
-  readonly stale: EndpointDef<NoRequest, SearchResult[]>;
+  readonly recent: EndpointDef<RecentParams | undefined, SearchResult[]>;
+  readonly stale: EndpointDef<StaleParams | undefined, SearchResult[]>;
   readonly gitStatus: EndpointDef<NoRequest, GitStatus>;
 } = {
   health: {
@@ -126,14 +128,14 @@ export const routes: {
     method: 'GET',
     path: '/recent',
     auth: false,
-    request: undefined as never,
+    request: undefined as unknown as RecentParams | undefined,
     response: undefined as unknown as SearchResult[],
   },
   stale: {
     method: 'GET',
     path: '/stale',
     auth: false,
-    request: undefined as never,
+    request: undefined as unknown as StaleParams | undefined,
     response: undefined as unknown as SearchResult[],
   },
   gitStatus: {

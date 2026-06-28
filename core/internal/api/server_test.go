@@ -175,6 +175,73 @@ func TestSearchEndpoint(t *testing.T) {
 	}
 }
 
+func TestSearchEndpoint_VectorParams(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	ts := newTestServer(t, vaultPath, database)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/search?q=test&vector=true&hybrid_weight=0.5&topk=10")
+	if err != nil {
+		t.Fatalf("failed to search with vector params: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var results []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Error("expected at least one search result")
+	}
+
+	// The test vault has no embeddings, so the server should gracefully fall
+	// back to FTS and still return the expected note shape.
+	found := false
+	for _, r := range results {
+		if r["id"] == "note_2024_01_15_123" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected seeded note in vector-param results, got: %v", results)
+	}
+}
+
+func TestSearchEndpoint_WeightIgnoredWithoutVector(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	ts := newTestServer(t, vaultPath, database)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/search?q=test&hybrid_weight=1.0")
+	if err != nil {
+		t.Fatalf("failed to search: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var results []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Error("expected FTS results even when vector is not enabled")
+	}
+}
+
 func TestNoteByIDEndpoint(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
 	defer database.Close()

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/embeddings"
@@ -41,6 +42,32 @@ func New(database *db.DB) *Searcher {
 // SetEmbedClient sets the embedding client for vector search.
 func (s *Searcher) SetEmbedClient(client *embeddings.Client) {
 	s.embedClient = client
+}
+
+// ConfigureEmbeddings loads the vault config and creates an embedding client
+// for vector/hybrid search. It mirrors the configuration logic used by the
+// indexer so search and indexing agree on which model and endpoint to use.
+// A missing or invalid config falls back to the Ollama default.
+func (s *Searcher) ConfigureEmbeddings(vaultPath string) {
+	cfg, err := config.Load(vaultPath)
+	if err != nil {
+		s.embedClient = embeddings.NewClient("http://localhost:11434", "nomic-embed-text")
+		return
+	}
+
+	baseURL := "http://localhost:11434"
+	model := "nomic-embed-text"
+
+	if cfg.AI != nil {
+		if cfg.AI.BaseURL != "" {
+			baseURL = cfg.AI.BaseURL
+		}
+		if cfg.AI.EmbeddingModel != "" {
+			model = cfg.AI.EmbeddingModel
+		}
+	}
+
+	s.embedClient = embeddings.NewClient(baseURL, model)
 }
 
 // Search performs a full-text search with optional filters.

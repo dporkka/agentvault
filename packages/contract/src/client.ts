@@ -85,15 +85,21 @@ export interface ApiClient {
   getGitStatus(): Promise<GitStatus>;
 }
 
-function buildSearch(params: SearchParams | undefined): string {
+function buildSearch(params: SearchParams | RecentParams | StaleParams | undefined): string {
   const sp = new URLSearchParams();
   if (!params) return '';
+  // The server expects snake_case for these query params while the TS API
+  // stays camelCase to match the rest of the contract.
+  const keyMap: Record<string, string> = {
+    hybridWeight: 'hybrid_weight',
+  };
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined || v === null) continue;
+    const key = keyMap[k] ?? k;
     if (typeof v === 'boolean') {
-      if (v) sp.set(k, 'true');
+      if (v) sp.set(key, 'true');
     } else {
-      sp.set(k, String(v));
+      sp.set(key, String(v));
     }
   }
   return sp.toString();

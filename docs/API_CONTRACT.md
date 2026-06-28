@@ -161,6 +161,10 @@ Query parameters (all optional):
 - `hybrid_weight`: weight for vector vs FTS (0=FTS only, 1=vector only, default 0.5)
 - `topk`: number of vector candidates to fetch (default limit*3)
 
+The `@agentvault/contract` TypeScript client exposes these as camelCase
+(`vector`, `hybridWeight`, `topk`) and translates `hybridWeight` to the
+server's `hybrid_weight` query key before sending the request.
+
 ```json
 [
   {
