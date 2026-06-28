@@ -486,7 +486,25 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 		limit = n
 	}
 
-	results, err := s.searcher.Recent(limit)
+	vectorParam := r.URL.Query().Get("vector")
+	useVector := vectorParam == "true" || vectorParam == "1"
+
+	var results []search.Result
+	var err error
+
+	if useVector {
+		vq := search.VectorQuery{
+			Query:        search.Query{Limit: limit},
+			VectorSearch: true,
+			QueryText:    "",
+			TopK:         limit * 3,
+			HybridWeight: 0.5,
+		}
+		results, err = s.searcher.HybridSearch(r.Context(), vq)
+	} else {
+		results, err = s.searcher.Recent(limit)
+	}
+
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "query failed",

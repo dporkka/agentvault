@@ -1,6 +1,6 @@
 # AgentVault Local HTTP API Contract
 
-Last updated: 2026-06-28
+Last updated: 2026-06-15
 
 This is the single source of truth for the local HTTP API exposed by
 `agentvault serve` (package `core/internal/api`). It documents every route, its
@@ -306,6 +306,9 @@ shape as [`/search`](#get-search).
 
 Query parameters (all optional):
 - `limit`: max results (default 10)
+- `vector`: enable vector/hybrid search (`true` or `1`)
+- `hybrid_weight`: weight for vector vs FTS (0=FTS only, 1=vector only, default 0.5)
+- `topk`: number of vector candidates to fetch (default limit*3)
 
 ## GET /stale
 
@@ -315,6 +318,9 @@ Same camelCase `[]search.Result` shape as [`/search`](#get-search).
 Query parameters (all optional):
 - `days`: staleness window in days (default 30)
 - `limit`: max results (default 20)
+- `vector`: enable vector/hybrid search (`true` or `1`)
+- `hybrid_weight`: weight for vector vs FTS (0=FTS only, 1=vector only, default 0.5)
+- `topk`: number of vector candidates to fetch (default 60)
 
 ## GET /git/status
 
@@ -336,5 +342,42 @@ vault is a valid state and returns `isGitRepo: false` (not an error). Uses
 When `isGitRepo` is `false`: `branch` is `""`, `clean` is `true`, and both file
 arrays are empty (never `null`).
 
-There is no current known contract drift. The shapes above are enforced by the
-shared `@agentvault/contract` package and the `make contract-check` CI gate.
+---
+
+## Known contract drift
+
+This document is now enforced by the shared `@agentvault/contract`
+package and the `make contract-check` CI gate. The drift items below
+are all resolved; the contract in the rest of this document is what
+every client and the server now produce.
+
+**Resolved:**
+- `/search`, `/recent`, `/stale` serialize `search.Result` with camelCase
+  `json` tags (`id`, `title`, `path`, `type`, `project`, `status`, `tags`,
+  `snippet`, `score`, `updatedAt`). — Types now live in
+  `packages/contract/src/types.ts` and `core/internal/contract/contract.go`.
+- `/vault/index` serializes `indexer.IndexResult` with camelCase `json`
+  tags (`scanned`, `added`, `updated`, `removed`, `skipped`, `errors`,
+  `chunksAdded`, `embedErrors`, `duration`). The nested `IndexError` also uses
+  camelCase (`path`, `error`). — Same shared source.
+- `/vault/status` returns `version` instead of `indexedAt`. — Same.
+- `/notes/{id}` returns the full note body under `content` and uses
+  `contract.NoteDetail` for the response shape. — New `contract.NoteDetail`.
+- `/git/status` returns the `contract.GitStatus` shape with
+  `isGitRepo`/`branch`/`clean`/`aheadBehind`/`modifiedFiles`/`untrackedFiles`
+  instead of a hand-written `map[string]interface{}`. — New
+  `contract.GitStatus` and `contract.GitModifiedFile`.
+- `/auth/verify` is wired and typed in the contract package even though
+  no client (besides the optional `verifyAuth()` helper) calls it.
+- Web, extension, mobile, and Wails desktop all import
+  `SearchResult`/`Answer`/`Source` from `@agentvault/contract`, so the
+  `decision.status || 'active'` line in the Wails DecisionDashboard now
+  reads real status data (previously the Wails SearchResult lacked
+  `status`).
+- The Wails desktop `VaultStatus` now uses the shared
+  `contract.VaultStatus` (`isVault`, not `isOpen`) and the Wails
+  frontend checks `vaultStatus?.isVault`.
+
+All endpoints are now aligned across server, tests, and clients:
+`/health`, `/vault/status`, `/vault/index`, `/search`, `/notes/{id}`, `/notes`
+(POST), `/capture`, `/ask`, `/projects`, `/recent`, `/stale`, and `/git/status`.

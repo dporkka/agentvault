@@ -478,15 +478,6 @@ type AIService struct {
 	app *App
 }
 
-// AIStatus describes whether AI is configured and reachable for the
-// currently open vault.
-type AIStatus struct {
-	Enabled  bool   `json:"enabled"`
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-	Error    string `json:"error"`
-}
-
 // Ask queries the AI with source-grounded retrieval
 func (s *AIService) Ask(question string) (*rag.Answer, error) {
 	if s.app.searcher == nil {
