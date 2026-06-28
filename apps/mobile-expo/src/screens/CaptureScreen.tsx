@@ -9,6 +9,7 @@ import {
   Platform,
   StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { addCapture } from '../storage/localInbox';
 import { sendCapture } from '../api/agentvault';
 import { useSettings } from '../context/SettingsContext';
@@ -83,11 +84,12 @@ export default function CaptureScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={80}
-    >
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView
+        style={styles.keyboard}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={80}
+      >
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
@@ -153,6 +155,7 @@ export default function CaptureScreen() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+  </SafeAreaView>
   );
 }
 
@@ -160,6 +163,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0f1117',
+  },
+  keyboard: {
+    flex: 1,
   },
   scroll: {
     flex: 1,

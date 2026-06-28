@@ -7,6 +7,7 @@ import {
   createClient,
   type ApiClient,
   type AuthVerifyResponse,
+  type NoteDetail,
   type SearchParams,
   type SearchResult,
   DEFAULT_BASE_URL,
@@ -114,6 +115,12 @@ export async function getProjects(url?: string): Promise<string[]> {
   if (url) client.setBaseUrl(url);
   else await resolveBaseUrl();
   return client.getProjects();
+}
+
+export async function getNote(id: string, url?: string): Promise<NoteDetail> {
+  if (url) client.setBaseUrl(url);
+  else await resolveBaseUrl();
+  return client.getNote(id);
 }
 
 export async function verifyToken(url?: string): Promise<AuthVerifyResponse | null> {

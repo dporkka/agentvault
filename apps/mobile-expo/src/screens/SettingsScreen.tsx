@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { DEFAULT_BASE_URL } from '@agentvault/contract';
 import { clearInbox } from '../storage/localInbox';
 import { useSettings } from '../context/SettingsContext';
@@ -106,7 +107,8 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Text style={styles.header}>Settings</Text>
 
       <View style={styles.section}>
@@ -208,6 +210,7 @@ export default function SettingsScreen() {
         </Text>
       </View>
     </ScrollView>
+  </SafeAreaView>
   );
 }
 
@@ -215,6 +218,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0f1117',
+  },
+  scroll: {
+    flex: 1,
   },
   content: {
     padding: 16,

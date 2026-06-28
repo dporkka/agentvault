@@ -9,12 +9,19 @@ import {
   StyleSheet,
   Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import { searchVault } from '../api/agentvault';
+import type { RootStackParamList } from '../navigation/types';
 import type { SearchResult } from '../types';
 import SearchResultCard from '../components/SearchResultCard';
 import ConnectionBadge from '../components/ConnectionBadge';
 
+type SearchNavigationProp = StackNavigationProp<RootStackParamList, 'MainTabs'>;
+
 export default function SearchScreen() {
+  const navigation = useNavigation<SearchNavigationProp>();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -45,7 +52,7 @@ export default function SearchScreen() {
   }, [query, vectorEnabled, hybridWeight]);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <Text style={styles.title}>Search Vault</Text>
         <ConnectionBadge />
@@ -117,10 +124,17 @@ export default function SearchScreen() {
       <FlatList
         data={results}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <SearchResultCard result={item} />}
+        renderItem={({ item }) => (
+          <SearchResultCard
+            result={item}
+            onPress={() =>
+              navigation.navigate('NoteDetail', { id: item.id, title: item.title })
+            }
+          />
+        )}
         contentContainerStyle={styles.list}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

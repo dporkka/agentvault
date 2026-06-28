@@ -8,6 +8,7 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { Capture } from '../types';
 import { getCaptures, deleteCapture } from '../storage/localInbox';
@@ -84,7 +85,7 @@ export default function InboxScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Inbox</Text>
@@ -130,7 +131,7 @@ export default function InboxScreen() {
           grouped.length === 0 ? styles.emptyContainer : undefined
         }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
