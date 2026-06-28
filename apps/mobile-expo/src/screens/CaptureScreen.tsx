@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -15,27 +15,24 @@ import { sendCapture } from '../api/agentvault';
 import { useSettings } from '../context/SettingsContext';
 import ProjectPicker from '../components/ProjectPicker';
 import TagPicker from '../components/TagPicker';
+import { colors, spacing, radii, typography } from '../theme';
 
 export default function CaptureScreen() {
   const { settings } = useSettings();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [project, setProject] = useState(settings.defaultProject || '');
+  const [projectOverride, setProjectOverride] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
 
-  useEffect(() => {
-    if (settings.defaultProject && !project) {
-      setProject(settings.defaultProject);
-    }
-  }, [settings.defaultProject]);
+  const project = projectOverride || settings.defaultProject || '';
 
   const reset = () => {
     setTitle('');
     setBody('');
-    setProject(settings.defaultProject || '');
+    setProjectOverride('');
     setTags([]);
     setMessage('');
   };
@@ -48,7 +45,7 @@ export default function CaptureScreen() {
 
   const buildPayload = () => ({
     type: 'text' as const,
-    title: title.trim() || (body.trim().slice(0, 50) || 'Untitled'),
+    title: title.trim() || body.trim().slice(0, 50) || 'Untitled',
     text: body.trim(),
     project: project || undefined,
     tags,
@@ -76,7 +73,7 @@ export default function CaptureScreen() {
       await sendCapture(buildPayload());
       showMessage('Sent to server!');
       reset();
-    } catch (err) {
+    } catch {
       showMessage('Server unreachable. Saved to inbox instead.', true);
       await addCapture(buildPayload());
     }
@@ -90,79 +87,75 @@ export default function CaptureScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={80}
       >
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.header}>New Capture</Text>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.header}>New Capture</Text>
 
-        {message ? (
-          <View style={[styles.toast, isError && styles.toastError]}>
-            <Text style={[styles.toastText, isError && styles.toastTextError]}>
-              {message}
-            </Text>
+          {message ? (
+            <View style={[styles.toast, isError && styles.toastError]}>
+              <Text style={[styles.toastText, isError && styles.toastTextError]}>{message}</Text>
+            </View>
+          ) : null}
+
+          <Text style={styles.label}>Title</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Capture title..."
+            placeholderTextColor={colors.textMuted}
+            value={title}
+            onChangeText={setTitle}
+            maxLength={200}
+          />
+
+          <Text style={styles.label}>Body</Text>
+          <TextInput
+            style={[styles.input, styles.textarea]}
+            placeholder="Write your thoughts..."
+            placeholderTextColor={colors.textMuted}
+            value={body}
+            onChangeText={setBody}
+            multiline
+            textAlignVertical="top"
+            maxLength={5000}
+          />
+          <Text style={styles.charCount}>{body.length}/5000</Text>
+
+          <ProjectPicker selected={project} onChange={setProjectOverride} />
+
+          <TagPicker selected={tags} onChange={setTags} />
+
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.btn, styles.btnSecondary, loading && styles.btnDisabled]}
+              onPress={handleSaveLocal}
+              disabled={loading}
+            >
+              <Text style={[styles.btnText, styles.btnTextSecondary]}>
+                {loading ? 'Saving...' : 'Save to Inbox'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.btn, styles.btnPrimary, loading && styles.btnDisabled]}
+              onPress={handleSendNow}
+              disabled={loading}
+            >
+              <Text style={styles.btnText}>{loading ? 'Sending...' : 'Send to Server'}</Text>
+            </TouchableOpacity>
           </View>
-        ) : null}
-
-        <Text style={styles.label}>Title</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Capture title..."
-          placeholderTextColor="#6b7280"
-          value={title}
-          onChangeText={setTitle}
-          maxLength={200}
-        />
-
-        <Text style={styles.label}>Body</Text>
-        <TextInput
-          style={[styles.input, styles.textarea]}
-          placeholder="Write your thoughts..."
-          placeholderTextColor="#6b7280"
-          value={body}
-          onChangeText={setBody}
-          multiline
-          textAlignVertical="top"
-          maxLength={5000}
-        />
-        <Text style={styles.charCount}>{body.length}/5000</Text>
-
-        <ProjectPicker selected={project} onChange={setProject} />
-
-        <TagPicker selected={tags} onChange={setTags} />
-
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.btn, styles.btnSecondary, loading && styles.btnDisabled]}
-            onPress={handleSaveLocal}
-            disabled={loading}
-          >
-            <Text style={[styles.btnText, styles.btnTextSecondary]}>
-              {loading ? 'Saving...' : 'Save to Inbox'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.btn, styles.btnPrimary, loading && styles.btnDisabled]}
-            onPress={handleSendNow}
-            disabled={loading}
-          >
-            <Text style={styles.btnText}>
-              {loading ? 'Sending...' : 'Send to Server'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  </SafeAreaView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f1117',
+    backgroundColor: colors.bgPrimary,
   },
   keyboard: {
     flex: 1,
@@ -171,90 +164,90 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
+    padding: spacing.lg,
     paddingBottom: 40,
   },
   header: {
-    color: '#e4e6eb',
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 16,
+    color: colors.textPrimary,
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.extrabold,
+    marginBottom: spacing.lg,
   },
   toast: {
-    backgroundColor: '#22c55e22',
-    borderRadius: 8,
+    backgroundColor: colors.successMuted,
+    borderRadius: radii.md,
     padding: 10,
     marginBottom: 14,
     alignItems: 'center',
   },
   toastError: {
-    backgroundColor: '#ef444422',
+    backgroundColor: colors.errorMuted,
   },
   toastText: {
-    color: '#22c55e',
-    fontSize: 13,
-    fontWeight: '500',
+    color: colors.success,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.medium,
   },
   toastTextError: {
-    color: '#ef4444',
+    color: colors.error,
   },
   label: {
-    color: '#9ca3af',
-    fontSize: 12,
-    fontWeight: '600',
+    color: colors.textSecondary,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
     marginBottom: 6,
-    marginTop: 8,
+    marginTop: spacing.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: '#1a1d27',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    color: '#e4e6eb',
-    fontSize: 15,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    color: colors.textPrimary,
+    fontSize: typography.sizes.lg,
     borderWidth: 1,
-    borderColor: '#252836',
+    borderColor: colors.borderSubtle,
   },
   textarea: {
     minHeight: 120,
     lineHeight: 20,
   },
   charCount: {
-    color: '#6b7280',
-    fontSize: 11,
+    color: colors.textMuted,
+    fontSize: typography.sizes.xs,
     textAlign: 'right',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   actions: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 20,
+    marginTop: spacing.xl,
   },
   btn: {
     flex: 1,
-    borderRadius: 10,
+    borderRadius: radii.lg,
     paddingVertical: 14,
     alignItems: 'center',
   },
   btnPrimary: {
-    backgroundColor: '#4f7cff',
+    backgroundColor: colors.accent,
   },
   btnSecondary: {
-    backgroundColor: '#1a1d27',
+    backgroundColor: colors.bgSecondary,
     borderWidth: 1,
-    borderColor: '#4f7cff',
+    borderColor: colors.accent,
   },
   btnDisabled: {
     opacity: 0.5,
   },
   btnText: {
     color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
   },
   btnTextSecondary: {
-    color: '#4f7cff',
+    color: colors.accent,
   },
 });

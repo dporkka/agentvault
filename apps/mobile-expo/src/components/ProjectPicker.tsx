@@ -1,15 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Modal,
-  FlatList,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Modal, FlatList, StyleSheet } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { getProjects } from '../api/agentvault';
 import { useSettings } from '../context/SettingsContext';
+import { colors, spacing, radii, typography, layout } from '../theme';
 
 interface ProjectPickerProps {
   selected: string;
@@ -61,17 +55,10 @@ export default function ProjectPicker({ selected, onChange }: ProjectPickerProps
     <>
       <TouchableOpacity style={styles.selector} onPress={() => setOpen(true)}>
         <Text style={styles.selectorLabel}>Project</Text>
-        <Text style={styles.selectorValue}>
-          {selected || 'Select project...'}
-        </Text>
+        <Text style={styles.selectorValue}>{selected || 'Select project...'}</Text>
       </TouchableOpacity>
 
-      <Modal
-        visible={open}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setOpen(false)}
-      >
+      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <View style={styles.overlay}>
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
@@ -85,7 +72,7 @@ export default function ProjectPicker({ selected, onChange }: ProjectPickerProps
               <TextInput
                 style={styles.customInput}
                 placeholder="New project..."
-                placeholderTextColor="#6b7280"
+                placeholderTextColor={colors.textMuted}
                 value={customInput}
                 onChangeText={setCustomInput}
                 onSubmitEditing={addCustom}
@@ -100,10 +87,7 @@ export default function ProjectPicker({ selected, onChange }: ProjectPickerProps
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={[
-                    styles.projectItem,
-                    item === selected && styles.projectItemActive,
-                  ]}
+                  style={[styles.projectItem, item === selected && styles.projectItemActive]}
                   onPress={() => selectProject(item)}
                 >
                   <Text
@@ -115,7 +99,7 @@ export default function ProjectPicker({ selected, onChange }: ProjectPickerProps
                     {item}
                   </Text>
                   {item === selected && (
-                    <Text style={styles.checkmark}>x</Text>
+                    <Ionicons name="checkmark" size={18} color={colors.accent} />
                   )}
                 </TouchableOpacity>
               )}
@@ -129,24 +113,24 @@ export default function ProjectPicker({ selected, onChange }: ProjectPickerProps
 
 const styles = StyleSheet.create({
   selector: {
-    backgroundColor: '#1a1d27',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     borderWidth: 1,
-    borderColor: '#252836',
-    marginVertical: 8,
+    borderColor: colors.borderSubtle,
+    marginVertical: spacing.sm,
   },
   selectorLabel: {
-    color: '#6b7280',
-    fontSize: 11,
-    fontWeight: '500',
+    color: colors.textMuted,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.medium,
     marginBottom: 2,
   },
   selectorValue: {
-    color: '#e4e6eb',
-    fontSize: 14,
-    fontWeight: '500',
+    color: colors.textPrimary,
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.medium,
   },
   overlay: {
     flex: 1,
@@ -154,79 +138,74 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#0f1117',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    backgroundColor: colors.bgPrimary,
+    borderTopLeftRadius: radii.xxl,
+    borderTopRightRadius: radii.xxl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
     paddingBottom: 40,
-    maxHeight: '60%',
+    maxHeight: layout.maxSheetHeight,
   },
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   sheetTitle: {
-    color: '#e4e6eb',
-    fontSize: 17,
-    fontWeight: '700',
+    color: colors.textPrimary,
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
   },
   closeBtn: {
-    color: '#4f7cff',
-    fontSize: 14,
-    fontWeight: '600',
+    color: colors.accent,
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
   },
   customRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   customInput: {
     flex: 1,
-    backgroundColor: '#1a1d27',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    color: '#e4e6eb',
-    fontSize: 14,
+    color: colors.textPrimary,
+    fontSize: typography.sizes.base,
     borderWidth: 1,
-    borderColor: '#252836',
+    borderColor: colors.borderSubtle,
   },
   customAddBtn: {
-    backgroundColor: '#4f7cff',
-    borderRadius: 8,
+    backgroundColor: colors.accent,
+    borderRadius: radii.md,
     paddingHorizontal: 16,
     justifyContent: 'center',
   },
   customAddText: {
     color: '#fff',
-    fontWeight: '600',
-    fontSize: 13,
+    fontWeight: typography.weights.semibold,
+    fontSize: typography.sizes.md,
   },
   projectItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
   },
   projectItemActive: {
-    backgroundColor: '#4f7cff22',
+    backgroundColor: `${colors.accent}22`,
   },
   projectItemText: {
-    color: '#e4e6eb',
-    fontSize: 15,
+    color: colors.textPrimary,
+    fontSize: typography.sizes.lg,
   },
   projectItemTextActive: {
-    color: '#4f7cff',
-    fontWeight: '600',
-  },
-  checkmark: {
-    color: '#4f7cff',
-    fontSize: 14,
-    fontWeight: '700',
+    color: colors.accent,
+    fontWeight: typography.weights.semibold,
   },
 });

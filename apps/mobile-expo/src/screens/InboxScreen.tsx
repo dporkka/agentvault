@@ -1,20 +1,13 @@
-import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  RefreshControl,
-  TouchableOpacity,
-  Alert,
-  StyleSheet,
-} from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, FlatList, RefreshControl, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
 import type { Capture } from '../types';
-import { getCaptures, deleteCapture } from '../storage/localInbox';
+import { deleteCapture } from '../storage/localInbox';
 import { syncCaptures, formatSyncResult, isSyncable } from '../storage/sync';
+import { useCaptures } from '../hooks/useCaptures';
 import CaptureCard from '../components/CaptureCard';
 import ConnectionBadge from '../components/ConnectionBadge';
+import { colors, spacing, typography } from '../theme';
 
 interface GroupedCaptures {
   date: string;
@@ -39,26 +32,12 @@ function groupByDate(captures: Capture[]): GroupedCaptures[] {
 }
 
 export default function InboxScreen() {
-  const [grouped, setGrouped] = useState<GroupedCaptures[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-
-  const load = useCallback(async () => {
-    const list = await getCaptures();
-    setGrouped(groupByDate(list));
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  const { captures, loading, refresh } = useCaptures();
+  const grouped = useMemo(() => groupByDate(captures), [captures]);
 
   const handleSync = async () => {
-    setRefreshing(true);
     await syncCaptures({ continueOnError: true });
-    await load();
-    setRefreshing(false);
+    await refresh();
   };
 
   const handleDelete = (id: string) => {
@@ -69,7 +48,7 @@ export default function InboxScreen() {
         style: 'destructive',
         onPress: async () => {
           await deleteCapture(id);
-          load();
+          refresh();
         },
       },
     ]);
@@ -81,7 +60,7 @@ export default function InboxScreen() {
     if (result.failed > 0) {
       Alert.alert('Error', formatSyncResult(result));
     }
-    load();
+    refresh();
   };
 
   return (
@@ -100,11 +79,7 @@ export default function InboxScreen() {
         data={grouped}
         keyExtractor={(item) => item.date}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleSync}
-            tintColor="#4f7cff"
-          />
+          <RefreshControl refreshing={loading} onRefresh={handleSync} tintColor={colors.accent} />
         }
         renderItem={({ item: group }) => (
           <View style={styles.group}>
@@ -122,14 +97,10 @@ export default function InboxScreen() {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyText}>Inbox is empty</Text>
-            <Text style={styles.emptySub}>
-              Captures are saved here for offline access
-            </Text>
+            <Text style={styles.emptySub}>Captures are saved here for offline access</Text>
           </View>
         }
-        contentContainerStyle={
-          grouped.length === 0 ? styles.emptyContainer : undefined
-        }
+        contentContainerStyle={grouped.length === 0 ? styles.emptyContainer : undefined}
       />
     </SafeAreaView>
   );
@@ -138,35 +109,35 @@ export default function InboxScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f1117',
-    padding: 16,
+    backgroundColor: colors.bgPrimary,
+    padding: spacing.lg,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
-    marginTop: 8,
+    marginBottom: spacing.md,
+    marginTop: spacing.sm,
   },
   title: {
-    color: '#e4e6eb',
-    fontSize: 22,
-    fontWeight: '800',
+    color: colors.textPrimary,
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.extrabold,
   },
   subtitle: {
-    color: '#6b7280',
-    fontSize: 13,
+    color: colors.textMuted,
+    fontSize: typography.sizes.md,
     marginTop: 2,
   },
   group: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   groupDate: {
-    color: '#6b7280',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
-    marginTop: 4,
+    color: colors.textMuted,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    marginBottom: spacing.sm,
+    marginTop: spacing.xs,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -180,13 +151,13 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyText: {
-    color: '#6b7280',
+    color: colors.textMuted,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: typography.weights.semibold,
   },
   emptySub: {
     color: '#4b5563',
-    fontSize: 13,
+    fontSize: typography.sizes.md,
     marginTop: 6,
     textAlign: 'center',
     paddingHorizontal: 40,

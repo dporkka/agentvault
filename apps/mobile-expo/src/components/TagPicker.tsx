@@ -1,12 +1,6 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { colors, spacing, radii, typography } from '../theme';
 
 interface TagPickerProps {
   selected: string[];
@@ -14,16 +8,7 @@ interface TagPickerProps {
   suggestions?: string[];
 }
 
-const DEFAULT_TAGS = [
-  'idea',
-  'todo',
-  'note',
-  'meeting',
-  'research',
-  'bug',
-  'feature',
-  'refactor',
-];
+const DEFAULT_TAGS = ['idea', 'todo', 'note', 'meeting', 'research', 'bug', 'feature', 'refactor'];
 
 export default function TagPicker({ selected, onChange, suggestions }: TagPickerProps) {
   const [input, setInput] = useState('');
@@ -53,7 +38,7 @@ export default function TagPicker({ selected, onChange, suggestions }: TagPicker
         <TextInput
           style={styles.input}
           placeholder="Add tag..."
-          placeholderTextColor="#6b7280"
+          placeholderTextColor={colors.textMuted}
           value={input}
           onChangeText={setInput}
           onSubmitEditing={addCustomTag}
@@ -67,11 +52,7 @@ export default function TagPicker({ selected, onChange, suggestions }: TagPicker
       {selected.length > 0 && (
         <View style={styles.selectedRow}>
           {selected.map((tag) => (
-            <TouchableOpacity
-              key={tag}
-              style={styles.selectedTag}
-              onPress={() => toggleTag(tag)}
-            >
+            <TouchableOpacity key={tag} style={styles.selectedTag} onPress={() => toggleTag(tag)}>
               <Text style={styles.selectedTagText}>{tag} x</Text>
             </TouchableOpacity>
           ))}
@@ -92,9 +73,7 @@ export default function TagPicker({ selected, onChange, suggestions }: TagPicker
               style={[styles.chip, isActive && styles.chipActive]}
               onPress={() => toggleTag(tag)}
             >
-              <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
-                {tag}
-              </Text>
+              <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{tag}</Text>
             </TouchableOpacity>
           );
         })}
@@ -105,33 +84,33 @@ export default function TagPicker({ selected, onChange, suggestions }: TagPicker
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 8,
+    marginVertical: spacing.sm,
   },
   label: {
-    color: '#e4e6eb',
-    fontSize: 14,
-    fontWeight: '600',
+    color: colors.textPrimary,
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
     marginBottom: 6,
   },
   inputRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   input: {
     flex: 1,
-    backgroundColor: '#1a1d27',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    color: '#e4e6eb',
-    fontSize: 14,
+    color: colors.textPrimary,
+    fontSize: typography.sizes.base,
     borderWidth: 1,
-    borderColor: '#252836',
+    borderColor: colors.borderSubtle,
   },
   addBtn: {
-    backgroundColor: '#4f7cff',
-    borderRadius: 8,
+    backgroundColor: colors.accent,
+    borderRadius: radii.md,
     width: 42,
     alignItems: 'center',
     justifyContent: 'center',
@@ -139,7 +118,7 @@ const styles = StyleSheet.create({
   addBtnText: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: typography.weights.semibold,
   },
   selectedRow: {
     flexDirection: 'row',
@@ -148,43 +127,43 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   selectedTag: {
-    backgroundColor: '#4f7cff22',
-    borderColor: '#4f7cff',
+    backgroundColor: `${colors.accent}22`,
+    borderColor: colors.accent,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: radii.md,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   selectedTagText: {
-    color: '#4f7cff',
-    fontSize: 12,
-    fontWeight: '500',
+    color: colors.accent,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
   },
   suggestions: {
     maxHeight: 44,
   },
   suggestionsContent: {
-    gap: 8,
+    gap: spacing.sm,
     paddingRight: 10,
   },
   chip: {
-    backgroundColor: '#252836',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: colors.borderSubtle,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
     marginRight: 6,
   },
   chipActive: {
-    backgroundColor: '#4f7cff33',
-    borderColor: '#4f7cff',
+    backgroundColor: colors.accentMuted,
+    borderColor: colors.accent,
     borderWidth: 1,
   },
   chipText: {
-    color: '#9ca3af',
-    fontSize: 12,
+    color: colors.textSecondary,
+    fontSize: typography.sizes.sm,
   },
   chipTextActive: {
-    color: '#4f7cff',
-    fontWeight: '600',
+    color: colors.accent,
+    fontWeight: typography.weights.semibold,
   },
 });

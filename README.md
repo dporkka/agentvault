@@ -231,7 +231,7 @@ agentvault/
 | Desktop | Wails v2 + React 18 + TypeScript |
 | Web app | React 18 + Vite + TypeScript |
 | Browser extension | Manifest V3 + React 18 + Vite |
-| Mobile | Expo 51 + React Native 0.74 |
+| Mobile | Expo 56 + React Native 0.85 |
 | Editor | CodeMirror 6 |
 | Styling | Tailwind CSS v3 |
 | AI providers | Ollama, OpenAI-compatible, Anthropic, OpenRouter |

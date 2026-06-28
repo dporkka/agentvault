@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NoteDetail } from '@agentvault/contract';
 import { getNote } from '../api/agentvault';
 import type { RootStackScreenProps } from '../navigation/types';
+import { colors, spacing, radii, typography } from '../theme';
 
 export default function NoteDetailScreen({
   route,
@@ -55,9 +56,7 @@ export default function NoteDetailScreen({
         </Text>
       </View>
 
-      {loading && (
-        <ActivityIndicator style={styles.loader} color="#4f7cff" size="large" />
-      )}
+      {loading && <ActivityIndicator style={styles.loader} color={colors.accent} size="large" />}
 
       {error ? (
         <View style={styles.errorBox}>
@@ -106,129 +105,129 @@ export default function NoteDetailScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f1117',
+    backgroundColor: colors.bgPrimary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#252836',
+    borderBottomColor: colors.borderSubtle,
   },
   backBtn: {
-    paddingRight: 12,
+    paddingRight: spacing.md,
   },
   backText: {
-    color: '#4f7cff',
-    fontSize: 15,
-    fontWeight: '600',
+    color: colors.accent,
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.semibold,
   },
   headerTitle: {
     flex: 1,
-    color: '#e4e6eb',
-    fontSize: 17,
-    fontWeight: '700',
+    color: colors.textPrimary,
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
   },
   loader: {
     marginTop: 40,
   },
   errorBox: {
-    backgroundColor: '#ef444422',
-    borderRadius: 8,
-    padding: 12,
-    margin: 16,
+    backgroundColor: colors.errorMuted,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    margin: spacing.lg,
   },
   errorText: {
-    color: '#ef4444',
-    fontSize: 13,
+    color: colors.error,
+    fontSize: typography.sizes.md,
     textAlign: 'center',
   },
   scroll: {
     flex: 1,
   },
   content: {
-    padding: 16,
+    padding: spacing.lg,
     paddingBottom: 40,
   },
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
     marginBottom: 14,
   },
   typeBadge: {
-    backgroundColor: '#2a2f3f',
-    borderRadius: 6,
+    backgroundColor: colors.bgTertiary,
+    borderRadius: radii.sm,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   typeText: {
-    color: '#4f7cff',
-    fontSize: 11,
-    fontWeight: '700',
+    color: colors.accent,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.bold,
     textTransform: 'uppercase',
   },
   projectBadge: {
-    backgroundColor: '#4f7cff22',
-    borderRadius: 6,
+    backgroundColor: `${colors.accent}22`,
+    borderRadius: radii.sm,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: '#4f7cff33',
+    borderColor: colors.accentMuted,
   },
   projectText: {
-    color: '#4f7cff',
-    fontSize: 11,
-    fontWeight: '600',
+    color: colors.accent,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
   },
   statusBadge: {
-    backgroundColor: '#252836',
-    borderRadius: 6,
+    backgroundColor: colors.borderSubtle,
+    borderRadius: radii.sm,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   statusText: {
-    color: '#9ca3af',
-    fontSize: 11,
-    fontWeight: '600',
+    color: colors.textSecondary,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
     textTransform: 'uppercase',
   },
   title: {
-    color: '#e4e6eb',
-    fontSize: 22,
-    fontWeight: '800',
+    color: colors.textPrimary,
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.extrabold,
     marginBottom: 6,
   },
   path: {
-    color: '#6b7280',
-    fontSize: 12,
-    marginBottom: 12,
+    color: colors.textMuted,
+    fontSize: typography.sizes.sm,
+    marginBottom: spacing.md,
   },
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
   tag: {
-    backgroundColor: '#252836',
-    borderRadius: 6,
+    backgroundColor: colors.borderSubtle,
+    borderRadius: radii.sm,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   tagText: {
-    color: '#9ca3af',
-    fontSize: 12,
+    color: colors.textSecondary,
+    fontSize: typography.sizes.sm,
   },
   divider: {
     height: 1,
-    backgroundColor: '#252836',
-    marginVertical: 16,
+    backgroundColor: colors.borderSubtle,
+    marginVertical: spacing.lg,
   },
   body: {
-    color: '#e4e6eb',
-    fontSize: 15,
+    color: colors.textPrimary,
+    fontSize: typography.sizes.lg,
     lineHeight: 22,
   },
 });

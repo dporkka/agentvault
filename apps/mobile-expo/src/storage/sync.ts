@@ -1,11 +1,6 @@
 import { sendCapture } from '../api/agentvault';
 import type { Capture } from '../types';
-import {
-  getUnsyncedCaptures,
-  markAsSynced,
-  markAsSyncing,
-  markAsFailed,
-} from './localInbox';
+import { getUnsyncedCaptures, markAsSynced, markAsSyncing, markAsFailed } from './localInbox';
 
 export interface SyncResult {
   sent: number;
@@ -19,6 +14,21 @@ export interface SyncOptions {
   continueOnError?: boolean;
   /** Optional filter to sync a specific capture. */
   captureId?: string;
+  /** Ignore exponential backoff and retry failed captures immediately. */
+  force?: boolean;
+}
+
+const BASE_BACKOFF_MS = 5000;
+const MAX_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes
+
+function getBackoffDelayMs(retryCount: number): number {
+  return Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * Math.pow(2, retryCount - 1));
+}
+
+function isBackoffElapsed(capture: Capture): boolean {
+  if (!capture.lastRetryAt || !capture.retryCount) return true;
+  const elapsed = Date.now() - new Date(capture.lastRetryAt).getTime();
+  return elapsed >= getBackoffDelayMs(capture.retryCount);
 }
 
 /**
@@ -26,9 +36,13 @@ export interface SyncOptions {
  *
  * Updates each capture's syncStatus through the lifecycle
  * (unsynced -> syncing -> synced | failed) and returns a summary.
+ *
+ * TODO: Pass the local capture `id` as an idempotency key once the server
+ * `/capture` endpoint accepts an optional `externalId` field. Until then,
+ * retries may create duplicate inbox files on the server.
  */
 export async function syncCaptures(options: SyncOptions = {}): Promise<SyncResult> {
-  const { continueOnError = true, captureId } = options;
+  const { continueOnError = true, captureId, force = false } = options;
   const captures = captureId
     ? (await getUnsyncedCaptures()).filter((c) => c.id === captureId)
     : await getUnsyncedCaptures();
@@ -36,6 +50,11 @@ export async function syncCaptures(options: SyncOptions = {}): Promise<SyncResul
   const result: SyncResult = { sent: 0, failed: 0, skipped: 0, errors: [] };
 
   for (const cap of captures) {
+    if (!force && !isBackoffElapsed(cap)) {
+      result.skipped++;
+      continue;
+    }
+
     await markAsSyncing(cap.id);
     try {
       await sendCapture({
@@ -72,6 +91,9 @@ export function formatSyncResult(result: SyncResult): string {
   if (result.failed > 0) {
     return `Sync failed for ${result.failed} capture${result.failed === 1 ? '' : 's'}`;
   }
+  if (result.skipped > 0) {
+    return `${result.skipped} capture${result.skipped === 1 ? '' : 's'} skipped (backing off)`;
+  }
   return 'Nothing to sync';
 }
 
@@ -80,4 +102,11 @@ export function formatSyncResult(result: SyncResult): string {
  */
 export function isSyncable(capture: Capture): boolean {
   return !capture.synced && capture.syncStatus !== 'syncing';
+}
+
+/**
+ * Determine whether a capture can be retried now, respecting backoff.
+ */
+export function canRetry(capture: Capture): boolean {
+  return isSyncable(capture) && isBackoffElapsed(capture);
 }

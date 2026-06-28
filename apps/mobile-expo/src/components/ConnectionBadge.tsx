@@ -1,42 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import NetInfo from '@react-native-community/netinfo';
-import { checkHealth } from '../api/agentvault';
-import { useSettings } from '../context/SettingsContext';
+import { useConnection } from '../hooks/useConnection';
+import { colors, typography } from '../theme';
 
 export default function ConnectionBadge() {
-  const { settings, loaded } = useSettings();
-  const [status, setStatus] = useState<'online' | 'offline' | 'checking'>('checking');
-
-  useEffect(() => {
-    let mounted = true;
-    const check = async () => {
-      if (!loaded) {
-        if (mounted) setStatus('checking');
-        return;
-      }
-      const netInfo = await NetInfo.fetch();
-      if (!netInfo.isConnected) {
-        if (mounted) setStatus('offline');
-        return;
-      }
-      const healthy = await checkHealth(settings.serverUrl);
-      if (mounted) setStatus(healthy ? 'online' : 'offline');
-    };
-    check();
-    const interval = setInterval(check, 15000);
-    const unsub = NetInfo.addEventListener((state) => {
-      if (!state.isConnected) setStatus('offline');
-    });
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-      unsub();
-    };
-  }, [loaded, settings.serverUrl]);
+  const { status } = useConnection();
 
   const label = status === 'online' ? 'Connected' : status === 'offline' ? 'Offline' : '...';
-  const color = status === 'online' ? '#22c55e' : status === 'offline' ? '#ef4444' : '#6b7280';
+  const color =
+    status === 'online' ? colors.success : status === 'offline' ? colors.error : colors.textMuted;
 
   return (
     <View style={styles.container}>
@@ -58,7 +30,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   text: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
   },
 });

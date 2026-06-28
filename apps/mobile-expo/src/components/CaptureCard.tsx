@@ -1,5 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { colors, spacing, radii, typography } from '../theme';
 import type { Capture } from '../types';
 
 interface CaptureCardProps {
@@ -15,10 +17,10 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  synced: '#22c55e',
-  syncing: '#4f7cff',
-  failed: '#ef4444',
-  unsynced: '#f59e0b',
+  synced: colors.success,
+  syncing: colors.accent,
+  failed: colors.error,
+  unsynced: colors.warning,
 };
 
 export default function CaptureCard({ capture, onPress, onDelete }: CaptureCardProps) {
@@ -46,12 +48,17 @@ export default function CaptureCard({ capture, onPress, onDelete }: CaptureCardP
         <Text style={styles.title} numberOfLines={1}>
           {capture.title}
         </Text>
-        <View
-          style={[
-            styles.syncIndicator,
-            { backgroundColor: statusColor },
-          ]}
-        />
+        <View style={[styles.syncIndicator, { backgroundColor: statusColor }]} />
+        {onDelete && (
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={() => onDelete(capture.id)}
+            accessibilityLabel="Delete capture"
+            accessibilityRole="button"
+          >
+            <Ionicons name="trash-outline" size={16} color={colors.error} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {capture.text ? (
@@ -81,47 +88,51 @@ export default function CaptureCard({ capture, onPress, onDelete }: CaptureCardP
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#1a1d27',
-    borderRadius: 12,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radii.xl,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#252836',
+    borderColor: colors.borderSubtle,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   typeBadge: {
-    backgroundColor: '#4f7cff',
-    borderRadius: 6,
-    paddingHorizontal: 8,
+    backgroundColor: colors.accent,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     marginRight: 10,
   },
   typeText: {
     color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.bold,
   },
   title: {
     flex: 1,
-    color: '#e4e6eb',
-    fontSize: 15,
-    fontWeight: '600',
+    color: colors.textPrimary,
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.semibold,
   },
   syncIndicator: {
-    width: 8,
-    height: 8,
+    width: spacing.sm,
+    height: spacing.sm,
     borderRadius: 4,
-    marginLeft: 8,
+    marginLeft: spacing.sm,
+  },
+  deleteBtn: {
+    padding: spacing.xs,
+    marginLeft: spacing.xs,
   },
   preview: {
-    color: '#6b7280',
-    fontSize: 13,
+    color: colors.textMuted,
+    fontSize: typography.sizes.md,
     lineHeight: 18,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   footer: {
     flexDirection: 'row',
@@ -130,35 +141,35 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   projectBadge: {
-    backgroundColor: '#2a2f3f',
-    borderRadius: 6,
-    paddingHorizontal: 8,
+    backgroundColor: colors.bgTertiary,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderWidth: 1,
-    borderColor: '#4f7cff33',
+    borderColor: colors.accentMuted,
   },
   projectText: {
-    color: '#4f7cff',
-    fontSize: 11,
-    fontWeight: '600',
+    color: colors.accent,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
   },
   tagsRow: {
     flexDirection: 'row',
     gap: 6,
   },
   tag: {
-    backgroundColor: '#252836',
-    borderRadius: 6,
-    paddingHorizontal: 8,
+    backgroundColor: colors.borderSubtle,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
   tagText: {
-    color: '#9ca3af',
-    fontSize: 11,
+    color: colors.textSecondary,
+    fontSize: typography.sizes.xs,
   },
   date: {
-    color: '#6b7280',
-    fontSize: 11,
+    color: colors.textMuted,
+    fontSize: typography.sizes.xs,
     marginLeft: 'auto',
   },
 });

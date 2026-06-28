@@ -123,6 +123,12 @@ export async function getNote(id: string, url?: string): Promise<NoteDetail> {
   return client.getNote(id);
 }
 
+export async function getRecentNotes(limit?: number, url?: string): Promise<SearchResult[]> {
+  if (url) client.setBaseUrl(url);
+  else await resolveBaseUrl();
+  return client.getRecent({ limit });
+}
+
 export async function verifyToken(url?: string): Promise<AuthVerifyResponse | null> {
   if (url) client.setBaseUrl(url);
   else await resolveBaseUrl();

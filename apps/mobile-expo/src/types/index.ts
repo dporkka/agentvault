@@ -18,6 +18,7 @@ export interface Capture {
   syncStatus?: CaptureSyncStatus;
   syncError?: string;
   retryCount?: number;
+  lastRetryAt?: string;
 }
 
 export interface AppSettings {
