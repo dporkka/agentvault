@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/agentvault/core/internal/ai"
@@ -165,8 +166,11 @@ type Note = contract.NoteDetail
 // drop).
 type SearchResult = contract.SearchResult
 
-// Search performs a full-text search
-func (s *NoteService) Search(query string, noteType string, project string) ([]SearchResult, error) {
+// Search performs a full-text or hybrid vector search.
+// When vector is true, the query is embedded and combined with FTS using
+// hybridWeight (0 = FTS only, 1 = vector only, 0.5 = equal). topk controls
+// how many vector candidates are retrieved.
+func (s *NoteService) Search(query string, noteType string, project string, vector bool, hybridWeight float64, topk int) ([]SearchResult, error) {
 	if s.app.searcher == nil {
 		return nil, fmt.Errorf("no vault is open")
 	}
@@ -178,7 +182,22 @@ func (s *NoteService) Search(query string, noteType string, project string) ([]S
 		Limit:   50,
 	}
 
-	results, err := s.app.searcher.Search(q)
+	var results []search.Result
+	var err error
+
+	if vector {
+		vq := search.VectorQuery{
+			Query:        q,
+			VectorSearch: true,
+			QueryText:    query,
+			TopK:         topk,
+			HybridWeight: hybridWeight,
+		}
+		results, err = s.app.searcher.HybridSearch(s.app.ctx, vq)
+	} else {
+		results, err = s.app.searcher.Search(q)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -191,8 +210,10 @@ func (s *NoteService) Search(query string, noteType string, project string) ([]S
 			Path:      r.Path,
 			Type:      r.Type,
 			Project:   r.Project,
+			Status:    r.Status,
 			Tags:      r.Tags,
 			Snippet:   r.Snippet,
+			Score:     r.Score,
 			UpdatedAt: r.UpdatedAt,
 		})
 	}
@@ -392,7 +413,9 @@ func (s *NoteService) GetNotesByProject(project string) ([]SearchResult, error) 
 
 // IndexService provides indexing operations
 type IndexService struct {
-	app *App
+	app      *App
+	mu       sync.Mutex
+	indexing bool
 }
 
 // IndexingStatus represents the current indexing state
@@ -403,6 +426,20 @@ type IndexingStatus struct {
 
 // Index triggers a vault index
 func (s *IndexService) Index(force bool) error {
+	s.mu.Lock()
+	if s.indexing {
+		s.mu.Unlock()
+		return fmt.Errorf("indexing already in progress")
+	}
+	s.indexing = true
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		s.indexing = false
+		s.mu.Unlock()
+	}()
+
 	if s.app.indexer == nil {
 		return fmt.Errorf("no vault is open")
 	}
@@ -410,6 +447,13 @@ func (s *IndexService) Index(force bool) error {
 	opts := indexer.IndexOptions{Force: force}
 	_, err := s.app.indexer.Index(opts)
 	return err
+}
+
+// IsIndexing returns true when an index run is currently active
+func (s *IndexService) IsIndexing() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.indexing
 }
 
 // GetStatus returns indexing status
@@ -422,7 +466,7 @@ func (s *IndexService) GetStatus() IndexingStatus {
 	_ = s.app.db.QueryRow("SELECT COUNT(*) FROM notes").Scan(&count)
 
 	return IndexingStatus{
-		IsIndexing: false,
+		IsIndexing: s.IsIndexing(),
 		NoteCount:  count,
 	}
 }
@@ -465,4 +509,62 @@ func (s *AIService) IsAIEnabled() bool {
 	}
 	_, err = ai.LoadProvider(cfg.AI)
 	return err == nil
+}
+
+// GetStatus returns the current AI configuration and reachability status
+func (s *AIService) GetStatus() AIStatus {
+	if s.app.vaultPath == "" {
+		return AIStatus{Error: "no vault is open"}
+	}
+
+	cfg, err := config.Load(s.app.vaultPath)
+	if err != nil {
+		return AIStatus{Error: fmt.Sprintf("failed to load config: %v", err)}
+	}
+
+	norm := ai.NormalizeConfig(cfg.AI)
+	status := AIStatus{
+		Enabled:  true,
+		Provider: norm.Provider,
+		Model:    norm.ChatModel,
+	}
+
+	provider, err := ai.LoadProvider(norm)
+	if err != nil {
+		status.Enabled = false
+		status.Error = err.Error()
+		return status
+	}
+
+	if err := provider.HealthCheck(s.app.ctx); err != nil {
+		status.Enabled = false
+		status.Error = err.Error()
+	}
+
+	return status
+}
+
+// SaveAIConfig persists the AI provider settings to the vault config file
+func (s *AIService) SaveAIConfig(provider string, baseURL string, chatModel string) error {
+	if s.app.vaultPath == "" {
+		return fmt.Errorf("no vault is open")
+	}
+
+	cfg, err := config.Load(s.app.vaultPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	if cfg.AI == nil {
+		cfg.AI = &config.AIConfig{}
+	}
+
+	if provider != "" {
+		cfg.AI.Provider = provider
+	}
+	cfg.AI.BaseURL = baseURL
+	cfg.AI.ChatModel = chatModel
+	cfg.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+
+	return config.Save(s.app.vaultPath, cfg)
 }

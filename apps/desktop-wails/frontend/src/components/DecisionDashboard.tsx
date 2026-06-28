@@ -12,7 +12,7 @@ export default function DecisionDashboard({ onOpenNote }: Props) {
 
   const loadDecisions = useCallback(async () => {
     try {
-      const results = await window.go.main.NoteService.Search('', 'decision', '');
+      const results = await window.go.main.NoteService.Search('', 'decision', '', false, 0.5, 0);
       setDecisions(results);
     } catch (err) {
       console.error('Failed to load decisions:', err);

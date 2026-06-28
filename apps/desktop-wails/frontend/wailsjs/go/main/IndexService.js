@@ -9,3 +9,7 @@ export function GetStatus() {
 export function Index(arg1) {
   return window['go']['main']['IndexService']['Index'](arg1);
 }
+
+export function IsIndexing() {
+  return window['go']['main']['IndexService']['IsIndexing']();
+}

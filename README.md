@@ -11,10 +11,13 @@ AgentVault is an early application with a working Go core, CLI, local HTTP API, 
 - [Codebase analysis](docs/CODEBASE_ANALYSIS.md)
 - [Improvement plan](docs/IMPROVEMENT_PLAN.md)
 
-Important current gaps:
+Notable current gaps:
 
-- Frontend clients still hand-maintain their own API contracts; a shared/generated type source is not yet in place.
-- Go verification runs locally with a toolchain installed under `$HOME/.local/go`; GitHub Actions is configured to run Go 1.23 tests, vet, and builds.
+- Packaging, release artifacts, and installation paths are not yet defined.
+- Desktop bundle size still triggers one Vite chunk-size warning on the `codemirror-vendor` chunk.
+- Capture-sync state visibility and desktop auth status are not yet surfaced in the Wails app.
+
+Go verification runs locally with the toolchain on `PATH`; GitHub Actions is configured to run Go 1.23 tests, vet, and builds.
 
 ## Features
 
@@ -65,7 +68,7 @@ cd ../my-vault
 | --- | --- |
 | `agentvault init [path] [--template]` | Initialize a vault and optional starter template |
 | `agentvault index [--force] [--rebuild] [--path] [--embed]` | Index Markdown files and optionally generate embeddings |
-| `agentvault search <query> [--type] [--project] [--tag] [--status]` | Full-text search with filters |
+| `agentvault search <query> [--type] [--project] [--tag] [--status] [--vector] [--hybrid-weight] [--topk]` | Full-text or hybrid search with filters |
 | `agentvault read <id-or-path>` | Read a note by ID or path |
 | `agentvault new <type> --title <title>` | Create a structured note |
 | `agentvault ask <question>` | Ask a source-grounded question over indexed notes |
@@ -123,6 +126,7 @@ The server prints an auth token at startup. `GET` endpoints are open locally; wr
 | Endpoint | Description |
 | --- | --- |
 | `GET /health` | Server health |
+| `GET /auth/verify` | Verify a stored auth token |
 | `GET /vault/status` | Vault status and indexed note count |
 | `POST /vault/index` | Trigger indexing |
 | `GET /search?q=...` | Search notes |
@@ -209,6 +213,7 @@ agentvault/
 │   ├── browser-extension/        # MV3 browser extension
 │   └── mobile-expo/              # Expo mobile app
 ├── docs/
+│   ├── API_CONTRACT.md
 │   ├── CODEBASE_ANALYSIS.md
 │   └── IMPROVEMENT_PLAN.md
 ├── Makefile

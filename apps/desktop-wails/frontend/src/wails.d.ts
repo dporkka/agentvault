@@ -13,6 +13,7 @@ import type {
   SearchResult,
   Answer,
   IndexingStatus,
+  AIStatus,
 } from './types';
 
 declare global {
@@ -40,7 +41,7 @@ interface VaultServiceBindings {
 }
 
 interface NoteServiceBindings {
-  Search(query: string, noteType: string, project: string): Promise<SearchResult[]>;
+  Search(query: string, noteType: string, project: string, vector: boolean, hybridWeight: number, topk: number): Promise<SearchResult[]>;
   GetNote(id: string): Promise<Note>;
   GetNoteContent(path: string): Promise<string>;
   SaveNote(path: string, content: string): Promise<void>;
@@ -53,11 +54,14 @@ interface NoteServiceBindings {
 interface IndexServiceBindings {
   Index(force: boolean): Promise<void>;
   GetStatus(): Promise<IndexingStatus>;
+  IsIndexing(): Promise<boolean>;
 }
 
 interface AIServiceBindings {
   Ask(question: string): Promise<Answer>;
   IsAIEnabled(): Promise<boolean>;
+  GetStatus(): Promise<AIStatus>;
+  SaveAIConfig(provider: string, baseUrl: string, chatModel: string): Promise<void>;
 }
 
 export {};

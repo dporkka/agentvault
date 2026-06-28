@@ -274,9 +274,12 @@ func (s *Searcher) Recent(limit int) ([]Result, error) {
 }
 
 // Stale returns notes not updated in the last N days.
-func (s *Searcher) Stale(days int) ([]Result, error) {
+func (s *Searcher) Stale(days, limit int) ([]Result, error) {
 	if days <= 0 {
 		days = 30
+	}
+	if limit <= 0 {
+		limit = 20
 	}
 
 	rows, err := s.db.Query(`
@@ -294,7 +297,8 @@ func (s *Searcher) Stale(days int) ([]Result, error) {
 		JOIN files ON files.id = notes.file_id
 		WHERE notes.updated_at < datetime('now', '-' || ? || ' days')
 		ORDER BY notes.updated_at ASC
-	`, days)
+		LIMIT ?
+	`, days, limit)
 	if err != nil {
 		return nil, fmt.Errorf("stale query failed: %w", err)
 	}

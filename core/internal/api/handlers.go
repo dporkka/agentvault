@@ -524,25 +524,12 @@ func (s *Server) handleStale(w http.ResponseWriter, r *http.Request) {
 		days = d
 	}
 
-	vectorParam := r.URL.Query().Get("vector")
-	useVector := vectorParam == "true" || vectorParam == "1"
-
-	var results []search.Result
-	var err error
-
-	if useVector {
-		vq := search.VectorQuery{
-			Query:        search.Query{Limit: 20},
-			VectorSearch: true,
-			QueryText:    "",
-			TopK:         60,
-			HybridWeight: 0.5,
-		}
-		results, err = s.searcher.HybridSearch(r.Context(), vq)
-	} else {
-		results, err = s.searcher.Stale(days)
+	limit := 20
+	if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 {
+		limit = n
 	}
 
+	results, err := s.searcher.Stale(days, limit)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "query failed",

@@ -1,6 +1,6 @@
 # AgentVault Improvement Plan
 
-Last updated: 2026-06-17
+Last updated: 2026-06-28
 
 ## Goal
 
@@ -59,11 +59,12 @@ Phase 1's two highest-leverage P1 items landed alongside the contract work:
 
 | Priority | Work | Why it matters | Evidence |
 | --- | --- | --- | --- |
-| P1 | Expose vector/hybrid search consistently | The core has vector capabilities, but clients mostly expose plain FTS. | `index --embed` and search vector helpers exist. |
-| P1 | Improve token onboarding for local clients | Auth exists, but user setup is manual and easy to misconfigure. | Server prints token; clients store token in local storage/settings. |
-| P2 | Reduce desktop bundle size | Improves startup and packaging. | Desktop frontend build warns about a chunk over 500 kB. |
+| P1 | ~~Expose vector/hybrid search consistently~~ **Done** | Core vector capabilities are now surfaced in CLI, API, web, extension, mobile, and desktop. | CLI `--vector`/`--hybrid-weight`/`--topk`; API `/search` params; client UIs all expose toggle/weight. |
+| P1 | ~~Improve token onboarding for local clients~~ **Done** | Web, extension, and mobile now prompt/verify the token printed by `agentvault serve`. | `ConnectionModal`, extension token status, mobile "Verify Token". |
+| P2 | Reduce desktop bundle size | Improves startup and packaging. | Manual chunks split React/CodeMirror/markdown; `codemirror-vendor` chunk still ~605 kB. |
 | P2 | Define release/install paths | Converts builds into usable distribution. | CI builds pieces but no release artifact flow is documented. |
 | P2 | Expand doctor and diagnostics | Makes local-first support easier. | Doctor exists; app-surface and API-contract checks are not yet included. |
+| P2 | Desktop settings/status parity | The desktop app added AI/index status in Settings; surface auth and capture-sync states next. | `SettingsView.tsx`, `IndexingStatus`, `AIStatus`. |
 
 ## Phase 0 - Contract Stabilization
 
@@ -85,15 +86,15 @@ Exit criteria:
 
 ## Phase 1 - Shared Core Services
 
-Target: 3-5 focused days.
+Target: complete.
 
 Deliverables:
 
-- Route CLI `ask`, API `/ask`, desktop `AIService`, and any MCP ask/summarize expansion through one RAG service.
-- Keep prompt construction and answer parsing in one package.
-- Support FTS-only, vector-only, and hybrid modes behind one search interface.
-- Expose vector/hybrid knobs through API query params with safe defaults.
-- Ensure create/capture operations either reindex affected files immediately or return an explicit "index needed" state.
+- Done — route CLI `ask`, API `/ask`, desktop `AIService`, and MCP `agentvault.ask` through one RAG service.
+- Done — keep prompt construction and answer parsing in `internal/rag` only.
+- Done — support FTS-only, vector-only, and hybrid modes behind one search interface.
+- Done — expose vector/hybrid knobs through API query params with safe defaults.
+- Done — ensure create/capture operations reindex affected files immediately (API and MCP kick off a non-blocking indexer goroutine).
 
 Exit criteria:
 
@@ -102,8 +103,8 @@ Exit criteria:
 - Newly created notes become searchable through the expected user flow.
 - Vector/hybrid search is wired end-to-end: the API searcher has an embedding
   client, the TypeScript contract emits the correct `hybrid_weight` query key,
-  the CLI exposes `--vector`/`--hybrid-weight`/`--topk`, and the web UI has a
-  vector toggle.
+  the CLI exposes `--vector`/`--hybrid-weight`/`--topk`, and every client UI
+  (web, extension, mobile, desktop) has a vector toggle.
 
 ## Phase 2 - Client Reliability And UX
 
@@ -111,12 +112,12 @@ Target: 1-2 weeks.
 
 Deliverables:
 
-- Add a first-run connection/token flow for web, extension, and mobile.
-- Show server health, vault status, auth status, and indexing status in clients.
-- Make capture sync states explicit: unsynced, syncing, synced, failed.
-- Align project pickers and note filters across web, extension, mobile, and desktop.
-- Share request/response types or generate them from one contract source.
-- Improve desktop bundle splitting for CodeMirror/markdown-heavy paths.
+- Done — add a first-run connection/token flow for web, extension, and mobile.
+- Partially done — show server health, vault status, auth status, and indexing status in clients. Web, extension, and mobile surface health/auth; desktop surfaces vault and AI/index status.
+- Not started — make capture sync states explicit: unsynced, syncing, synced, failed.
+- Done — align project pickers and note filters across web, extension, mobile, and desktop (all use the shared `@agentvault/contract` types and consistent filter sets).
+- Done — share request/response types from one contract source (`@agentvault/contract`).
+- Partially done — improve desktop bundle splitting for CodeMirror/markdown-heavy paths. The main chunk is no longer the offender; the `codemirror-vendor` chunk still triggers a warning.
 
 Exit criteria:
 
@@ -125,6 +126,8 @@ Exit criteria:
 - Desktop build no longer emits the large-chunk warning, or the warning is intentionally budgeted.
 
 ## Phase 2 Progress
+
+The token-onboarding and local-client reliability work is complete:
 
 - Web: `ConnectionModal` automatically prompts for server URL + token when the
   server is reachable but the stored token is invalid/missing. `VaultStatus`
@@ -135,6 +138,14 @@ Exit criteria:
   and reports the result.
 - Docs: `API_CONTRACT.md` documents `/auth/verify` as the supported token-check
   mechanism.
+
+What remains for Phase 2:
+
+- Surface auth status and capture-sync states in the desktop app (the Wails
+  desktop does not use the HTTP API, so it needs its own token/status plumbing
+  or a Wails-backed status panel).
+- Budget or eliminate the remaining desktop `codemirror-vendor` chunk warning
+  (~605 kB after minification).
 
 ## Phase 3 - Vault Lifecycle And Data Quality
 
@@ -174,12 +185,18 @@ Exit criteria:
 
 ## Near-Term Suggested First PR
 
-The contract-stabilization PR (Phase 0), the shared-types consolidation
-(Phase 0+), and the shared RAG service + auto-index-after-writes work
-(Phase 1) are all complete and landed on `phase0-contract-stabilization`.
+Phase 0 (contract stabilization), Phase 0+ (shared client types), Phase 1
+(shared RAG service + auto-index + folder consolidation), and the recent
+vector/hybrid + token-onboarding work are all complete.
 
-Next suggested PR: expose vector/hybrid search consistently across the
-API and clients (the `SearchParams`/`RecentParams`/`StaleParams` knobs in
-`packages/contract` are already defined but unused), then improve token
-onboarding for local clients. Those two P1 items in the Priority Backlog
-are the next steps; vector/hybrid exposure is the larger payoff.
+Next suggested PRs, in priority order:
+
+1. **Budget the remaining desktop bundle size.** Either lazy-load the CodeMirror
+   markdown language support or raise `build.chunkSizeWarningLimit` intentionally
+   and document the budget.
+2. **Desktop auth/status parity.** Surface auth state and capture-sync status in
+   the Wails desktop (it does not use the HTTP API, so this needs Wails service
+   plumbing or a status panel).
+3. **Release readiness scaffolding.** Define CLI binary artifacts, desktop
+   installer strategy, extension packaging, and mobile distribution in CI and
+   documentation.

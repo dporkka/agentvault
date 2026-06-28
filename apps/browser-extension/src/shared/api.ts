@@ -8,6 +8,7 @@ import {
   type AuthVerifyResponse,
   type CaptureRequest,
   type CaptureResponse,
+  type SearchParams,
   type SearchResult,
   DEFAULT_BASE_URL,
 } from '@agentvault/contract';
@@ -122,9 +123,12 @@ export async function sendCapture(payload: CapturePayload): Promise<CaptureRespo
   return client.capture(body);
 }
 
-export async function searchVault(query: string): Promise<SearchResult[]> {
-  if (!query.trim()) return [];
-  return client.search({ q: query });
+export async function searchVault(queryOrParams: string | SearchParams): Promise<SearchResult[]> {
+  const params: SearchParams = typeof queryOrParams === 'string'
+    ? { q: queryOrParams }
+    : queryOrParams;
+  if (!params.q?.trim()) return [];
+  return client.search(params);
 }
 
 export async function getProjects(): Promise<string[]> {

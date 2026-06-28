@@ -1,9 +1,10 @@
-export namespace main {
+export namespace contract {
 	
 	export class Source {
+	    id: string;
 	    path: string;
 	    title: string;
-	    excerpt: string;
+	    excerpt?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Source(source);
@@ -11,6 +12,7 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
 	        this.path = source["path"];
 	        this.title = source["title"];
 	        this.excerpt = source["excerpt"];
@@ -20,9 +22,9 @@ export namespace main {
 	    answer: string;
 	    sources: Source[];
 	    confidence: string;
-	    caveats: string[];
-	    missingInfo: string;
-	    suggestedActions: string[];
+	    caveats?: string[];
+	    missingInfo?: string;
+	    suggestedActions?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Answer(source);
@@ -56,21 +58,7 @@ export namespace main {
 		    return a;
 		}
 	}
-	export class IndexingStatus {
-	    isIndexing: boolean;
-	    noteCount: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new IndexingStatus(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.isIndexing = source["isIndexing"];
-	        this.noteCount = source["noteCount"];
-	    }
-	}
-	export class Note {
+	export class NoteDetail {
 	    id: string;
 	    title: string;
 	    path: string;
@@ -78,11 +66,10 @@ export namespace main {
 	    project: string;
 	    status: string;
 	    tags: string[];
-	    body: string;
-	    updatedAt: string;
+	    content: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new Note(source);
+	        return new NoteDetail(source);
 	    }
 	
 	    constructor(source: any = {}) {
@@ -94,8 +81,7 @@ export namespace main {
 	        this.project = source["project"];
 	        this.status = source["status"];
 	        this.tags = source["tags"];
-	        this.body = source["body"];
-	        this.updatedAt = source["updatedAt"];
+	        this.content = source["content"];
 	    }
 	}
 	export class SearchResult {
@@ -104,8 +90,10 @@ export namespace main {
 	    path: string;
 	    type: string;
 	    project: string;
+	    status: string;
 	    tags: string[];
 	    snippet: string;
+	    score: number;
 	    updatedAt: string;
 	
 	    static createFrom(source: any = {}) {
@@ -119,15 +107,17 @@ export namespace main {
 	        this.path = source["path"];
 	        this.type = source["type"];
 	        this.project = source["project"];
+	        this.status = source["status"];
 	        this.tags = source["tags"];
 	        this.snippet = source["snippet"];
+	        this.score = source["score"];
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
 	
 	export class VaultStatus {
 	    path: string;
-	    isOpen: boolean;
+	    isVault: boolean;
 	    noteCount: number;
 	    version: string;
 	
@@ -138,9 +128,46 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
-	        this.isOpen = source["isOpen"];
+	        this.isVault = source["isVault"];
 	        this.noteCount = source["noteCount"];
 	        this.version = source["version"];
+	    }
+	}
+
+}
+
+export namespace main {
+	
+	export class AIStatus {
+	    enabled: boolean;
+	    provider: string;
+	    model: string;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AIStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.provider = source["provider"];
+	        this.model = source["model"];
+	        this.error = source["error"];
+	    }
+	}
+	export class IndexingStatus {
+	    isIndexing: boolean;
+	    noteCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new IndexingStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.isIndexing = source["isIndexing"];
+	        this.noteCount = source["noteCount"];
 	    }
 	}
 

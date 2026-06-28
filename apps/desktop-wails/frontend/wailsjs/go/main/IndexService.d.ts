@@ -5,3 +5,5 @@ import {main} from '../models';
 export function GetStatus():Promise<main.IndexingStatus>;
 
 export function Index(arg1:boolean):Promise<void>;
+
+export function IsIndexing():Promise<boolean>;

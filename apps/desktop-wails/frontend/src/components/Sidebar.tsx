@@ -11,8 +11,12 @@ import {
   ChevronRight,
   ChevronDown,
   Plus,
+  Activity,
+  Loader2,
+  CheckCircle,
+  AlertTriangle,
 } from './Icons';
-import type { VaultStatus, ViewName } from '../types';
+import type { VaultStatus, ViewName, IndexingStatus, AIStatus } from '../types';
 
 interface Props {
   vaultStatus: VaultStatus;
@@ -52,6 +56,8 @@ export default function Sidebar({
   const [vaultTree, setVaultTree] = useState<TreeItem[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['10-notes', '20-projects', '30-decisions', '40-research']));
   const [recentNotes, setRecentNotes] = useState<Array<{ title: string; path: string }>>([]);
+  const [indexStatus, setIndexStatus] = useState<IndexingStatus>({ isIndexing: false, noteCount: vaultStatus.noteCount });
+  const [aiStatus, setAiStatus] = useState<AIStatus | null>(null);
 
   const loadTree = useCallback(async () => {
     try {
@@ -72,9 +78,32 @@ export default function Sidebar({
     }
   }, []);
 
+  const refreshStatus = useCallback(async () => {
+    try {
+      const status = await window.go.main.IndexService.GetStatus();
+      setIndexStatus(status);
+    } catch (err) {
+      console.error('Failed to load index status:', err);
+    }
+    try {
+      const status = await window.go.main.AIService.GetStatus();
+      setAiStatus(status);
+    } catch (err) {
+      console.error('Failed to load AI status:', err);
+      setAiStatus(null);
+    }
+  }, []);
+
   useEffect(() => {
     loadTree();
-  }, [loadTree]);
+    refreshStatus();
+    const id = setInterval(refreshStatus, 3000);
+    return () => clearInterval(id);
+  }, [loadTree, refreshStatus]);
+
+  useEffect(() => {
+    setIndexStatus(prev => ({ ...prev, noteCount: vaultStatus.noteCount }));
+  }, [vaultStatus.noteCount]);
 
   const toggleFolder = (name: string) => {
     setExpandedFolders(prev => {
@@ -87,6 +116,8 @@ export default function Sidebar({
       return next;
     });
   };
+
+  const vaultName = vaultStatus.path.split('/').pop() || 'AgentVault';
 
   if (collapsed) {
     return (
@@ -118,11 +149,11 @@ export default function Sidebar({
             <Sparkles className="w-4 h-4 text-[var(--accent)]" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-[var(--text-primary)] truncate">
-              {vaultStatus.path.split('/').pop() || 'AgentVault'}
+            <div className="text-sm font-medium text-[var(--text-primary)] truncate" title={vaultName}>
+              {vaultName}
             </div>
             <div className="text-xs text-[var(--text-muted)]">
-              {vaultStatus.noteCount} notes
+              {indexStatus.noteCount} notes
             </div>
           </div>
         </div>
@@ -207,18 +238,55 @@ export default function Sidebar({
       )}
 
       {/* Footer */}
-      <div className="px-3 py-2 border-t border-[var(--border)] flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-          <GitBranch className="w-3.5 h-3.5" />
-          <span>main</span>
+      <div className="px-3 py-2 border-t border-[var(--border)] space-y-1.5">
+        {/* Status indicators */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]" title="Indexing status">
+            {indexStatus.isIndexing ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 text-[var(--accent)] animate-spin" />
+                <span className="text-[var(--accent)]">Indexing...</span>
+              </>
+            ) : (
+              <>
+                <Activity className="w-3.5 h-3.5 text-[var(--success)]" />
+                <span>Indexed {indexStatus.noteCount} notes</span>
+              </>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]" title={aiStatus?.error || (aiStatus?.enabled ? `${aiStatus.provider} · ${aiStatus.model}` : 'AI not configured')}>
+            {aiStatus?.enabled ? (
+              <>
+                <CheckCircle className="w-3.5 h-3.5 text-[var(--success)]" />
+                <span className="truncate">
+                  AI: {aiStatus.provider}
+                </span>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />
+                <span className="truncate">
+                  {aiStatus?.error ? `AI: ${aiStatus.error}` : 'AI not configured'}
+                </span>
+              </>
+            )}
+          </div>
         </div>
-        <button
-          onClick={onToggleCollapse}
-          className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)]"
-          title="Collapse sidebar"
-        >
-          <PanelRight className="w-4 h-4" />
-        </button>
+
+        <div className="flex items-center justify-between pt-1.5 border-t border-[var(--border)]">
+          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+            <GitBranch className="w-3.5 h-3.5" />
+            <span>main</span>
+          </div>
+          <button
+            onClick={onToggleCollapse}
+            className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)]"
+            title="Collapse sidebar"
+          >
+            <PanelRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );

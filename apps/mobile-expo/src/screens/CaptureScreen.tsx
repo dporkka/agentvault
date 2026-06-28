@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,22 +11,30 @@ import {
 } from 'react-native';
 import { addCapture } from '../storage/localInbox';
 import { sendCapture } from '../api/agentvault';
+import { useSettings } from '../context/SettingsContext';
 import ProjectPicker from '../components/ProjectPicker';
 import TagPicker from '../components/TagPicker';
 
 export default function CaptureScreen() {
+  const { settings } = useSettings();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [project, setProject] = useState('');
+  const [project, setProject] = useState(settings.defaultProject || '');
   const [tags, setTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
 
+  useEffect(() => {
+    if (settings.defaultProject && !project) {
+      setProject(settings.defaultProject);
+    }
+  }, [settings.defaultProject]);
+
   const reset = () => {
     setTitle('');
     setBody('');
-    setProject('');
+    setProject(settings.defaultProject || '');
     setTags([]);
     setMessage('');
   };

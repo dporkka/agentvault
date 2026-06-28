@@ -27,6 +27,13 @@ export interface IndexingStatus {
   noteCount: number;
 }
 
+export interface AIStatus {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  error: string;
+}
+
 export type ViewName =
   | 'editor'
   | 'search'

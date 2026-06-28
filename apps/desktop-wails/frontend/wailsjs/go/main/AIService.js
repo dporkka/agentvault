@@ -6,6 +6,14 @@ export function Ask(arg1) {
   return window['go']['main']['AIService']['Ask'](arg1);
 }
 
+export function GetStatus() {
+  return window['go']['main']['AIService']['GetStatus']();
+}
+
 export function IsAIEnabled() {
   return window['go']['main']['AIService']['IsAIEnabled']();
+}
+
+export function SaveAIConfig(arg1, arg2, arg3) {
+  return window['go']['main']['AIService']['SaveAIConfig'](arg1, arg2, arg3);
 }

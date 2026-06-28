@@ -12,6 +12,9 @@ export default function SearchView({ onOpenNote }: Props) {
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [typeFilter, setTypeFilter] = useState('');
+  const [vectorEnabled, setVectorEnabled] = useState(false);
+  const [hybridWeight, setHybridWeight] = useState(0.5);
+  const [topK, setTopK] = useState(30);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const performSearch = useCallback(async (q: string) => {
@@ -29,7 +32,7 @@ export default function SearchView({ onOpenNote }: Props) {
 
     setLoading(true);
     try {
-      const searchResults = await window.go.main.NoteService.Search(q, typeFilter, '');
+      const searchResults = await window.go.main.NoteService.Search(q, typeFilter, '', vectorEnabled, hybridWeight, topK);
       setResults(searchResults);
       setSelectedIndex(0);
     } catch (err) {
@@ -38,7 +41,7 @@ export default function SearchView({ onOpenNote }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [typeFilter]);
+  }, [typeFilter, vectorEnabled, hybridWeight, topK]);
 
   // Search on query change (debounced)
   useEffect(() => {
@@ -127,6 +130,55 @@ export default function SearchView({ onOpenNote }: Props) {
               {t || 'All'}
             </button>
           ))}
+        </div>
+
+        {/* Vector / Hybrid Controls */}
+        <div className="flex items-center gap-3 mt-2">
+          <button
+            onClick={() => setVectorEnabled(v => !v)}
+            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+              vectorEnabled
+                ? 'bg-[var(--accent)] text-white'
+                : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
+            }`}
+            title="Toggle semantic vector search"
+          >
+            Vector
+          </button>
+
+          {vectorEnabled && (
+            <>
+              <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                <span>Hybrid</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  value={hybridWeight}
+                  onChange={(e) => setHybridWeight(parseFloat(e.target.value))}
+                  className="w-20 accent-[var(--accent)]"
+                  title="0 = FTS only, 1 = vector only"
+                />
+                <span className="w-8 text-right tabular-nums">{hybridWeight.toFixed(1)}</span>
+              </label>
+
+              <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                <span>TopK</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={topK}
+                  onChange={(e) => {
+                    const n = parseInt(e.target.value || '1', 10);
+                    setTopK(Number.isNaN(n) ? 1 : Math.min(200, Math.max(1, n)));
+                  }}
+                  className="w-14 px-1 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] text-xs tabular-nums"
+                />
+              </label>
+            </>
+          )}
         </div>
       </div>
 
