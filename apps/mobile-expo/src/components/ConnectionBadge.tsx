@@ -5,6 +5,40 @@ import { colors, typography } from '../theme';
 
 export default function ConnectionBadge() {
   const { status } = useConnection();
+import NetInfo from '@react-native-community/netinfo';
+import { checkHealth } from '../api/agentvault';
+import { useSettings } from '../context/SettingsContext';
+
+export default function ConnectionBadge() {
+  const { settings, loaded } = useSettings();
+  const [status, setStatus] = useState<'online' | 'offline' | 'checking'>('checking');
+
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      if (!loaded) {
+        if (mounted) setStatus('checking');
+        return;
+      }
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected) {
+        if (mounted) setStatus('offline');
+        return;
+      }
+      const healthy = await checkHealth(settings.serverUrl);
+      if (mounted) setStatus(healthy ? 'online' : 'offline');
+    };
+    check();
+    const interval = setInterval(check, 15000);
+    const unsub = NetInfo.addEventListener((state) => {
+      if (!state.isConnected) setStatus('offline');
+    });
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      unsub();
+    };
+  }, [loaded, settings.serverUrl]);
 
   const label = status === 'online' ? 'Connected' : status === 'offline' ? 'Offline' : '...';
   const color =

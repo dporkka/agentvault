@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,17 +22,24 @@ export default function CaptureScreen() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [projectOverride, setProjectOverride] = useState('');
+  const [project, setProject] = useState(settings.defaultProject || '');
   const [tags, setTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
 
   const project = projectOverride || settings.defaultProject || '';
+  useEffect(() => {
+    if (settings.defaultProject && !project) {
+      setProject(settings.defaultProject);
+    }
+  }, [settings.defaultProject]);
 
   const reset = () => {
     setTitle('');
     setBody('');
     setProjectOverride('');
+    setProject(settings.defaultProject || '');
     setTags([]);
     setMessage('');
   };
