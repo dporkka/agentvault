@@ -2,19 +2,25 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { checkHealth } from '../api/agentvault';
+import { useSettings } from '../context/SettingsContext';
 
 export default function ConnectionBadge() {
+  const { settings, loaded } = useSettings();
   const [status, setStatus] = useState<'online' | 'offline' | 'checking'>('checking');
 
   useEffect(() => {
     let mounted = true;
     const check = async () => {
+      if (!loaded) {
+        if (mounted) setStatus('checking');
+        return;
+      }
       const netInfo = await NetInfo.fetch();
       if (!netInfo.isConnected) {
         if (mounted) setStatus('offline');
         return;
       }
-      const healthy = await checkHealth();
+      const healthy = await checkHealth(settings.serverUrl);
       if (mounted) setStatus(healthy ? 'online' : 'offline');
     };
     check();
@@ -27,7 +33,7 @@ export default function ConnectionBadge() {
       clearInterval(interval);
       unsub();
     };
-  }, []);
+  }, [loaded, settings.serverUrl]);
 
   const label = status === 'online' ? 'Connected' : status === 'offline' ? 'Offline' : '...';
   const color = status === 'online' ? '#22c55e' : status === 'offline' ? '#ef4444' : '#6b7280';

@@ -1,46 +1,148 @@
 import { useState, useEffect, useCallback } from 'react';
-import { HardDrive, Sparkles, CheckCircle, AlertTriangle, X } from './Icons';
+import { HardDrive, Sparkles, CheckCircle, AlertTriangle, X, Loader2, Info, RefreshCw } from './Icons';
+import type { AIStatus, IndexingStatus } from '../types';
 
 interface Props {
   vaultPath: string;
 }
 
+const AI_PROVIDERS = ['ollama', 'openai', 'anthropic', 'openrouter', 'mock'];
+
+const DEFAULT_URLS: Record<string, string> = {
+  ollama: 'http://localhost:11434',
+  openai: 'https://api.openai.com/v1',
+  anthropic: 'https://api.anthropic.com/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+  mock: '',
+};
+
+const DEFAULT_MODELS: Record<string, string> = {
+  ollama: 'llama3.1',
+  openai: 'gpt-4o-mini',
+  anthropic: 'claude-3-5-sonnet-20241022',
+  openrouter: 'meta-llama/llama-3.1-70b',
+  mock: '',
+};
+
 export default function SettingsView({ vaultPath }: Props) {
+  const [aiStatus, setAiStatus] = useState<AIStatus | null>(null);
   const [aiEnabled, setAiEnabled] = useState(false);
-  const [indexStatus, setIndexStatus] = useState({ isIndexing: false, noteCount: 0 });
+  const [indexStatus, setIndexStatus] = useState<IndexingStatus>({ isIndexing: false, noteCount: 0 });
   const [reindexing, setReindexing] = useState(false);
-  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
+  const [provider, setProvider] = useState('ollama');
+  const [baseUrl, setBaseUrl] = useState('http://localhost:11434');
   const [model, setModel] = useState('llama3.1');
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  const [error, setError] = useState('');
+
+  const clearFeedback = useCallback(() => {
+    setToast('');
+    setError('');
+  }, []);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const enabled = await window.go.main.AIService.IsAIEnabled();
+      setAiEnabled(enabled);
+    } catch (err) {
+      console.error('Failed to load AI enabled state:', err);
+    }
+    try {
+      const status = await window.go.main.AIService.GetStatus();
+      setAiStatus(status);
+      if (status.provider) {
+        setProvider(status.provider);
+        setModel(status.model);
+      }
+    } catch (err: any) {
+      console.error('Failed to load AI status:', err);
+    }
+    try {
+      const status = await window.go.main.IndexService.GetStatus();
+      setIndexStatus(status);
+    } catch (err) {
+      console.error('Failed to load index status:', err);
+    }
+  }, []);
 
   useEffect(() => {
-    window.go.main.AIService.IsAIEnabled().then(setAiEnabled).catch(() => {});
-    window.go.main.IndexService.GetStatus().then(setIndexStatus).catch(() => {});
+    loadStatus();
+  }, [loadStatus]);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(''), 4000);
   }, []);
 
   const handleReindex = useCallback(async () => {
+    clearFeedback();
     setReindexing(true);
     try {
       await window.go.main.IndexService.Index(true);
       const status = await window.go.main.IndexService.GetStatus();
       setIndexStatus(status);
-      setToast('Vault reindexed successfully');
-      setTimeout(() => setToast(''), 3000);
+      showToast('Vault reindexed successfully');
     } catch (err: any) {
-      setToast(`Error: ${err.message}`);
+      setError(err.message || 'Failed to reindex vault');
     } finally {
       setReindexing(false);
     }
-  }, []);
+  }, [clearFeedback, showToast]);
 
   const handleSaveAIConfig = useCallback(async () => {
-    // In a real app, this would save to the vault config
-    setToast('AI settings saved (restart required)');
-    setTimeout(() => setToast(''), 3000);
-  }, [ollamaUrl, model]);
+    clearFeedback();
+    setSaving(true);
+    try {
+      await window.go.main.AIService.SaveAIConfig(provider, baseUrl, model);
+      await loadStatus();
+      showToast('AI settings saved');
+    } catch (err: any) {
+      setError(err.message || 'Failed to save AI settings');
+    } finally {
+      setSaving(false);
+    }
+  }, [provider, baseUrl, model, clearFeedback, loadStatus, showToast]);
+
+  const handleTestAI = useCallback(async () => {
+    clearFeedback();
+    setTesting(true);
+    try {
+      const status = await window.go.main.AIService.GetStatus();
+      setAiStatus(status);
+      if (status.enabled) {
+        showToast(`AI reachable: ${status.provider} · ${status.model}`);
+      } else {
+        setError(status.error || 'AI is not reachable');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to test AI connection');
+    } finally {
+      setTesting(false);
+    }
+  }, [clearFeedback, showToast]);
+
+  const handleProviderChange = useCallback((next: string) => {
+    setProvider(next);
+    if (!baseUrl || DEFAULT_URLS[provider] === baseUrl) {
+      setBaseUrl(DEFAULT_URLS[next] || '');
+    }
+    if (!model || DEFAULT_MODELS[provider] === model) {
+      setModel(DEFAULT_MODELS[next] || '');
+    }
+  }, [baseUrl, model, provider]);
+
+  const providerHelp: Record<string, string> = {
+    ollama: 'Install Ollama, then run: ollama pull {model}',
+    openai: 'Add your OpenAI API key to the vault config to enable chat.',
+    anthropic: 'Add your Anthropic API key to the vault config to enable chat.',
+    openrouter: 'Add your OpenRouter API key to the vault config to enable chat.',
+    mock: 'Mock provider returns a static response for testing.',
+  };
 
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-primary)]">
+    <div className="flex flex-col h-full bg-[var(--bg-primary)] relative">
       {/* Header */}
       <div className="px-6 py-4 border-b border-[var(--border)] bg-[var(--bg-secondary)]">
         <h1 className="text-lg font-semibold text-[var(--text-primary)]">Settings</h1>
@@ -58,7 +160,7 @@ export default function SettingsView({ vaultPath }: Props) {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Path</span>
-                <span className="text-[var(--text-primary)] font-mono text-xs">{vaultPath}</span>
+                <span className="text-[var(--text-primary)] font-mono text-xs text-right max-w-[60%] break-all">{vaultPath}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Notes indexed</span>
@@ -72,8 +174,13 @@ export default function SettingsView({ vaultPath }: Props) {
             <button
               onClick={handleReindex}
               disabled={reindexing}
-              className="mt-3 btn-secondary text-xs"
+              className="mt-3 btn-secondary text-xs flex items-center gap-1.5"
             >
+              {reindexing ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3.5 h-3.5" />
+              )}
               {reindexing ? 'Reindexing...' : 'Force Reindex'}
             </button>
           </section>
@@ -84,49 +191,100 @@ export default function SettingsView({ vaultPath }: Props) {
               <Sparkles className="w-4 h-4 text-[var(--accent)]" />
               AI Provider
               {aiEnabled ? (
-                <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+                <CheckCircle className="w-3.5 h-3.5 text-[var(--success)]" title="AI enabled" />
               ) : (
-                <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />
+                <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" title="AI not configured" />
               )}
             </h2>
+
+            {aiStatus && (
+              <div className={`mb-3 px-3 py-2 rounded-lg border text-xs ${
+                aiStatus.enabled
+                  ? 'bg-green-500/10 border-green-500/20 text-green-400'
+                  : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {aiStatus.enabled ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                  <span className="font-medium">
+                    {aiStatus.enabled ? `${aiStatus.provider} · ${aiStatus.model}` : 'AI not reachable'}
+                  </span>
+                </div>
+                {aiStatus.error && (
+                  <p className="mt-1 ml-5 text-[var(--text-muted)]">{aiStatus.error}</p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-3">
               <div>
                 <label className="block text-xs text-[var(--text-muted)] mb-1">
-                  Ollama URL
+                  Provider
+                </label>
+                <select
+                  value={provider}
+                  onChange={(e) => handleProviderChange(e.target.value)}
+                  className="w-full input"
+                >
+                  {AI_PROVIDERS.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  Base URL
                 </label>
                 <input
                   type="text"
-                  value={ollamaUrl}
-                  onChange={(e) => setOllamaUrl(e.target.value)}
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
                   className="w-full input"
-                  placeholder="http://localhost:11434"
+                  placeholder={DEFAULT_URLS[provider] || 'https://api.example.com/v1'}
                 />
               </div>
+
               <div>
                 <label className="block text-xs text-[var(--text-muted)] mb-1">
-                  Model
+                  Chat Model
                 </label>
                 <input
                   type="text"
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                   className="w-full input"
-                  placeholder="llama3.1"
+                  placeholder={DEFAULT_MODELS[provider] || 'model-name'}
                 />
               </div>
-              <div className="text-xs text-[var(--text-muted)]">
-                Install Ollama from <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">ollama.com</a>, then run:
-                <code className="block mt-1 px-2 py-1 bg-[var(--bg-tertiary)] rounded font-mono text-[var(--text-secondary)]">
-                  ollama pull {model}
-                </code>
+
+              <div className="text-xs text-[var(--text-muted)] flex items-start gap-2">
+                <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>
+                  {providerHelp[provider].replace('{model}', model || DEFAULT_MODELS[provider])}
+                  {provider === 'ollama' && (
+                    <> See <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">ollama.com</a>.</>
+                  )}
+                </span>
               </div>
-              <button
-                onClick={handleSaveAIConfig}
-                className="btn-primary text-xs"
-              >
-                Save AI Settings
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSaveAIConfig}
+                  disabled={saving}
+                  className="btn-primary text-xs flex items-center gap-1.5"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  {saving ? 'Saving...' : 'Save AI Settings'}
+                </button>
+                <button
+                  onClick={handleTestAI}
+                  disabled={testing}
+                  className="btn-secondary text-xs flex items-center gap-1.5"
+                >
+                  {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  {testing ? 'Testing...' : 'Test Connection'}
+                </button>
+              </div>
             </div>
           </section>
 
@@ -156,6 +314,17 @@ export default function SettingsView({ vaultPath }: Props) {
           </section>
         </div>
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="absolute top-4 right-4 max-w-sm px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400 flex items-start gap-2.5 shadow-lg">
+          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError('')} className="hover:opacity-70 flex-shrink-0">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (

@@ -3,7 +3,9 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, StyleSheet } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { SettingsProvider } from './src/context/SettingsContext';
 import HomeScreen from './src/screens/HomeScreen';
 import CaptureScreen from './src/screens/CaptureScreen';
 import InboxScreen from './src/screens/InboxScreen';
@@ -22,68 +24,72 @@ function TabLabel({ focused, label }: { focused: boolean; label: string }) {
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <StatusBar style="light" />
-      <Tab.Navigator
-        screenOptions={{
-          headerShown: false,
-          tabBarStyle: styles.tabBar,
-          tabBarActiveTintColor: '#4f7cff',
-          tabBarInactiveTintColor: '#6b7280',
-        }}
-      >
-        <Tab.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} label="Home" />,
-            tabBarIcon: ({ color }) => (
-              <Text style={[styles.icon, { color }]}>H</Text>
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Capture"
-          component={CaptureScreen}
-          options={{
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} label="Capture" />,
-            tabBarIcon: ({ color }) => (
-              <Text style={[styles.icon, { color }]}>+</Text>
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Inbox"
-          component={InboxScreen}
-          options={{
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} label="Inbox" />,
-            tabBarIcon: ({ color }) => (
-              <Text style={[styles.icon, { color }]}>I</Text>
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Search"
-          component={SearchScreen}
-          options={{
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} label="Search" />,
-            tabBarIcon: ({ color }) => (
-              <Text style={[styles.icon, { color }]}>Q</Text>
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} label="Settings" />,
-            tabBarIcon: ({ color }) => (
-              <Text style={[styles.icon, { color }]}>S</Text>
-            ),
-          }}
-        />
-      </Tab.Navigator>
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <SettingsProvider>
+        <NavigationContainer>
+          <StatusBar style="light" />
+          <Tab.Navigator
+            screenOptions={{
+              headerShown: false,
+              tabBarStyle: styles.tabBar,
+              tabBarActiveTintColor: '#4f7cff',
+              tabBarInactiveTintColor: '#6b7280',
+            }}
+          >
+            <Tab.Screen
+              name="Home"
+              component={HomeScreen}
+              options={{
+                tabBarLabel: ({ focused }) => <TabLabel focused={focused} label="Home" />,
+                tabBarIcon: ({ color }) => (
+                  <Text style={[styles.icon, { color }]}>H</Text>
+                ),
+              }}
+            />
+            <Tab.Screen
+              name="Capture"
+              component={CaptureScreen}
+              options={{
+                tabBarLabel: ({ focused }) => <TabLabel focused={focused} label="Capture" />,
+                tabBarIcon: ({ color }) => (
+                  <Text style={[styles.icon, { color }]}>+</Text>
+                ),
+              }}
+            />
+            <Tab.Screen
+              name="Inbox"
+              component={InboxScreen}
+              options={{
+                tabBarLabel: ({ focused }) => <TabLabel focused={focused} label="Inbox" />,
+                tabBarIcon: ({ color }) => (
+                  <Text style={[styles.icon, { color }]}>I</Text>
+                ),
+              }}
+            />
+            <Tab.Screen
+              name="Search"
+              component={SearchScreen}
+              options={{
+                tabBarLabel: ({ focused }) => <TabLabel focused={focused} label="Search" />,
+                tabBarIcon: ({ color }) => (
+                  <Text style={[styles.icon, { color }]}>Q</Text>
+                ),
+              }}
+            />
+            <Tab.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{
+                tabBarLabel: ({ focused }) => <TabLabel focused={focused} label="Settings" />,
+                tabBarIcon: ({ color }) => (
+                  <Text style={[styles.icon, { color }]}>S</Text>
+                ),
+              }}
+            />
+          </Tab.Navigator>
+        </NavigationContainer>
+      </SettingsProvider>
+    </SafeAreaProvider>
   );
 }
 

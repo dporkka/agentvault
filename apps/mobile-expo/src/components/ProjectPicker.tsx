@@ -9,6 +9,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { getProjects } from '../api/agentvault';
+import { useSettings } from '../context/SettingsContext';
 
 interface ProjectPickerProps {
   selected: string;
@@ -18,13 +19,14 @@ interface ProjectPickerProps {
 const DEFAULT_PROJECTS = ['personal', 'work', 'inbox', 'learning'];
 
 export default function ProjectPicker({ selected, onChange }: ProjectPickerProps) {
+  const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<string[]>(DEFAULT_PROJECTS);
   const [customInput, setCustomInput] = useState('');
 
   useEffect(() => {
     let mounted = true;
-    getProjects()
+    getProjects(settings.serverUrl)
       .then((list) => {
         if (mounted && list.length > 0) {
           setProjects((prev) => [...new Set([...prev, ...list])]);
@@ -36,7 +38,7 @@ export default function ProjectPicker({ selected, onChange }: ProjectPickerProps
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [settings.serverUrl]);
 
   const selectProject = (name: string) => {
     onChange(name);

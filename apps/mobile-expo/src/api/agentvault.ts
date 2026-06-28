@@ -16,58 +16,60 @@ import type { Capture } from '../types';
 
 export { DEFAULT_BASE_URL };
 
-// asyncTokenStore keeps the token in memory once loaded and is the
-// minimal shim needed by the contract client. The actual source of truth
-// is AsyncStorage; this layer just caches it for the client to read
-// synchronously. The mobile app never re-saves the token from the
-// contract client side (the Settings screen writes through
-// `localInbox.saveSettings`), so set/clear are no-ops.
-function asyncTokenStore() {
-  let cached: string | null = null;
-  // Pre-load asynchronously.
-  getSettings()
-    .then((s) => {
-      cached = s.token || null;
-    })
-    .catch(() => {
-      cached = null;
-    });
+// Mutable client configuration. SettingsContext is the source of truth and
+// calls updateClientConfig whenever settings load or change. API helper
+// functions also refresh from AsyncStorage before authenticated calls as a
+// safety net when components render before the context has loaded.
+let currentToken = '';
+let currentBaseUrl = DEFAULT_BASE_URL;
+
+function tokenStore() {
   return {
-    get: () => cached,
-    set: (_v: string) => {
-      // No-op: callers go through saveSettings(...) which persists
-      // to AsyncStorage and updates the cache on the next read.
+    get: () => currentToken || null,
+    set: (v: string) => {
+      currentToken = v;
     },
     clear: () => {
-      cached = null;
+      currentToken = '';
     },
   };
 }
 
 const client: ApiClient = createClient({
-  baseUrl: DEFAULT_BASE_URL,
-  tokenStore: asyncTokenStore(),
+  baseUrl: currentBaseUrl,
+  tokenStore: tokenStore(),
 });
 
-// resolveBaseUrl reads the saved base URL from settings, falling back
-// to the default. It updates the module-level client's base URL so
-// all calls use the same instance.
-async function resolveBaseUrl(): Promise<string> {
-  try {
-    const s = await getSettings();
-    client.setBaseUrl(s.serverUrl || DEFAULT_BASE_URL);
-    return s.serverUrl || DEFAULT_BASE_URL;
-  } catch {
-    return DEFAULT_BASE_URL;
+export function updateClientConfig(baseUrl?: string, token?: string): void {
+  if (baseUrl !== undefined) {
+    currentBaseUrl = baseUrl.replace(/\/$/, '');
+    client.setBaseUrl(currentBaseUrl);
+  }
+  if (token !== undefined) {
+    currentToken = token;
+    client.setToken(token);
   }
 }
 
-// refreshToken re-reads the token from AsyncStorage. Call this at the
-// start of every write call to make sure the client's cached token
-// matches the latest saved value.
+// resolveBaseUrl ensures the module-level client uses the latest saved server
+// URL. Prefer using SettingsContext directly; this is a fallback for code
+// that has not yet been migrated.
+async function resolveBaseUrl(): Promise<string> {
+  try {
+    const s = await getSettings();
+    updateClientConfig(s.serverUrl, undefined);
+    return currentBaseUrl;
+  } catch {
+    return currentBaseUrl;
+  }
+}
+
+// refreshToken re-reads the token from AsyncStorage. Call this at the start
+// of every write call to make sure the client's cached token matches the
+// latest saved value.
 async function refreshToken(): Promise<void> {
   const s = await getSettings();
-  client.setToken(s.token || '');
+  updateClientConfig(undefined, s.token);
 }
 
 export async function checkHealth(url?: string): Promise<boolean> {

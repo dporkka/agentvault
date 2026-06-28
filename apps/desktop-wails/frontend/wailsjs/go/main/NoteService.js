@@ -30,6 +30,6 @@ export function SaveNote(arg1, arg2) {
   return window['go']['main']['NoteService']['SaveNote'](arg1, arg2);
 }
 
-export function Search(arg1, arg2, arg3) {
-  return window['go']['main']['NoteService']['Search'](arg1, arg2, arg3);
+export function Search(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['NoteService']['Search'](arg1, arg2, arg3, arg4, arg5, arg6);
 }

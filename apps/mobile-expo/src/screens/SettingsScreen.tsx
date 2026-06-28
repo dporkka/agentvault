@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,44 +8,51 @@ import {
   ScrollView,
   StyleSheet,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { DEFAULT_BASE_URL } from '@agentvault/contract';
-import { getSettings, saveSettings, clearInbox, getUnsyncedCaptures, markAsSynced } from '../storage/localInbox';
+import { clearInbox, getUnsyncedCaptures, markAsSynced } from '../storage/localInbox';
+import { useSettings } from '../context/SettingsContext';
 import { sendCapture, checkHealth, verifyToken } from '../api/agentvault';
 import type { AppSettings } from '../types';
 
 export default function SettingsScreen() {
-  const [settings, setSettingsState] = useState<AppSettings>({
-    serverUrl: DEFAULT_BASE_URL,
-    defaultProject: '',
-    token: '',
-  });
+  const { settings, saveSettings } = useSettings();
+  const [draft, setDraft] = useState<AppSettings>(settings);
   const [health, setHealth] = useState<boolean | null>(null);
   const [tokenStatus, setTokenStatus] = useState<'unknown' | 'missing' | 'invalid' | 'valid'>('unknown');
   const [verifying, setVerifying] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(async () => {
-    const s = await getSettings();
-    setSettingsState(s);
-    const h = await checkHealth(s.serverUrl);
-    setHealth(h);
+  useEffect(() => {
+    setDraft(settings);
+  }, [settings]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
+  const scheduleSave = useCallback(
+    (next: AppSettings) => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        saveSettings(next);
+      }, 400);
+    },
+    [saveSettings]
   );
 
   const update = (patch: Partial<AppSettings>) => {
-    const next = { ...settings, ...patch };
-    setSettingsState(next);
-    saveSettings(next);
+    const next = { ...draft, ...patch };
+    setDraft(next);
+    scheduleSave(next);
   };
 
   const handleTest = async () => {
-    const ok = await checkHealth(settings.serverUrl);
+    // Persist the URL being tested so the client config matches.
+    await saveSettings(draft);
+    const ok = await checkHealth(draft.serverUrl);
     setHealth(ok);
     Alert.alert(ok ? 'Connected' : 'Unreachable', ok
       ? 'Server is responding.'
@@ -53,8 +60,9 @@ export default function SettingsScreen() {
   };
 
   const handleVerifyToken = async () => {
+    await saveSettings(draft);
     setVerifying(true);
-    const result = await verifyToken(settings.serverUrl);
+    const result = await verifyToken(draft.serverUrl);
     setVerifying(false);
     if (!result) {
       setTokenStatus('unknown');
@@ -123,7 +131,7 @@ export default function SettingsScreen() {
         <Text style={styles.label}>Server URL</Text>
         <TextInput
           style={styles.input}
-          value={settings.serverUrl}
+          value={draft.serverUrl}
           onChangeText={(v) => update({ serverUrl: v })}
           placeholder={DEFAULT_BASE_URL}
           placeholderTextColor="#6b7280"
@@ -147,7 +155,7 @@ export default function SettingsScreen() {
         </Text>
         <TextInput
           style={styles.input}
-          value={settings.token}
+          value={draft.token}
           onChangeText={(v) => update({ token: v })}
           placeholder="X-AgentVault-Token (printed by 'serve')"
           placeholderTextColor="#6b7280"
@@ -172,7 +180,7 @@ export default function SettingsScreen() {
         <Text style={styles.label}>Default Project</Text>
         <TextInput
           style={styles.input}
-          value={settings.defaultProject}
+          value={draft.defaultProject}
           onChangeText={(v) => update({ defaultProject: v })}
           placeholder="e.g. inbox"
           placeholderTextColor="#6b7280"

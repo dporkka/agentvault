@@ -4,6 +4,8 @@
 
 export type { SearchResult } from '@agentvault/contract';
 
+export type CaptureSyncStatus = 'unsynced' | 'syncing' | 'synced' | 'failed';
+
 export interface Capture {
   id: string;
   type: 'text' | 'voice' | 'photo';
@@ -13,6 +15,9 @@ export interface Capture {
   tags: string[];
   createdAt: string;
   synced: boolean;
+  syncStatus?: CaptureSyncStatus;
+  syncError?: string;
+  retryCount?: number;
 }
 
 export interface AppSettings {

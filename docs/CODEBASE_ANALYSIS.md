@@ -1,6 +1,6 @@
 # AgentVault Codebase Analysis
 
-Last reviewed: 2026-06-17
+Last reviewed: 2026-06-28
 
 ## Evidence Reviewed
 
@@ -9,9 +9,11 @@ Last reviewed: 2026-06-17
 - Verification run in this shell:
   - `npm run build` in `apps/web-local`: pass.
   - `npm run build` in `apps/browser-extension`: pass.
-  - `npm run build` in `apps/desktop-wails/frontend`: pass with a Vite chunk-size warning for the desktop bundle.
+  - `npm run build` in `apps/desktop-wails/frontend`: pass with a Vite chunk-size warning for the desktop bundle (`codemirror-vendor` chunk ~605 kB).
   - `npx tsc --noEmit` in `apps/mobile-expo`: pass.
-  - `go test ./...` in `core`: blocked because `go` is not available on `PATH` in this shell.
+  - `go test ./...` in `core`: pass.
+  - `go vet ./...` in `apps/desktop-wails`: pass.
+  - `make contract-check`: pass.
 
 ## Product Shape
 
@@ -101,10 +103,14 @@ AgentVault is a local-first Markdown vault with agent-facing retrieval and multi
      parsing live in `internal/rag` alone; the CLI's former duplicate
      search/prompt/parse flow is gone.
 
-3. Search capabilities are unevenly exposed.
-   - CLI ask can use hybrid search when embeddings exist.
-   - API search only exposes FTS filters.
-   - Web/extension/mobile clients do not expose vector/hybrid search options.
+3. Vector/hybrid search is now exposed end-to-end.
+   - CLI `search` supports `--vector`, `--hybrid-weight`, and `--topk`.
+   - API `/search` accepts `vector`, `hybrid_weight`, and `topk` query params and
+     falls back to FTS when embeddings are missing or the query is empty.
+   - Web, browser-extension, mobile, and desktop search UIs all include a
+     vector toggle and hybrid-weight control.
+   - The `@agentvault/contract` TypeScript client maps camelCase `hybridWeight`
+     to the server's `hybrid_weight` query key.
 
 4. Write operations now refresh derived state.
    - The API `handleCreateNote`/`handleCapture` and the MCP
@@ -119,12 +125,28 @@ AgentVault is a local-first Markdown vault with agent-facing retrieval and multi
      `watchFolders` for mobile). The package is a zero-dependency,
      source-of-truth for every server-facing type.
 
-6. Documentation was stale before this pass.
+6. Local client token onboarding is now explicit.
+   - Web: `ConnectionModal` prompts for server URL + token when the stored
+     token is missing or invalid, and `VaultStatus` surfaces "Not authenticated".
+   - Extension: popup shows token status (valid / invalid / missing) and
+     explains how to copy the token from `agentvault serve`.
+   - Mobile: Settings screen has a "Verify Token" button that uses
+     `GET /auth/verify` and reports the result.
+   - The `@agentvault/contract` client exposes `verifyAuth()` so every local
+     client can check a stored token without making a write request.
+
+7. Desktop bundle splitting reduced the main chunk but one vendor chunk is still large.
+   - `vite.config.ts` now splits `react-vendor`, `editor-vendor`, and a generic
+     `vendor` chunk, so the main `index` chunk is no longer the >500 kB offender.
+   - The `codemirror-vendor` chunk still triggers a Vite chunk-size warning
+     (~605 kB after minification). This is a known P2 budget item.
+
+8. Documentation was stale before this pass.
    - README listed completed areas as upcoming.
    - Historical phase plans described work already present in the code.
    - The desktop design note still reflected an earlier target rather than the exact current implementation.
 
-7. Packaging and release story is still immature.
+9. Packaging and release story is still immature.
    - CI builds the pieces, but the repository does not yet define release artifacts, installation paths, compatibility matrix, or user setup flows for desktop, extension, and mobile.
 
 ## Verification Snapshot
@@ -133,9 +155,11 @@ AgentVault is a local-first Markdown vault with agent-facing retrieval and multi
 | --- | --- | --- |
 | `apps/web-local npm run build` | Pass | Vite production build succeeded. |
 | `apps/browser-extension npm run build` | Pass | Vite production build succeeded. |
-| `apps/desktop-wails/frontend npm run build` | Pass with warning | Bundle warning: one desktop JS chunk is above 500 kB after minification. |
+| `apps/desktop-wails/frontend npm run build` | Pass with warning | `codemirror-vendor` chunk is ~605 kB after minification. |
 | `apps/mobile-expo npx tsc --noEmit` | Pass | No TypeScript output. |
-| `core go test ./...` | Pass | Run with the toolchain under `$HOME/.local/go`; `go vet ./...` also clean. CI installs Go 1.23. |
+| `core go test ./...` | Pass | `go vet ./...` clean. CI installs Go 1.23. |
+| `apps/desktop-wails go vet ./...` | Pass | Wails bindings regenerated after adding vector params to `NoteService.Search`. |
+| `make contract-check` | Pass | No snake_case keys or hard-coded base URLs detected in clients.
 
 ## Recommended Engineering Direction
 
@@ -147,5 +171,7 @@ both sides of the boundary (Go: `core/internal/contract/`; TypeScript:
 2. Done — share one TypeScript contract source across all clients.
 3. Done — route all AI ask behavior (CLI, API, desktop, MCP) through one core RAG service (`internal/rag.Pipeline`).
 4. Done — writes become searchable predictably (API and MCP auto-index after create/capture).
-5. Consolidate note→folder resolution into `templates.FolderRelForType`/`FolderPathForType` as the single source used by CLI, API, MCP, and desktop.
-6. Then improve UX, packaging, and release readiness across the app surfaces.
+5. Done — consolidate note→folder resolution into `templates.FolderRelForType`/`FolderPathForType` as the single source used by CLI, API, MCP, and desktop.
+6. Done — expose vector/hybrid search end-to-end across CLI, API, web, extension, mobile, and desktop.
+7. Done — add explicit token onboarding/status flows for web, extension, and mobile local clients.
+8. Next — improve packaging, release readiness, diagnostics, and desktop bundle budgets across the app surfaces.

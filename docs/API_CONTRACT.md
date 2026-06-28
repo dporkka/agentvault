@@ -1,6 +1,6 @@
 # AgentVault Local HTTP API Contract
 
-Last updated: 2026-06-15
+Last updated: 2026-06-28
 
 This is the single source of truth for the local HTTP API exposed by
 `agentvault serve` (package `core/internal/api`). It documents every route, its
@@ -72,8 +72,12 @@ A missing or incorrect token on a write endpoint returns `401` with
   exactly `localhost`, `127.0.0.1`, or `::1` (any port). Spoofed hosts such as
   `http://localhost.evil.com` are rejected (host-exact, not substring). Allowed
   methods: `GET, POST, OPTIONS`. Allowed headers:
-  `Content-Type, Authorization, X-AgentVault-Token`. Preflight `OPTIONS` returns
+  `Content-Type, Authorization, X-AgentVault-Token`.
+  `Access-Control-Allow-Credentials` is set to `true`. Preflight `OPTIONS` returns
   `200` with no body.
+- **Rate limiting:** a token-bucket limiter allows bursts of up to ~30 requests;
+  exceeding the limit returns `429 Too Many Requests` with
+  `{"error":"rate limit exceeded"}`.
 - **Error shape:** all handler errors use
   `{"error": "<summary>", "detail": "<specifics>"}` with a non-2xx status.
 
@@ -86,10 +90,10 @@ A missing or incorrect token on a write endpoint returns `401` with
 | GET | `/vault/status` | no | 200 | camelCase |
 | POST | `/vault/index` | yes | 200 | camelCase (`IndexResult`) |
 | GET | `/search` | no | 200 | camelCase (`[]search.Result`) |
-| GET | `/notes/{id}` | no | 200 / 400 / 404 | camelCase |
+| GET | `/notes/{id}` | no | 200 / 400 / 403 / 404 | camelCase |
 | POST | `/notes` | yes | 200 | camelCase |
 | POST | `/capture` | yes | 200 | camelCase |
-| POST | `/ask` | yes | 200 / 400 / 502 | camelCase (`rag.Answer`) |
+| POST | `/ask` | yes | 200 / 400 / 500 / 502 | camelCase (`rag.Answer`) |
 | GET | `/projects` | no | 200 | bare `string[]` |
 | GET | `/recent` | no | 200 | camelCase (`[]search.Result`) |
 | GET | `/stale` | no | 200 | camelCase (`[]search.Result`) |
@@ -172,9 +176,12 @@ Query parameters (all optional):
 - `status`: filter by status
 - `limit`: max results (default 20)
 - `offset`: pagination offset
-- `vector`: enable vector/hybrid search (`true` or `1`)
-- `hybrid_weight`: weight for vector vs FTS (0=FTS only, 1=vector only, default 0.5)
-- `topk`: number of vector candidates to fetch (default limit*3)
+- `vector`: enable vector/hybrid search (`true` or `1`). When enabled, the
+  server still falls back to FTS if there are no embeddings or no query text.
+- `hybrid_weight`: weight for vector vs FTS, only read when `vector` is enabled
+  (0=FTS only, 1=vector only, default 0.5)
+- `topk`: number of vector candidates to fetch when `vector` is enabled
+  (default `max(limit * 3, 10)`)
 
 The `@agentvault/contract` TypeScript client exposes these as camelCase
 (`vector`, `hybridWeight`, `topk`) and translates `hybridWeight` to the
@@ -200,8 +207,9 @@ server's `hybrid_weight` query key before sending the request.
 ## GET /notes/{id}
 
 No auth. Looks up a note by ID and returns its metadata plus the full file
-contents. `400` if the id segment is missing, `404` if no note matches. Built
-from a hand-written map, so fields are camelCase:
+contents. `400` if the id segment is missing, `404` if no note matches, `403`
+if the resolved file path escapes the vault (path traversal). Uses
+`contract.NoteDetail`, so fields are camelCase:
 
 ```json
 {
@@ -249,10 +257,14 @@ Response (path always under `00-inbox/`):
 { "path": "00-inbox/2026-06-10_capture_001.md" }
 ```
 
+If more than 999 captures are created for the same day, the endpoint returns
+`409 Conflict` with `{"error":"too many captures for today"}`.
+
 ## POST /ask
 
 Auth required. Source-grounded RAG answer over the vault. Returns `400` if
-`question` is blank/whitespace, `502` if the configured AI provider fails.
+`question` is blank/whitespace, `500` if the AI provider cannot be loaded, and
+`502` if the provider call fails.
 
 Request:
 
@@ -307,8 +319,8 @@ Query parameters (all optional):
 ## GET /git/status
 
 No auth. Reports real vault VCS state via `internal/git.Status`. A non-versioned
-vault is a valid state and returns `isGitRepo: false` (not an error). Built from
-a hand-written map, so fields are camelCase:
+vault is a valid state and returns `isGitRepo: false` (not an error). Uses
+`contract.GitStatus`, so fields are camelCase:
 
 ```json
 {
@@ -324,42 +336,5 @@ a hand-written map, so fields are camelCase:
 When `isGitRepo` is `false`: `branch` is `""`, `clean` is `true`, and both file
 arrays are empty (never `null`).
 
----
-
-## Known contract drift
-
-This document is now enforced by the shared `@agentvault/contract`
-package and the `make contract-check` CI gate. The drift items below
-are all resolved; the contract in the rest of this document is what
-every client and the server now produce.
-
-**Resolved:**
-- `/search`, `/recent`, `/stale` serialize `search.Result` with camelCase
-  `json` tags (`id`, `title`, `path`, `type`, `project`, `status`, `tags`,
-  `snippet`, `score`, `updatedAt`). — Types now live in
-  `packages/contract/src/types.ts` and `core/internal/contract/contract.go`.
-- `/vault/index` serializes `indexer.IndexResult` with camelCase `json`
-  tags (`scanned`, `added`, `updated`, `removed`, `skipped`, `errors`,
-  `chunksAdded`, `embedErrors`, `duration`). The nested `IndexError` also uses
-  camelCase (`path`, `error`). — Same shared source.
-- `/vault/status` returns `version` instead of `indexedAt`. — Same.
-- `/notes/{id}` returns the full note body under `content` and uses
-  `contract.NoteDetail` for the response shape. — New `contract.NoteDetail`.
-- `/git/status` returns the `contract.GitStatus` shape with
-  `isGitRepo`/`branch`/`clean`/`aheadBehind`/`modifiedFiles`/`untrackedFiles`
-  instead of a hand-written `map[string]interface{}`. — New
-  `contract.GitStatus` and `contract.GitModifiedFile`.
-- `/auth/verify` is wired and typed in the contract package even though
-  no client (besides the optional `verifyAuth()` helper) calls it.
-- Web, extension, mobile, and Wails desktop all import
-  `SearchResult`/`Answer`/`Source` from `@agentvault/contract`, so the
-  `decision.status || 'active'` line in the Wails DecisionDashboard now
-  reads real status data (previously the Wails SearchResult lacked
-  `status`).
-- The Wails desktop `VaultStatus` now uses the shared
-  `contract.VaultStatus` (`isVault`, not `isOpen`) and the Wails
-  frontend checks `vaultStatus?.isVault`.
-
-All endpoints are now aligned across server, tests, and clients:
-`/health`, `/vault/status`, `/vault/index`, `/search`, `/notes/{id}`, `/notes`
-(POST), `/capture`, `/ask`, `/projects`, `/recent`, `/stale`, and `/git/status`.
+There is no current known contract drift. The shapes above are enforced by the
+shared `@agentvault/contract` package and the `make contract-check` CI gate.
