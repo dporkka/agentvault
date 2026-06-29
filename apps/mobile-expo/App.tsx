@@ -95,25 +95,31 @@ function MainTabs() {
   );
 }
 
-export default function App() {
+function AppContent() {
   useAutoSync();
+  return (
+    <NavigationContainer>
+      <StatusBar style="light" />
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="MainTabs" component={MainTabs} />
+        <Stack.Screen
+          name="NoteDetail"
+          component={NoteDetailScreen}
+          options={{
+            cardStyle: { backgroundColor: colors.bgPrimary },
+          }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
         <SettingsProvider>
-          <NavigationContainer>
-            <StatusBar style="light" />
-            <Stack.Navigator screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="MainTabs" component={MainTabs} />
-              <Stack.Screen
-                name="NoteDetail"
-                component={NoteDetailScreen}
-                options={{
-                  cardStyle: { backgroundColor: colors.bgPrimary },
-                }}
-              />
-            </Stack.Navigator>
-          </NavigationContainer>
+          <AppContent />
         </SettingsProvider>
       </ErrorBoundary>
       <SettingsProvider>

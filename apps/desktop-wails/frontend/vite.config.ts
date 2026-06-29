@@ -13,6 +13,10 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // The markdown editor bundles @codemirror/lang-markdown and its Lezer
+    // parser. After trimming unused codeLanguages, the chunk is still ~605 kB
+    // minified, so we intentionally budget it rather than fighting the warning.
+    chunkSizeWarningLimit: 650,
     rollupOptions: {
       output: {
         manualChunks(id) {

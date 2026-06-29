@@ -1,16 +1,18 @@
-.PHONY: build test lint dev-core clean install help desktop desktop-dev contract-check contract-list-snake
+.PHONY: build test lint dev-core clean install help desktop desktop-dev contract-check contract-list-snake smoke
 
 VAULT := ./test-vault
 CORE := ./core
 DESKTOP := ./apps/desktop-wails
 # Ubuntu 24.04+/26.04 ship webkit2gtk 4.1 (not 4.0), so the desktop app needs this build tag.
 WAILS_TAGS := webkit2_41
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -X main.version=$(VERSION)
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 build: ## Build the agentvault CLI binary
-	cd $(CORE) && go build -o ../bin/agentvault ./cmd/agentvault
+	cd $(CORE) && go build -ldflags "$(LDFLAGS)" -o ../bin/agentvault ./cmd/agentvault
 
 test: ## Run all Go tests
 	cd $(CORE) && go test ./... -v
@@ -31,6 +33,12 @@ desktop-dev: ## Run the Wails desktop app in live-dev mode
 clean: ## Remove build artifacts and test vault
 	rm -rf bin/
 	rm -rf $(VAULT)
+	rm -rf dist/
+	rm -rf $(CORE)/../apps/desktop-wails/build/
+	rm -rf $(CORE)/../apps/desktop-wails/frontend/dist/
+	rm -rf $(CORE)/../apps/web-local/dist/
+	rm -rf $(CORE)/../apps/browser-extension/dist/
+	rm -rf $(CORE)/../apps/mobile-expo/dist/
 
 init-test: build ## Initialize a test vault
 	$(CORE)/../bin/agentvault init $(VAULT)
@@ -40,6 +48,16 @@ index-test: build ## Index the test vault
 
 search-test: build ## Search the test vault
 	$(CORE)/../bin/agentvault search "test" --vault $(VAULT)
+
+SMOKE_VAULT := /tmp/agentvault-smoke
+
+smoke: build ## Smoke-test the built CLI binary
+	rm -rf $(SMOKE_VAULT)
+	$(CORE)/../bin/agentvault version
+	$(CORE)/../bin/agentvault init $(SMOKE_VAULT)
+	$(CORE)/../bin/agentvault index --vault $(SMOKE_VAULT)
+	$(CORE)/../bin/agentvault search "smoke" --vault $(SMOKE_VAULT)
+	$(CORE)/../bin/agentvault doctor --vault $(SMOKE_VAULT)
 
 contract-check: ## Verify @agentvault/contract is the only source of API types in clients
 	@echo "Checking @agentvault/contract usage..."

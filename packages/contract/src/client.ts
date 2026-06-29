@@ -135,16 +135,20 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     if (!response.ok) {
       let message = `HTTP ${response.status}`;
       try {
-        const data = await response.json();
-        if (data && typeof data === 'object' && 'error' in data) {
-          message = (data as { error: string }).error || message;
+        const text = await response.text();
+        if (text) {
+          try {
+            const data = JSON.parse(text);
+            if (data && typeof data === 'object' && 'error' in data) {
+              message = (data as { error: string }).error || message;
+            } else {
+              message = text;
+            }
+          } catch {
+            message = text;
+          }
         }
-      } catch {
-        try {
-          const text = await response.text();
-          if (text) message = text;
-        } catch { /* ignore */ }
-      }
+      } catch { /* ignore */ }
       throw new ApiError(message, response.status);
     }
     if (response.status === 204) {
@@ -152,8 +156,11 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     }
     try {
       return (await response.json()) as T;
-    } catch {
-      return undefined as T;
+    } catch (err) {
+      throw new ApiError(
+        `Invalid JSON response from ${url}: ${err instanceof Error ? err.message : String(err)}`,
+        500
+      );
     }
   }
 

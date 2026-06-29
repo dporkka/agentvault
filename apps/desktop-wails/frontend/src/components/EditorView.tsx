@@ -136,7 +136,7 @@ export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: P
           <CodeMirror
             value={content}
             height="100%"
-            extensions={[markdown()]}
+            extensions={[markdown({ codeLanguages: [] })]}
             theme={oneDark}
             onChange={handleChange}
             basicSetup={{

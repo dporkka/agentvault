@@ -194,6 +194,7 @@ agentvault/
 │   │   ├── chunker/              # Markdown/text chunking
 │   │   ├── config/               # Vault configuration
 │   │   ├── db/                   # SQLite wrapper and migrations
+│   │   │   └── migrations/001_init.sql
 │   │   ├── doctor/               # Vault validation
 │   │   ├── embeddings/           # Embedding clients
 │   │   ├── git/                  # Git CLI wrapper
@@ -206,7 +207,6 @@ agentvault/
 │   │   ├── templates/            # Note and starter templates
 │   │   ├── vault/                # Vault folder layout
 │   │   └── vectors/              # Vector math
-│   └── migrations/001_init.sql
 ├── apps/
 │   ├── desktop-wails/            # Wails v2 desktop app
 │   ├── web-local/                # React/Vite local web app

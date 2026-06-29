@@ -10,5 +10,12 @@
     "./types": "./src/types.ts",
     "./endpoints": "./src/endpoints.ts",
     "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vitest": "^2.1.0"
   }
 }

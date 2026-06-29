@@ -26,8 +26,17 @@ jobs:
         run: go vet ./...
       - name: go test
         run: go test ./...
-      - name: go build
-        run: go build -o /tmp/agentvault ./cmd/agentvault
+      - name: Build CLI
+        working-directory: ${{ github.workspace }}
+        run: make build
+      - name: Smoke test CLI
+        working-directory: ${{ github.workspace }}
+        run: make smoke
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentvault-cli-linux-amd64
+          path: bin/agentvault
 
   frontends:
     name: Frontend (${{ matrix.app }})
@@ -113,7 +122,11 @@ jobs:
       - name: Install contract package dependencies
         run: |
           cd packages/contract
-          npm install --no-save typescript@5.4.5
+          npm ci
+      - name: Run contract tests
+        run: |
+          cd packages/contract
+          npm test
       - name: Install app dependencies for type-check
         run: |
           (cd apps/web-local && npm ci)

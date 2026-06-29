@@ -3,6 +3,7 @@ package db
 
 import (
 	"database/sql"
+	_ "embed"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -10,6 +11,9 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+//go:embed migrations/001_init.sql
+var embeddedSchema string
 
 // DB wraps a SQLite connection with vault-specific helpers.
 type DB struct {
@@ -51,9 +55,26 @@ func (d *DB) Path() string {
 	return d.path
 }
 
-// RunMigrations executes the inline migration SQL.
+// RunMigrations executes the embedded migration SQL when available, falling
+// back to the inline schema so the binary works even if the migration file is
+// not present at runtime.
 func (d *DB) RunMigrations() error {
+	if embeddedSchema != "" {
+		return d.runEmbeddedMigrations()
+	}
 	return d.runInlineMigrations()
+}
+
+// runEmbeddedMigrations creates the schema from the embedded SQL file.
+func (d *DB) runEmbeddedMigrations() error {
+	_, err := d.conn.Exec(embeddedSchema)
+	if err != nil {
+		return fmt.Errorf("failed to run embedded migrations: %w", err)
+	}
+	_, err = d.conn.Exec(
+		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, datetime('now'))`,
+	)
+	return err
 }
 
 // runInlineMigrations creates the schema directly when migration files aren't found.
