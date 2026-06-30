@@ -91,10 +91,13 @@ A missing or incorrect token on a write endpoint returns `401` with
 | POST | `/vault/index` | yes | 200 | camelCase (`IndexResult`) |
 | GET | `/search` | no | 200 | camelCase (`[]search.Result`) |
 | GET | `/notes/{id}` | no | 200 / 400 / 403 / 404 | camelCase |
+| GET | `/notes/{id}/links` | no | 200 / 400 / 404 | camelCase |
 | POST | `/notes` | yes | 200 | camelCase |
 | POST | `/capture` | yes | 200 | camelCase |
 | POST | `/ask` | yes | 200 / 400 / 500 / 502 | camelCase (`rag.Answer`) |
 | GET | `/projects` | no | 200 | bare `string[]` |
+| GET | `/tasks` | no | 200 | camelCase (`[]contract.TaskResult`) |
+| GET | `/dashboard` | no | 200 | camelCase (`contract.DashboardResponse`) |
 | GET | `/recent` | no | 200 | camelCase (`[]search.Result`) |
 | GET | `/stale` | no | 200 | camelCase (`[]search.Result`) |
 | GET | `/git/status` | no | 200 | camelCase |
@@ -224,6 +227,27 @@ if the resolved file path escapes the vault (path traversal). Uses
 }
 ```
 
+## GET /notes/{id}/links
+
+No auth. Returns the backlinks and outgoing links for a note. Backlinks are
+notes that link to `{id}`; outgoing links are notes that `{id}` links to.
+Both arrays are `NoteLink` objects with camelCase `json` tags:
+
+```json
+{
+  "backlinks": [
+    { "id": "note_…", "title": "…", "path": "10-notes/….md" }
+  ],
+  "outgoing": [
+    { "id": "note_…", "title": "…", "path": "10-notes/….md" }
+  ]
+}
+```
+
+Returns `400` if the id segment is missing and `404` if no note matches.
+Unresolved wiki-link targets are omitted from `outgoing`; `backlinks` only
+includes notes whose links resolved to the requested note ID.
+
 ## POST /notes
 
 Auth required. Creates a note from a template.
@@ -298,6 +322,64 @@ result serializes to `[]`, never `null`:
 ```json
 ["personal", "test-project", "work"]
 ```
+
+## GET /tasks
+
+No auth. Query params (all optional): `status`, `due_before`, `due_after`, `limit`.
+Returns a JSON array of `contract.TaskResult` objects:
+
+```json
+[
+  {
+    "id": "task_2026_06_30_001",
+    "title": "Review proposal",
+    "path": "20-projects/proposal/task_2026_06_30_001.md",
+    "type": "task",
+    "project": "work",
+    "status": "open",
+    "priority": "high",
+    "dueDate": "2026-06-30",
+    "tags": ["urgent"],
+    "snippet": "Review the Q3 proposal before end of day.",
+    "updatedAt": "2026-06-29T12:00:00Z"
+  }
+]
+```
+
+Query parameters:
+- `status`: filter by task status (`open`, `in_progress`, `done`)
+- `due_before`: ISO date (`YYYY-MM-DD`) — tasks due on or before this date
+- `due_after`: ISO date (`YYYY-MM-DD`) — tasks due on or after this date
+- `limit`: max results
+
+The TypeScript client exposes these as camelCase (`status`, `dueBefore`, `dueAfter`, `limit`) and translates `dueBefore`/`dueAfter` to the server's `due_before`/`due_after` query keys before sending the request.
+
+## GET /dashboard
+
+No auth. Returns a single `contract.DashboardResponse` aggregating actionable
+items and recent captures:
+
+```json
+{
+  "overdueTasks": [
+    { "id": "task_…", "title": "…", "path": "…", "type": "task", "project": "…", "status": "open", "priority": "high", "dueDate": "2026-06-29", "tags": [], "snippet": "…", "updatedAt": "…" }
+  ],
+  "upcomingTasks": [
+    { "id": "task_…", "title": "…", "path": "…", "type": "task", "project": "…", "status": "open", "priority": "medium", "dueDate": "2026-06-30", "tags": [], "snippet": "…", "updatedAt": "…" }
+  ],
+  "pendingDecisions": [
+    { "id": "decision_…", "title": "…", "path": "…", "type": "decision", "project": "…", "status": "proposed", "tags": [], "snippet": "…", "updatedAt": "…" }
+  ],
+  "recentCaptures": [
+    { "id": "capture_…", "title": "…", "path": "…", "type": "capture", "updatedAt": "…" }
+  ]
+}
+```
+
+- `overdueTasks`: tasks whose `dueDate` is strictly before today, limited (e.g. 10)
+- `upcomingTasks`: tasks whose `dueDate` is today or in the future, limited (e.g. 10)
+- `pendingDecisions`: decisions with `status` of `proposed`
+- `recentCaptures`: the most recent captures from the `captures` table, limited (e.g. 5)
 
 ## GET /recent
 
@@ -379,5 +461,6 @@ every client and the server now produce.
   frontend checks `vaultStatus?.isVault`.
 
 All endpoints are now aligned across server, tests, and clients:
-`/health`, `/vault/status`, `/vault/index`, `/search`, `/notes/{id}`, `/notes`
-(POST), `/capture`, `/ask`, `/projects`, `/recent`, `/stale`, and `/git/status`.
+`/health`, `/vault/status`, `/vault/index`, `/search`, `/notes/{id}`,
+`/notes/{id}/links`, `/notes` (POST), `/capture`, `/ask`, `/projects`,
+`/tasks`, `/dashboard`, `/recent`, `/stale`, and `/git/status`.

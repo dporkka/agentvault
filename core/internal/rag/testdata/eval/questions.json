@@ -1,0 +1,26 @@
+[
+  {
+    "question": "What vector database did the team decide to use?",
+    "expected_paths": ["30-decisions/vector-db.md"]
+  },
+  {
+    "question": "What are the open questions for the Adacavo project?",
+    "expected_paths": ["projects/adacavo/questions.md"]
+  },
+  {
+    "question": "Explain goroutines and channels in Go.",
+    "expected_paths": ["reference/go-concurrency.md"]
+  },
+  {
+    "question": "What is the team's vacation policy?",
+    "expected_paths": ["50-people/vacation-policy.md"]
+  },
+  {
+    "question": "How do we handle incident response?",
+    "expected_paths": ["30-decisions/incident-response.md"]
+  },
+  {
+    "question": "What are the key features planned for the mobile app?",
+    "expected_paths": ["20-projects/mobile-app.md"]
+  }
+]

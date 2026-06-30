@@ -21,14 +21,12 @@ export default function CaptureScreen() {
   const { settings } = useSettings();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [projectOverride, setProjectOverride] = useState('');
   const [project, setProject] = useState(settings.defaultProject || '');
   const [tags, setTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
 
-  const project = projectOverride || settings.defaultProject || '';
   useEffect(() => {
     if (settings.defaultProject && !project) {
       setProject(settings.defaultProject);
@@ -38,7 +36,6 @@ export default function CaptureScreen() {
   const reset = () => {
     setTitle('');
     setBody('');
-    setProjectOverride('');
     setProject(settings.defaultProject || '');
     setTags([]);
     setMessage('');
@@ -130,7 +127,7 @@ export default function CaptureScreen() {
           />
           <Text style={styles.charCount}>{body.length}/5000</Text>
 
-          <ProjectPicker selected={project} onChange={setProjectOverride} />
+          <ProjectPicker selected={project} onChange={setProject} />
 
           <TagPicker selected={tags} onChange={setTags} />
 

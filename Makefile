@@ -1,4 +1,4 @@
-.PHONY: build test lint dev-core clean install help desktop desktop-dev contract-check contract-list-snake smoke
+.PHONY: build test lint dev-core clean install help desktop desktop-dev contract-check contract-list-snake smoke release release-snapshot package-extension
 
 VAULT := ./test-vault
 CORE := ./core
@@ -58,6 +58,18 @@ smoke: build ## Smoke-test the built CLI binary
 	$(CORE)/../bin/agentvault index --vault $(SMOKE_VAULT)
 	$(CORE)/../bin/agentvault search "smoke" --vault $(SMOKE_VAULT)
 	$(CORE)/../bin/agentvault doctor --vault $(SMOKE_VAULT)
+
+release-snapshot: ## Build release artifacts locally without publishing
+	goreleaser release --snapshot --clean --skip-publish
+
+release: ## Create a release with GoReleaser (run on a tag)
+	goreleaser release --clean
+
+package-extension: ## Build and zip the browser extension
+	cd apps/browser-extension && npm ci && npm run build
+	mkdir -p dist
+	rm -f dist/agentvault-extension-v$(VERSION).zip
+	cd apps/browser-extension/dist && zip -r ../../../dist/agentvault-extension-v$(VERSION).zip .
 
 contract-check: ## Verify @agentvault/contract is the only source of API types in clients
 	@echo "Checking @agentvault/contract usage..."

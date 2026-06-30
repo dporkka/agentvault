@@ -54,6 +54,24 @@ describe('createClient', () => {
     expect(requests[0]).not.toContain('hybridWeight');
   });
 
+  it('fetches note links from /notes/{id}/links', async () => {
+    const client = createClient({
+      fetchImpl: async (url) => {
+        if (url.toString().includes('/notes/note-1/links')) {
+          return mockResponse({
+            backlinks: [{ id: 'note-2', title: 'Other Note', path: '10-notes/other.md' }],
+            outgoing: [],
+          });
+        }
+        return mockResponse({ error: 'not found' }, { status: 404 });
+      },
+    });
+    const result = await client.getNoteLinks('note-1');
+    expect(result.backlinks).toHaveLength(1);
+    expect(result.backlinks[0]).toMatchObject({ id: 'note-2', title: 'Other Note', path: '10-notes/other.md' });
+    expect(result.outgoing).toEqual([]);
+  });
+
   it('throws ApiError on network failure with status 0', async () => {
     const client = createClient({
       fetchImpl: async () => {

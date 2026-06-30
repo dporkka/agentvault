@@ -3,9 +3,11 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from '
 import Layout from './components/Layout';
 import SearchView from './components/SearchView';
 import NoteViewer from './components/NoteViewer';
+import GraphView from './components/GraphView';
 import AskPanel from './components/AskPanel';
 import ProjectDashboard from './components/ProjectDashboard';
 import SettingsPanel from './components/SettingsPanel';
+import TodayDashboard from './components/TodayDashboard';
 import { useApi } from './hooks/useApi';
 import { api } from './api/client';
 
@@ -62,7 +64,9 @@ const App: React.FC = () => {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<SearchView />} />
+            <Route path="/today" element={<TodayDashboard />} />
             <Route path="/note/:id" element={<NotePage />} />
+            <Route path="/graph" element={<GraphView />} />
             <Route path="/ask" element={<AskPanel />} />
             <Route path="/projects" element={<ProjectDashboard />} />
             <Route path="/settings" element={<SettingsPanel />} />

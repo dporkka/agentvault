@@ -16,10 +16,6 @@ import { clearInbox } from '../storage/localInbox';
 import { useSettings } from '../context/SettingsContext';
 import { syncCaptures, formatSyncResult } from '../storage/sync';
 import { checkHealth, verifyToken } from '../api/agentvault';
-import { DEFAULT_BASE_URL } from '@agentvault/contract';
-import { clearInbox, getUnsyncedCaptures, markAsSynced } from '../storage/localInbox';
-import { useSettings } from '../context/SettingsContext';
-import { sendCapture, checkHealth, verifyToken } from '../api/agentvault';
 import type { AppSettings } from '../types';
 import { colors, spacing, radii, typography } from '../theme';
 
@@ -211,68 +207,6 @@ export default function SettingsScreen() {
               autoCapitalize="none"
             />
           </View>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Server</Text>
-        <Text style={styles.label}>Server URL</Text>
-        <TextInput
-          style={styles.input}
-          value={draft.serverUrl}
-          onChangeText={(v) => update({ serverUrl: v })}
-          placeholder={DEFAULT_BASE_URL}
-          placeholderTextColor="#6b7280"
-          autoCapitalize="none"
-          keyboardType="url"
-        />
-        <View style={styles.healthRow}>
-          <View style={[styles.healthDot, { backgroundColor: health === true ? '#22c55e' : health === false ? '#ef4444' : '#6b7280' }]} />
-          <Text style={styles.healthText}>
-            {health === true ? 'Online' : health === false ? 'Offline' : 'Unknown'}
-          </Text>
-          <TouchableOpacity style={styles.testBtn} onPress={handleTest}>
-            <Text style={styles.testBtnText}>Test</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.label}>
-          Auth Token
-          {tokenStatus === 'valid' && <Text style={{ color: '#22c55e' }}> • valid</Text>}
-          {tokenStatus === 'invalid' && <Text style={{ color: '#ef4444' }}> • invalid</Text>}
-          {tokenStatus === 'missing' && <Text style={{ color: '#f59e0b' }}> • missing</Text>}
-        </Text>
-        <TextInput
-          style={styles.input}
-          value={draft.token}
-          onChangeText={(v) => update({ token: v })}
-          placeholder="X-AgentVault-Token (printed by 'serve')"
-          placeholderTextColor="#6b7280"
-          autoCapitalize="none"
-          autoCorrect={false}
-          secureTextEntry
-        />
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnSecondary]}
-          onPress={handleVerifyToken}
-          disabled={verifying}
-        >
-          <Text style={styles.actionBtnTextSecondary}>
-            {verifying ? 'Verifying...' : 'Verify Token'}
-          </Text>
-        </TouchableOpacity>
-        <Text style={styles.hint}>Required to sync captures to the server.</Text>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Defaults</Text>
-        <Text style={styles.label}>Default Project</Text>
-        <TextInput
-          style={styles.input}
-          value={draft.defaultProject}
-          onChangeText={(v) => update({ defaultProject: v })}
-          placeholder="e.g. inbox"
-          placeholderTextColor="#6b7280"
-          autoCapitalize="none"
-        />
-      </View>
-
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Actions</Text>
 

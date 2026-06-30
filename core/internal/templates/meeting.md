@@ -4,7 +4,8 @@ type: meeting
 title: {{.Title}}
 status: active
 {{if .Project}}project: {{.Project}}
-{{end}}created: {{.Created}}
+{{end}}attendees: []
+created: {{.Created}}
 updated: {{.Created}}
 ---
 

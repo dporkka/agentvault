@@ -15,16 +15,19 @@ import (
 
 // Frontmatter holds the YAML frontmatter from a note.
 type Frontmatter struct {
-	ID            string                 `yaml:"id"`
-	Type          string                 `yaml:"type"`
-	Title         string                 `yaml:"title"`
-	Status        string                 `yaml:"status"`
-	Project       string                 `yaml:"project"`
-	Tags          []string               `yaml:"tags"`
-	Entities      []string               `yaml:"entities"`
-	Created       string                 `yaml:"created"`
-	Updated       string                 `yaml:"updated"`
-	SourceQuality string                 `yaml:"source_quality"`
+	ID            string                 `yaml:"id" json:"id"`
+	Type          string                 `yaml:"type" json:"type"`
+	Title         string                 `yaml:"title" json:"title"`
+	Status        string                 `yaml:"status" json:"status"`
+	Project       string                 `yaml:"project" json:"project"`
+	Tags          []string               `yaml:"tags" json:"tags"`
+	Entities      []string               `yaml:"entities" json:"entities"`
+	Created       string                 `yaml:"created" json:"created"`
+	Updated       string                 `yaml:"updated" json:"updated"`
+	SourceQuality string                 `yaml:"source_quality" json:"source_quality"`
+	DueDate       string                 `yaml:"due_date" json:"due_date"`
+	Priority      string                 `yaml:"priority" json:"priority"`
+	Attendees     []string               `yaml:"attendees" json:"attendees"`
 	Extra         map[string]interface{} `yaml:",inline"`
 }
 

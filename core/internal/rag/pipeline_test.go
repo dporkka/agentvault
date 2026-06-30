@@ -192,8 +192,8 @@ func TestPipeline_Ask_SourcesAlwaysIncluded(t *testing.T) {
 }
 
 func TestBuildPrompt(t *testing.T) {
-	sources := []Source{
-		{Path: "test.md", Title: "Test Note", Excerpt: "This is a test."},
+	sources := []promptSource{
+		{Path: "test.md", Title: "Test Note", Summary: "A test note.", Excerpt: "This is a test."},
 	}
 	question := "What is this?"
 
@@ -219,10 +219,13 @@ func TestBuildPrompt(t *testing.T) {
 	if !strings.Contains(messages[0].Content, "test.md") {
 		t.Error("expected system prompt to contain source path")
 	}
+	if !strings.Contains(messages[0].Content, "Summary:") {
+		t.Error("expected system prompt to contain summary")
+	}
 }
 
 func TestBuildPrompt_NoSources(t *testing.T) {
-	messages := BuildPrompt([]Source{}, "What is this?")
+	messages := BuildPrompt([]promptSource{}, "What is this?")
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
 	}

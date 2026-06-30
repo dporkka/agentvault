@@ -2,7 +2,7 @@
 id: {{.ID}}
 type: decision
 title: {{.Title}}
-status: active
+status: proposed
 {{if .Project}}project: {{.Project}}
 {{end}}{{if .Tags}}tags: []
 {{end}}created: {{.Created}}

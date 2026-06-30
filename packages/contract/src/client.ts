@@ -13,16 +13,20 @@ import type {
   CaptureResponse,
   CreateNoteRequest,
   CreateNoteResponse,
+  DashboardResponse,
   GitStatus,
   HealthResponse,
   IndexOptions,
   IndexResult,
   NoteDetail,
+  NoteLinksResponse,
   Projects,
   RecentParams,
   SearchParams,
   SearchResult,
   StaleParams,
+  TaskResult,
+  TasksParams,
   VaultStatus,
 } from './types';
 
@@ -75,7 +79,10 @@ export interface ApiClient {
   getVaultStatus(): Promise<VaultStatus>;
   triggerIndex(opts?: IndexOptions): Promise<IndexResult>;
   search(params: SearchParams): Promise<SearchResult[]>;
+  getTasks(params?: TasksParams): Promise<TaskResult[]>;
+  getDashboard(): Promise<DashboardResponse>;
   getNote(id: string): Promise<NoteDetail>;
+  getNoteLinks(id: string): Promise<NoteLinksResponse>;
   createNote(req: CreateNoteRequest): Promise<CreateNoteResponse>;
   capture(req: CaptureRequest): Promise<CaptureResponse>;
   ask(req: AskRequest): Promise<AskResponse>;
@@ -85,13 +92,15 @@ export interface ApiClient {
   getGitStatus(): Promise<GitStatus>;
 }
 
-function buildSearch(params: SearchParams | RecentParams | StaleParams | undefined): string {
+function buildSearch(params: SearchParams | RecentParams | StaleParams | TasksParams | undefined): string {
   const sp = new URLSearchParams();
   if (!params) return '';
   // The server expects snake_case for these query params while the TS API
   // stays camelCase to match the rest of the contract.
   const keyMap: Record<string, string> = {
     hybridWeight: 'hybrid_weight',
+    dueBefore: 'due_before',
+    dueAfter: 'due_after',
   };
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined || v === null) continue;
@@ -194,8 +203,18 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
       const qs = buildSearch(params);
       return call<SearchResult[]>('GET', qs ? `/search?${qs}` : '/search', undefined, false);
     },
+    getTasks(params) {
+      const qs = buildSearch(params);
+      return call<TaskResult[]>('GET', qs ? `/tasks?${qs}` : '/tasks', undefined, false);
+    },
+    getDashboard() {
+      return call<DashboardResponse>('GET', '/dashboard', undefined, false);
+    },
     getNote(id) {
       return call<NoteDetail>('GET', `/notes/${encodeURIComponent(id)}`, undefined, false);
+    },
+    getNoteLinks(id) {
+      return call<NoteLinksResponse>('GET', `/notes/${encodeURIComponent(id)}/links`, undefined, false);
     },
     createNote(req) {
       return call<CreateNoteResponse>('POST', '/notes', req);

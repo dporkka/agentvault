@@ -1,13 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useConnection } from '../hooks/useConnection';
-import { colors, typography } from '../theme';
-
-export default function ConnectionBadge() {
-  const { status } = useConnection();
 import NetInfo from '@react-native-community/netinfo';
 import { checkHealth } from '../api/agentvault';
 import { useSettings } from '../context/SettingsContext';
+import { colors, typography } from '../theme';
 
 export default function ConnectionBadge() {
   const { settings, loaded } = useSettings();

@@ -7,10 +7,38 @@ interface ClipFormProps {
   initialTitle: string;
   initialUrl: string;
   initialSelectedText: string;
+  initialText?: string;
   onSend?: () => void;
 }
 
-export function ClipForm({ initialTitle, initialUrl, initialSelectedText, onSend }: ClipFormProps) {
+function Spinner() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 50 50" aria-hidden="true">
+      <g>
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from="0 25 25"
+          to="360 25 25"
+          dur="1s"
+          repeatCount="indefinite"
+        />
+        <circle
+          cx="25"
+          cy="25"
+          r="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray="80 20"
+        />
+      </g>
+    </svg>
+  );
+}
+
+export function ClipForm({ initialTitle, initialUrl, initialSelectedText, initialText, onSend }: ClipFormProps) {
   const [title, setTitle] = useState(initialTitle);
   const [url] = useState(initialUrl);
   const [selectedText] = useState(initialSelectedText);
@@ -27,12 +55,19 @@ export function ClipForm({ initialTitle, initialUrl, initialSelectedText, onSend
     getPendingCount().then(setPendingCount);
   }, [status]);
 
+  const clearSynced = useCallback(() => {
+    setStatus('unsynced');
+    setResult(null);
+  }, []);
+
   const handleSend = useCallback(async () => {
-    setStatus('syncing'); setResult(null);
+    setStatus('syncing');
+    setResult(null);
     const payload: CapturePayload = {
       type: selectedText ? 'selection' : 'webpage',
-      title: title || 'Untitled', url,
-      text: selectedText || undefined,
+      title: title || 'Untitled',
+      url,
+      text: selectedText || initialText || undefined,
       selectedText: selectedText || undefined,
       project: project || undefined,
       tags: tagsInput.split(',').map(t => t.trim()).filter(Boolean),
@@ -43,24 +78,25 @@ export function ClipForm({ initialTitle, initialUrl, initialSelectedText, onSend
     setStatus(res.state);
     if (res.state === 'synced') {
       onSend?.();
-      setTimeout(() => setStatus('unsynced'), 3000);
+      setTimeout(clearSynced, 3000);
     }
-  }, [title, url, selectedText, project, tagsInput, onSend]);
+  }, [title, url, selectedText, initialText, project, tagsInput, onSend, clearSynced]);
 
   const handleRetry = useCallback(async () => {
     setStatus('syncing');
+    setResult(null);
     await retryQueuedCaptures();
     const remaining = await getPendingCount();
     setPendingCount(remaining);
     if (remaining === 0) {
       setStatus('synced');
       setResult({ state: 'synced' });
-      setTimeout(() => setStatus('unsynced'), 3000);
+      setTimeout(clearSynced, 3000);
     } else {
       setStatus('failed');
       setResult({ state: 'failed', error: `${remaining} capture${remaining === 1 ? '' : 's'} still pending` });
     }
-  }, []);
+  }, [clearSynced]);
 
   const hasSelection = !!selectedText;
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' };
@@ -97,15 +133,36 @@ export function ClipForm({ initialTitle, initialUrl, initialSelectedText, onSend
         style={{ marginTop: '4px', padding: '10px 16px', background: '#4f7cff', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '14px', fontWeight: 600, cursor: status === 'syncing' ? 'wait' : 'pointer', opacity: status === 'syncing' ? 0.7 : 1 }}>
         {status === 'syncing' ? 'Sending...' : 'Send to Vault'}
       </button>
-      {status === 'synced' && (
-        <div style={{ padding: '8px 12px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '6px', color: '#22c55e', fontSize: '13px', textAlign: 'center' }}>Sent to AgentVault!{result?.path && <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.9 }}>{result.path}</div>}</div>
-      )}
-      {(status === 'unsynced' || status === 'failed') && result?.error && (
-        <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ef4444', fontSize: '12px' }}>
-          {result.error}
-          {result.queued && <span> Saved offline.</span>}
+
+      {status === 'syncing' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(79,124,255,0.1)', border: '1px solid rgba(79,124,255,0.3)', borderRadius: '6px', color: '#4f7cff', fontSize: '13px' }}>
+          <Spinner />
+          <span>Syncing...</span>
         </div>
       )}
+
+      {status === 'synced' && (
+        <div style={{ padding: '8px 12px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '6px', color: '#22c55e', fontSize: '13px', textAlign: 'center' }}>
+          Saved to AgentVault
+          {result?.path && <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.9 }}>{result.path}</div>}
+        </div>
+      )}
+
+      {status === 'unsynced' && result?.queued && (
+        <div style={{ padding: '8px 12px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', color: '#f59e0b', fontSize: '12px' }}>
+          Saved offline. Will retry when AgentVault is running.
+          {result.error && <div style={{ marginTop: '4px', opacity: 0.9 }}>{result.error}</div>}
+        </div>
+      )}
+
+      {status === 'failed' && (
+        <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ef4444', fontSize: '12px' }}>
+          <div style={{ fontWeight: 600, marginBottom: '4px' }}>Failed</div>
+          {result?.error && <div style={{ marginBottom: '6px' }}>{result.error}</div>}
+          <button onClick={handleRetry} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef4444', borderRadius: '4px', color: '#ef4444', fontSize: '11px', cursor: 'pointer' }}>Retry</button>
+        </div>
+      )}
+
       {pendingCount > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', color: '#f59e0b', fontSize: '12px' }}>
           <span>{pendingCount} pending capture{pendingCount === 1 ? '' : 's'}</span>

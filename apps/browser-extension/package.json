@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc && vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@agentvault/contract": "file:../../packages/contract",
@@ -17,6 +19,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "typescript": "^5.4.5",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "vitest": "^2.1.0"
   }
 }

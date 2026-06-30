@@ -11,16 +11,20 @@ import type {
   CaptureResponse,
   CreateNoteRequest,
   CreateNoteResponse,
+  DashboardResponse,
   GitStatus,
   HealthResponse,
   IndexOptions,
   IndexResult,
   NoteDetail,
+  NoteLinksResponse,
   Projects,
   RecentParams,
   SearchResult,
   SearchParams,
   StaleParams,
+  TaskResult,
+  TasksParams,
   VaultStatus,
 } from './types';
 
@@ -46,6 +50,7 @@ export const routes: {
   readonly vaultIndex: EndpointDef<IndexOptions | undefined, IndexResult>;
   readonly search: EndpointDef<SearchParams, SearchResult[]>;
   readonly noteById: EndpointDef<{ id: string }, NoteDetail>;
+  readonly noteLinks: EndpointDef<{ id: string }, NoteLinksResponse>;
   readonly createNote: EndpointDef<CreateNoteRequest, CreateNoteResponse>;
   readonly capture: EndpointDef<CaptureRequest, CaptureResponse>;
   readonly ask: EndpointDef<AskRequest, AskResponse>;
@@ -53,6 +58,8 @@ export const routes: {
   readonly recent: EndpointDef<RecentParams | undefined, SearchResult[]>;
   readonly stale: EndpointDef<StaleParams | undefined, SearchResult[]>;
   readonly gitStatus: EndpointDef<NoRequest, GitStatus>;
+  readonly tasks: EndpointDef<TasksParams | undefined, TaskResult[]>;
+  readonly dashboard: EndpointDef<NoRequest, DashboardResponse>;
 } = {
   health: {
     method: 'GET',
@@ -95,6 +102,13 @@ export const routes: {
     auth: false,
     request: undefined as unknown as { id: string },
     response: undefined as unknown as NoteDetail,
+  },
+  noteLinks: {
+    method: 'GET',
+    path: '/notes/{id}/links',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as NoteLinksResponse,
   },
   createNote: {
     method: 'POST',
@@ -144,6 +158,20 @@ export const routes: {
     auth: false,
     request: undefined as never,
     response: undefined as unknown as GitStatus,
+  },
+  tasks: {
+    method: 'GET',
+    path: '/tasks',
+    auth: false,
+    request: undefined as unknown as TasksParams | undefined,
+    response: undefined as unknown as TaskResult[],
+  },
+  dashboard: {
+    method: 'GET',
+    path: '/dashboard',
+    auth: false,
+    request: undefined as never,
+    response: undefined as unknown as DashboardResponse,
   },
 };
 

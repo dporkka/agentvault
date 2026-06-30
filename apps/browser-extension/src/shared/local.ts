@@ -20,6 +20,7 @@ export interface PageData {
   title: string;
   url: string;
   selectedText: string;
+  text?: string;
   author?: string;
   description?: string;
   publishedDate?: string;

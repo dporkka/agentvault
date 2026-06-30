@@ -7,8 +7,19 @@ import (
 	"github.com/agentvault/core/internal/ai"
 )
 
+// promptSource carries the fields needed to render a source in the RAG system
+// prompt. It is intentionally separate from the public Source type so that
+// prompt-only metadata (like a one-sentence summary) does not leak into the
+// API response shape.
+type promptSource struct {
+	Title   string
+	Path    string
+	Summary string
+	Excerpt string
+}
+
 // BuildPrompt constructs the system and user messages for the AI provider.
-func BuildPrompt(sources []Source, question string) []ai.Message {
+func BuildPrompt(sources []promptSource, question string) []ai.Message {
 	systemContent := buildSystemPrompt(sources)
 	return []ai.Message{
 		{Role: "system", Content: systemContent},
@@ -17,7 +28,7 @@ func BuildPrompt(sources []Source, question string) []ai.Message {
 }
 
 // buildSystemPrompt creates the system prompt with source context.
-func buildSystemPrompt(sources []Source) string {
+func buildSystemPrompt(sources []promptSource) string {
 	var b strings.Builder
 
 	b.WriteString("You are AgentVault AI, a helpful assistant with access to the user's knowledge base.\n")
@@ -29,6 +40,9 @@ func buildSystemPrompt(sources []Source) string {
 		for i, src := range sources {
 			b.WriteString(fmt.Sprintf("\n[%d] %s\n", i+1, src.Title))
 			b.WriteString(fmt.Sprintf("    Path: %s\n", src.Path))
+			if src.Summary != "" {
+				b.WriteString(fmt.Sprintf("    Summary: %s\n", src.Summary))
+			}
 			if src.Excerpt != "" {
 				b.WriteString(fmt.Sprintf("    Excerpt: %s\n", src.Excerpt))
 			}

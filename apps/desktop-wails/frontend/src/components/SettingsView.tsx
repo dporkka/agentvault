@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { HardDrive, Sparkles, CheckCircle, AlertTriangle, X, Loader2, Info, RefreshCw } from './Icons';
-import type { AIStatus, IndexingStatus } from '../types';
+import { HardDrive, Sparkles, CheckCircle, AlertTriangle, X, Loader2, Info, RefreshCw, ExternalLink } from './Icons';
+import type { AIStatus, IndexingStatus, VaultStatus } from '../types';
 
 interface Props {
   vaultPath: string;
@@ -28,6 +28,7 @@ export default function SettingsView({ vaultPath }: Props) {
   const [aiStatus, setAiStatus] = useState<AIStatus | null>(null);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [indexStatus, setIndexStatus] = useState<IndexingStatus>({ isIndexing: false, noteCount: 0 });
+  const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null);
   const [reindexing, setReindexing] = useState(false);
   const [provider, setProvider] = useState('ollama');
   const [baseUrl, setBaseUrl] = useState('http://localhost:11434');
@@ -64,6 +65,12 @@ export default function SettingsView({ vaultPath }: Props) {
       setIndexStatus(status);
     } catch (err) {
       console.error('Failed to load index status:', err);
+    }
+    try {
+      const status = await window.go.main.VaultService.GetStatus();
+      setVaultStatus(status);
+    } catch (err) {
+      console.error('Failed to load vault status:', err);
     }
   }, []);
 
@@ -158,13 +165,29 @@ export default function SettingsView({ vaultPath }: Props) {
               Vault
             </h2>
             <div className="space-y-2 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-[var(--text-muted)]">Status</span>
+                <span className="flex items-center gap-1.5 text-[var(--text-primary)]">
+                  {vaultPath ? (
+                    <>
+                      <CheckCircle className="w-3.5 h-3.5 text-[var(--success)]" />
+                      Vault ready
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />
+                      No vault loaded
+                    </>
+                  )}
+                </span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Path</span>
-                <span className="text-[var(--text-primary)] font-mono text-xs text-right max-w-[60%] break-all">{vaultPath}</span>
+                <span className="text-[var(--text-primary)] font-mono text-xs text-right max-w-[60%] break-all">{vaultPath || '-'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Notes indexed</span>
-                <span className="text-[var(--text-primary)]">{indexStatus.noteCount}</span>
+                <span className="text-[var(--text-primary)]">{vaultStatus?.noteCount ?? indexStatus.noteCount}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Version</span>
@@ -183,6 +206,17 @@ export default function SettingsView({ vaultPath }: Props) {
               )}
               {reindexing ? 'Reindexing...' : 'Force Reindex'}
             </button>
+            <div className="mt-3 text-xs">
+              <a
+                href="https://github.com/agentvault/agentvault/releases"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[var(--accent)] hover:underline"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Check for updates
+              </a>
+            </div>
           </section>
 
           {/* AI Settings */}

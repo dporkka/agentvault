@@ -79,6 +79,18 @@ export interface NoteDetail {
   content: string;
 }
 
+// GET /notes/{id}/links
+export interface NoteLink {
+  id: string;
+  title: string;
+  path: string;
+}
+
+export interface NoteLinksResponse {
+  backlinks: NoteLink[];
+  outgoing: NoteLink[];
+}
+
 // POST /notes
 export interface CreateNoteRequest {
   type?: string;
@@ -175,3 +187,69 @@ export interface StaleParams {
   hybridWeight?: number;
   topk?: number;
 }
+
+// GET /tasks
+export interface TasksParams {
+  status?: string;
+  dueBefore?: string;
+  dueAfter?: string;
+  limit?: number;
+}
+
+export interface TaskResult {
+  id: string;
+  title: string;
+  path: string;
+  type: string;
+  project: string;
+  status: string;
+  priority: string;
+  dueDate: string;
+  tags: string[];
+  snippet: string;
+  updatedAt: string;
+}
+
+// GET /decisions (future endpoint)
+export interface DecisionResult {
+  id: string;
+  title: string;
+  path: string;
+  type: string;
+  project: string;
+  status: string;
+  tags: string[];
+  snippet: string;
+  updatedAt: string;
+}
+
+// GET /meetings (future endpoint)
+export interface MeetingResult {
+  id: string;
+  title: string;
+  path: string;
+  type: string;
+  project: string;
+  attendees: string[];
+  tags: string[];
+  snippet: string;
+  updatedAt: string;
+}
+
+// GET /dashboard
+export interface CaptureSummary {
+  id: string;
+  title: string;
+  path: string;
+  type: string;
+  updatedAt: string;
+}
+
+export interface DashboardResponse {
+  overdueTasks: TaskResult[];
+  upcomingTasks: TaskResult[];
+  pendingDecisions: DecisionResult[];
+  recentCaptures: CaptureSummary[];
+}
+
+

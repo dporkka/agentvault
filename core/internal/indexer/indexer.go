@@ -4,6 +4,7 @@ package indexer
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -140,6 +141,11 @@ func (idx *Indexer) Index(opts IndexOptions) (*IndexResult, error) {
 		result.Errors = append(result.Errors, IndexError{Path: "cleanup", Error: err.Error()})
 	}
 
+	// Resolve any links that were created before their targets were indexed.
+	if err := idx.resolveUnresolvedLinks(); err != nil {
+		result.Errors = append(result.Errors, IndexError{Path: "links", Error: err.Error()})
+	}
+
 	result.Duration = time.Since(start)
 	return result, nil
 }
@@ -204,20 +210,25 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 	// Upsert notes table
 	tagsStr := strings.Join(doc.Frontmatter.Tags, ", ")
 	entitiesStr := strings.Join(doc.Frontmatter.Entities, ", ")
+	frontmatterJSON, err := json.Marshal(doc.Frontmatter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal frontmatter: %w", err)
+	}
 	_, err = idx.db.Exec(`
-		INSERT INTO notes (id, file_id, title, type, status, project, created_at, updated_at, source_quality, body)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO notes (id, file_id, title, type, status, project, created_at, updated_at, source_quality, frontmatter_json, body)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title = excluded.title,
 			type = excluded.type,
 			status = excluded.status,
 			project = excluded.project,
 			updated_at = excluded.updated_at,
+			frontmatter_json = excluded.frontmatter_json,
 			body = excluded.body
 	`, noteID, fileID, doc.Frontmatter.Title, doc.Frontmatter.Type,
 		doc.Frontmatter.Status, doc.Frontmatter.Project,
 		doc.Frontmatter.Created, doc.Frontmatter.Updated,
-		doc.Frontmatter.SourceQuality, doc.Body)
+		doc.Frontmatter.SourceQuality, string(frontmatterJSON), doc.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upsert note: %w", err)
 	}
@@ -232,6 +243,29 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert tag: %w", err)
 		}
+	}
+
+	// Delete and re-insert outgoing links for this note.
+	if _, err := idx.db.Exec("DELETE FROM links WHERE from_note_id = ?", noteID); err != nil {
+		return nil, fmt.Errorf("failed to delete old links: %w", err)
+	}
+	linkCount := 0
+	for _, link := range doc.WikiLinks {
+		targetID, err := idx.resolveLinkTarget(link.Target)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve link target %q: %w", link.Target, err)
+		}
+		_, err = idx.db.Exec(
+			"INSERT INTO links (from_note_id, to_note_id, raw_target, link_type) VALUES (?, ?, ?, ?)",
+			noteID, targetID, link.Target, "wiki",
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert link %q: %w", link.Target, err)
+		}
+		linkCount++
+	}
+	if linkCount > 0 {
+		fmt.Printf("[indexer] note %s: %d link(s)\n", noteID, linkCount)
 	}
 
 	// Update FTS index. notes_fts is an FTS5 virtual table, which does not
@@ -392,6 +426,88 @@ func (idx *Indexer) cleanupDeletedFiles() error {
 func (idx *Indexer) clearFTS() error {
 	_, err := idx.db.Exec("DELETE FROM notes_fts")
 	return err
+}
+
+// resolveUnresolvedLinks updates link rows whose target was not found during
+// the per-note insertion pass. This handles notes that are linked before they
+// are encountered by the file walk.
+func (idx *Indexer) resolveUnresolvedLinks() error {
+	rows, err := idx.db.Query("SELECT id, raw_target FROM links WHERE to_note_id IS NULL")
+	if err != nil {
+		return fmt.Errorf("failed to query unresolved links: %w", err)
+	}
+	defer rows.Close()
+
+	type unresolved struct {
+		id   int
+		target string
+	}
+	var pending []unresolved
+	for rows.Next() {
+		var u unresolved
+		if err := rows.Scan(&u.id, &u.target); err != nil {
+			return fmt.Errorf("failed to scan unresolved link: %w", err)
+		}
+		pending = append(pending, u)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("failed to iterate unresolved links: %w", err)
+	}
+
+	resolvedCount := 0
+	for _, u := range pending {
+		targetID, err := idx.resolveLinkTarget(u.target)
+		if err != nil {
+			return fmt.Errorf("failed to resolve link target %q: %w", u.target, err)
+		}
+		if targetID == nil {
+			continue
+		}
+		if _, err := idx.db.Exec("UPDATE links SET to_note_id = ? WHERE id = ?", *targetID, u.id); err != nil {
+			return fmt.Errorf("failed to update resolved link: %w", err)
+		}
+		resolvedCount++
+	}
+	if resolvedCount > 0 {
+		fmt.Printf("[indexer] resolved %d link(s)\n", resolvedCount)
+	}
+	return nil
+}
+
+// resolveLinkTarget tries to resolve a wiki-link target to a note ID.
+// It matches, in order: note id, title (case-insensitive), and file path.
+func (idx *Indexer) resolveLinkTarget(target string) (*string, error) {
+	var id string
+
+	// 1. Exact match on notes.id
+	row := idx.db.QueryRow("SELECT id FROM notes WHERE id = ?", target)
+	if err := row.Scan(&id); err == nil {
+		return &id, nil
+	} else if err != sql.ErrNoRows {
+		return nil, err
+	}
+
+	// 2. Case-insensitive match on notes.title
+	row = idx.db.QueryRow("SELECT id FROM notes WHERE lower(title) = lower(?)", target)
+	if err := row.Scan(&id); err == nil {
+		return &id, nil
+	} else if err != sql.ErrNoRows {
+		return nil, err
+	}
+
+	// 3. Match on notes.path via files.path
+	row = idx.db.QueryRow(`
+		SELECT notes.id FROM notes
+		JOIN files ON files.id = notes.file_id
+		WHERE files.path = ? OR files.path = ?
+	`, target, target+".md")
+	if err := row.Scan(&id); err == nil {
+		return &id, nil
+	} else if err != sql.ErrNoRows {
+		return nil, err
+	}
+
+	return nil, nil
 }
 
 // ComputeHash returns the SHA-256 hex digest of content.

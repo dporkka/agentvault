@@ -6,7 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -29,11 +31,13 @@ The token is printed at startup.`,
 
 var servePort int
 var serveHost string
+var serveNoOpen bool
 
 func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.Flags().IntVar(&servePort, "port", 47321, "Port to listen on")
 	serveCmd.Flags().StringVar(&serveHost, "host", "127.0.0.1", "Host to bind to (default: localhost only)")
+	serveCmd.Flags().BoolVar(&serveNoOpen, "no-open", false, "Do not open the browser on startup")
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
@@ -52,23 +56,40 @@ func runServe(cmd *cobra.Command, args []string) error {
 	srv.RegisterRoutes()
 
 	addr := fmt.Sprintf("%s:%d", serveHost, servePort)
+	url := "http://" + addr
 
-	// 4. Print startup info
-	fmt.Printf("\n  AgentVault API server starting on http://%s\n\n", addr)
-	fmt.Printf("  Vault:    %s\n", vp)
-	fmt.Printf("  Auth token: %s\n\n", srv.AuthToken())
-	fmt.Println("  Use this token in the X-AgentVault-Token header for write operations.")
-	fmt.Println("  Press Ctrl+C to stop.")
-	fmt.Println()
+	// 4. Print startup banner
+	srv.PrintStartupBanner(addr)
 
 	// 5. Start server in a goroutine
+	startErr := make(chan error, 1)
 	go func() {
 		if err := srv.Start(addr); err != nil && err != http.ErrServerClosed {
+			startErr <- err
+		}
+	}()
+
+	// 6. Wait for the server to be ready
+	if err := waitForServer(url, startErr); err != nil {
+		return err
+	}
+
+	// Surface any runtime errors from the server goroutine.
+	go func() {
+		if err := <-startErr; err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
 	}()
 
-	// 6. Wait for interrupt signal for graceful shutdown
+	// 7. Open the browser unless disabled
+	if !serveNoOpen {
+		fmt.Printf("Opening %s in your browser...\n", url)
+		if err := openBrowser(url); err != nil {
+			log.Printf("Could not open browser: %v", err)
+		}
+	}
+
+	// 8. Wait for interrupt signal for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -82,5 +103,55 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("Server stopped.")
+	return nil
+}
+
+// openBrowser opens the given URL in the default browser for the current OS.
+func openBrowser(url string) error {
+	var cmd string
+	var args []string
+
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = "open"
+		args = []string{url}
+	case "windows":
+		cmd = "cmd"
+		args = []string{"/c", "start", "", url}
+	default:
+		cmd = "xdg-open"
+		args = []string{url}
+	}
+
+	return exec.Command(cmd, args...).Start()
+}
+
+// waitForServer polls the server's health endpoint until it responds or a
+// startup error is reported.
+func waitForServer(url string, startErr <-chan error) error {
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	deadline := time.Now().Add(2 * time.Second)
+
+	for time.Now().Before(deadline) {
+		select {
+		case err := <-startErr:
+			if err != nil && err != http.ErrServerClosed {
+				return fmt.Errorf("server failed to start: %w", err)
+			}
+			return nil
+		default:
+		}
+
+		resp, err := client.Get(url + "/health")
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+		}
+
+		time.Sleep(50 * time.Millisecond)
+	}
+
 	return nil
 }

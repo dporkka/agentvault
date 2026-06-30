@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/api/client';
+import { useApi } from '@/hooks/useApi';
 import { useDebounce } from '@/hooks/useDebounce';
-import type { SearchResult } from '@agentvault/contract';
+import type { DashboardResponse, SearchResult } from '@agentvault/contract';
 
 const TYPE_FILTERS = ['all', 'note', 'decision', 'task', 'meeting', 'source'] as const;
 type TypeFilter = (typeof TYPE_FILTERS)[number];
@@ -30,6 +31,10 @@ const SearchView: React.FC = () => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { data: dashboard } = useApi<DashboardResponse>(
+    () => api.getDashboard(),
+    []
+  );
 
   const debouncedQuery = useDebounce(query, 200);
 
@@ -116,6 +121,36 @@ const SearchView: React.FC = () => {
       {/* Header */}
       <div className="border-b border-vault-border px-6 py-4">
         <h1 className="text-lg font-semibold text-vault-text-primary mb-3">Search</h1>
+
+        {dashboard && (
+          <button
+            onClick={() => navigate('/today')}
+            className="w-full flex items-center justify-between gap-4 mb-4 p-3 rounded-lg bg-vault-bg-secondary hover:bg-vault-bg-hover border border-vault-border transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-vault-accent-muted flex items-center justify-center">
+                <svg className="w-4 h-4 text-vault-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium text-vault-text-primary">Today&apos;s focus</p>
+                <p className="text-xs text-vault-text-secondary">
+                  {dashboard.overdueTasks.length > 0 ? (
+                    <span className="text-red-400">{dashboard.overdueTasks.length} overdue</span>
+                  ) : (
+                    <span>{dashboard.upcomingTasks.length} upcoming</span>
+                  )}
+                  {' · '}
+                  {dashboard.pendingDecisions.length} pending decision{dashboard.pendingDecisions.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+            </div>
+            <svg className="w-4 h-4 text-vault-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
+        )}
 
         {/* Search input */}
         <div className="relative mb-3">

@@ -91,6 +91,19 @@ func (s *Server) AuthToken() string {
 	return s.authToken
 }
 
+// PrintStartupBanner prints a clean, readable startup banner to stdout.
+func (s *Server) PrintStartupBanner(addr string) {
+	fmt.Println()
+	fmt.Println("AgentVault server is running")
+	fmt.Printf("  URL:        http://%s\n", addr)
+	fmt.Printf("  Vault:      %s\n", s.vaultPath)
+	fmt.Printf("  Auth token: %s\n", s.authToken)
+	fmt.Println()
+	fmt.Println("Paste this token into your web app or browser extension when prompted.")
+	fmt.Println("Press Ctrl+C to stop.")
+	fmt.Println()
+}
+
 // getAIProvider returns a cached AI provider, loading it on first use.
 func (s *Server) getAIProvider() (ai.AIProvider, error) {
 	s.aiProviderMu.Lock()
@@ -141,7 +154,12 @@ func (s *Server) RegisterRoutes() {
 	// Search
 	s.mux.HandleFunc("GET /search", s.handleSearch)
 
+	// Actionable dashboard & tasks
+	s.mux.HandleFunc("GET /tasks", s.handleGetTasks)
+	s.mux.HandleFunc("GET /dashboard", s.handleGetDashboard)
+
 	// Notes CRUD
+	s.mux.HandleFunc("GET /notes/{id}/links", s.handleGetNoteLinks)
 	s.mux.HandleFunc("GET /notes/", s.handleNoteByPath) // handles /notes/{id}
 	s.mux.HandleFunc("POST /notes", s.handleCreateNote)
 

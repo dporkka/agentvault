@@ -34,7 +34,7 @@ func setupTestVault(t *testing.T) (string, *db.DB) {
 	}
 
 	// Create standard folders
-	folders := []string{"00-inbox", "10-notes", "20-projects"}
+	folders := []string{"00-inbox", "10-notes", "20-projects", "30-decisions", "50-actions"}
 	for _, f := range folders {
 		if err := os.MkdirAll(filepath.Join(tmpDir, f), 0755); err != nil {
 			t.Fatalf("failed to create folder %s: %v", f, err)
@@ -272,6 +272,62 @@ func TestNoteByIDEndpoint(t *testing.T) {
 	}
 	if body["content"] == "" {
 		t.Error("expected non-empty content field")
+	}
+}
+
+func TestNoteLinksEndpoint(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	// Seed a second note that links to the test note.
+	linkedContent := `---
+id: note_linked
+type: note
+title: Linked Note
+---
+
+See [[Test Note]] for context.
+`
+	if err := os.WriteFile(filepath.Join(vaultPath, "10-notes", "linked.md"), []byte(linkedContent), 0644); err != nil {
+		t.Fatalf("failed to write linked note: %v", err)
+	}
+	idx := indexer.New(database, vaultPath)
+	if _, err := idx.Index(indexer.IndexOptions{}); err != nil {
+		t.Fatalf("failed to reindex: %v", err)
+	}
+
+	ts := newTestServer(t, vaultPath, database)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/notes/note_2024_01_15_123/links")
+	if err != nil {
+		t.Fatalf("failed to get note links: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	backlinks, ok := body["backlinks"].([]interface{})
+	if !ok {
+		t.Fatalf("expected backlinks array, got %T", body["backlinks"])
+	}
+	if len(backlinks) != 1 {
+		t.Errorf("expected 1 backlink, got %d", len(backlinks))
+	}
+
+	outgoing, ok := body["outgoing"].([]interface{})
+	if !ok {
+		t.Fatalf("expected outgoing array, got %T", body["outgoing"])
+	}
+	if len(outgoing) != 0 {
+		t.Errorf("expected 0 outgoing links, got %d", len(outgoing))
 	}
 }
 
@@ -875,5 +931,127 @@ func TestAuthVerifyEndpoint(t *testing.T) {
 	}
 	if body["tokenValid"] != false {
 		t.Errorf("expected tokenValid=false with wrong token, got %v", body["tokenValid"])
+	}
+}
+
+func TestDashboardEndpoint(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	// Seed an overdue open task, a future open task, and a pending decision.
+	taskOverdue := `---
+id: task_overdue
+type: task
+title: Overdue Task
+status: open
+priority: high
+due_date: 2020-01-01
+created: 2024-01-01T00:00:00Z
+updated: 2024-01-01T00:00:00Z
+---
+
+Do this yesterday.
+`
+	taskFuture := `---
+id: task_future
+type: task
+title: Future Task
+status: open
+priority: medium
+due_date: 2099-12-31
+created: 2024-01-01T00:00:00Z
+updated: 2024-01-01T00:00:00Z
+---
+
+Do this later.
+`
+	decisionPending := `---
+id: decision_pending
+type: decision
+title: Pending Decision
+status: proposed
+created: 2024-01-01T00:00:00Z
+updated: 2024-01-01T00:00:00Z
+---
+
+Should we do it?
+`
+
+	if err := os.WriteFile(filepath.Join(vaultPath, "50-actions", "overdue.md"), []byte(taskOverdue), 0644); err != nil {
+		t.Fatalf("failed to write overdue task: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(vaultPath, "50-actions", "future.md"), []byte(taskFuture), 0644); err != nil {
+		t.Fatalf("failed to write future task: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(vaultPath, "30-decisions", "pending.md"), []byte(decisionPending), 0644); err != nil {
+		t.Fatalf("failed to write pending decision: %v", err)
+	}
+
+	idx := indexer.New(database, vaultPath)
+	if _, err := idx.Index(indexer.IndexOptions{}); err != nil {
+		t.Fatalf("failed to index: %v", err)
+	}
+
+	ts := newTestServer(t, vaultPath, database)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/dashboard")
+	if err != nil {
+		t.Fatalf("failed to get dashboard: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode dashboard: %v", err)
+	}
+
+	overdue, ok := body["overdueTasks"].([]interface{})
+	if !ok {
+		t.Fatalf("expected overdueTasks array, got %T", body["overdueTasks"])
+	}
+	foundOverdue := false
+	for _, item := range overdue {
+		task, _ := item.(map[string]interface{})
+		if task["id"] == "task_overdue" {
+			foundOverdue = true
+		}
+	}
+	if !foundOverdue {
+		t.Errorf("expected overdue task in dashboard, got: %v", overdue)
+	}
+
+	upcoming, ok := body["upcomingTasks"].([]interface{})
+	if !ok {
+		t.Fatalf("expected upcomingTasks array, got %T", body["upcomingTasks"])
+	}
+	foundUpcoming := false
+	for _, item := range upcoming {
+		task, _ := item.(map[string]interface{})
+		if task["id"] == "task_future" {
+			foundUpcoming = true
+		}
+	}
+	if !foundUpcoming {
+		t.Errorf("expected upcoming task in dashboard, got: %v", upcoming)
+	}
+
+	pending, ok := body["pendingDecisions"].([]interface{})
+	if !ok {
+		t.Fatalf("expected pendingDecisions array, got %T", body["pendingDecisions"])
+	}
+	foundPending := false
+	for _, item := range pending {
+		d, _ := item.(map[string]interface{})
+		if d["id"] == "decision_pending" {
+			foundPending = true
+		}
+	}
+	if !foundPending {
+		t.Errorf("expected pending decision in dashboard, got: %v", pending)
 	}
 }

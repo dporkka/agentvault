@@ -1,11 +1,44 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import type { NoteDetail } from '@agentvault/contract';
+import type { NoteDetail, NoteLink } from '@agentvault/contract';
+import { api } from '@/api/client';
 
 interface NoteViewerProps {
   note: NoteDetail;
 }
+
+interface LinkSectionProps {
+  title: string;
+  links: NoteLink[];
+  emptyText: string;
+  onNavigate: (id: string) => void;
+}
+
+const LinkSection: React.FC<LinkSectionProps> = ({ title, links, emptyText, onNavigate }) => (
+  <div className="mb-5">
+    <h3 className="text-xs font-semibold uppercase tracking-wider text-vault-text-muted mb-2">
+      {title}
+    </h3>
+    {links.length === 0 ? (
+      <p className="text-sm text-vault-text-muted italic">{emptyText}</p>
+    ) : (
+      <ul className="space-y-1">
+        {links.map((link) => (
+          <li key={link.id}>
+            <button
+              onClick={() => onNavigate(link.id)}
+              className="w-full text-left text-sm text-vault-text-secondary hover:text-vault-accent truncate transition-colors"
+              title={link.title}
+            >
+              {link.title}
+            </button>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+);
 
 const typeBadgeClass = (type: string): string => {
   switch (type) {
@@ -20,7 +53,31 @@ const typeBadgeClass = (type: string): string => {
 
 const NoteViewer: React.FC<NoteViewerProps> = ({ note }) => {
   const [showRaw, setShowRaw] = useState(false);
+  const [links, setLinks] = useState<{ backlinks: NoteLink[]; outgoing: NoteLink[] } | null>(null);
+  const [linksLoading, setLinksLoading] = useState(true);
+  const [linksError, setLinksError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    setLinksLoading(true);
+    setLinksError(null);
+    api.getNoteLinks(note.id)
+      .then((res) => {
+        if (!cancelled) setLinks(res);
+      })
+      .catch((err) => {
+        if (!cancelled) setLinksError(err instanceof Error ? err.message : 'Failed to load links');
+      })
+      .finally(() => {
+        if (!cancelled) setLinksLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [note.id]);
+
+  const handleNavigate = (id: string) => {
+    navigate(`/note/${encodeURIComponent(id)}`);
+  };
 
   return (
     <div className="h-full flex flex-col animate-fade-in">
@@ -69,17 +126,47 @@ const NoteViewer: React.FC<NoteViewerProps> = ({ note }) => {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        {showRaw ? (
-          <pre className="text-sm text-vault-text-primary whitespace-pre-wrap font-mono leading-relaxed bg-vault-bg-tertiary rounded-lg p-4 border border-vault-border overflow-x-auto">
-            {note.content}
-          </pre>
-        ) : (
-          <div className="prose prose-invert prose-vault max-w-none">
-            <ReactMarkdown>{note.content}</ReactMarkdown>
-          </div>
-        )}
+      {/* Content + links */}
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0">
+        <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0">
+          {showRaw ? (
+            <pre className="text-sm text-vault-text-primary whitespace-pre-wrap font-mono leading-relaxed bg-vault-bg-tertiary rounded-lg p-4 border border-vault-border overflow-x-auto">
+              {note.content}
+            </pre>
+          ) : (
+            <div className="prose prose-invert prose-vault max-w-none">
+              <ReactMarkdown>{note.content}</ReactMarkdown>
+            </div>
+          )}
+        </div>
+
+        {/* Links panel */}
+        <aside className="w-full lg:w-72 flex-shrink-0 border-t lg:border-t-0 lg:border-l border-vault-border bg-vault-bg-secondary/50 px-4 py-4 overflow-y-auto">
+          <h2 className="text-sm font-semibold text-vault-text-primary mb-3">Links</h2>
+          {linksLoading ? (
+            <div className="flex items-center gap-2 text-sm text-vault-text-muted">
+              <div className="w-4 h-4 border-2 border-vault-accent border-t-transparent rounded-full animate-spin" />
+              Loading links…
+            </div>
+          ) : linksError ? (
+            <p className="text-sm text-vault-error">{linksError}</p>
+          ) : links ? (
+            <>
+              <LinkSection
+                title="Linked mentions"
+                links={links.backlinks}
+                emptyText="No notes link here yet."
+                onNavigate={handleNavigate}
+              />
+              <LinkSection
+                title="Outgoing links"
+                links={links.outgoing}
+                emptyText="This note has no outgoing links."
+                onNavigate={handleNavigate}
+              />
+            </>
+          ) : null}
+        </aside>
       </div>
     </div>
   );

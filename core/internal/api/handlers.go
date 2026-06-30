@@ -206,6 +206,40 @@ func (s *Server) handleNoteByPath(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ── Note Links ──────────────────────────────────────────────────────
+
+func (s *Server) handleGetNoteLinks(w http.ResponseWriter, r *http.Request) {
+	id := extractID(r.URL.Path)
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"error":  "missing note id",
+			"detail": "URL path must be /notes/{id}/links",
+		})
+		return
+	}
+
+	backlinks, outgoing, err := s.searcher.NoteLinks(id)
+	if err != nil {
+		if err == sql.ErrNoRows || strings.Contains(err.Error(), "not found") {
+			writeJSON(w, http.StatusNotFound, map[string]interface{}{
+				"error":  "not found",
+				"detail": err.Error(),
+			})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "lookup failed",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, contract.NoteLinksResponse{
+		Backlinks: backlinks,
+		Outgoing:  outgoing,
+	})
+}
+
 // ── Create Note ─────────────────────────────────────────────────────
 
 func (s *Server) handleCreateNote(w http.ResponseWriter, r *http.Request) {
@@ -444,6 +478,120 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, answer)
+}
+
+// ── Tasks ───────────────────────────────────────────────────────────
+
+func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
+	q := search.TaskQuery{
+		Status:    r.URL.Query().Get("status"),
+		DueBefore: r.URL.Query().Get("due_before"),
+		DueAfter:  r.URL.Query().Get("due_after"),
+	}
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if n, err := strconv.Atoi(limitStr); err == nil && n > 0 {
+			q.Limit = n
+		}
+	}
+
+	results, err := s.searcher.Tasks(q)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "tasks query failed",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, results)
+}
+
+// ── Dashboard ───────────────────────────────────────────────────────
+
+func (s *Server) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
+	today := time.Now().UTC().Format("2006-01-02")
+
+	overdue, err := s.searcher.Tasks(search.TaskQuery{
+		Status:    "open",
+		DueBefore: today,
+		Limit:     10,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "dashboard overdue query failed",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	upcoming, err := s.searcher.Tasks(search.TaskQuery{
+		Status:   "open",
+		DueAfter: today,
+		Limit:    10,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "dashboard upcoming query failed",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	pendingDecisions, err := s.searcher.Decisions("proposed", 10)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "dashboard decisions query failed",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	recentCaptures, err := s.loadRecentCaptures(5)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "dashboard captures query failed",
+			"detail": err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, contract.DashboardResponse{
+		OverdueTasks:     overdue,
+		UpcomingTasks:    upcoming,
+		PendingDecisions: pendingDecisions,
+		RecentCaptures:   recentCaptures,
+	})
+}
+
+func (s *Server) loadRecentCaptures(limit int) ([]contract.CaptureSummary, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+
+	rows, err := s.db.Query(`
+		SELECT id, capture_type, title, created_at
+		FROM captures
+		ORDER BY created_at DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results := []contract.CaptureSummary{}
+	for rows.Next() {
+		var c contract.CaptureSummary
+		var title sql.NullString
+		if err := rows.Scan(&c.ID, &c.CaptureType, &title, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		if title.Valid {
+			c.Title = title.String
+		}
+		results = append(results, c)
+	}
+	return results, rows.Err()
 }
 
 // ── Projects ────────────────────────────────────────────────────────

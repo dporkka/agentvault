@@ -99,6 +99,22 @@ export function Popup() {
     }
   };
 
+  const handleAskAboutPage = async () => {
+    try {
+      await chrome.storage.session.set({
+        agentvault_ask_context: {
+          url: pageData.url,
+          title: pageData.title,
+          text: pageData.text || '',
+          createdAt: new Date().toISOString(),
+        },
+      });
+    } catch {
+      // session storage may be unavailable; still open the ask route.
+    }
+    chrome.tabs.create({ url: `${serverUrl.replace(/\/$/, '')}/ask` });
+  };
+
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
@@ -201,7 +217,34 @@ export function Popup() {
         {tabButton('recent', 'Recent', '\u23F0')}
       </div>
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {activeTab === 'clip' && <ClipForm initialTitle={pageData.title} initialUrl={pageData.url} initialSelectedText={pageData.selectedText} />}
+        {activeTab === 'clip' && (
+          <div>
+            <div style={{ padding: '10px 14px 0', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={handleAskAboutPage}
+                title="Ask about this page"
+                style={{
+                  padding: '4px 10px',
+                  background: 'transparent',
+                  border: '1px solid #4f7cff',
+                  borderRadius: '4px',
+                  color: '#4f7cff',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Ask about this page
+              </button>
+            </div>
+            <ClipForm
+              initialTitle={pageData.title}
+              initialUrl={pageData.url}
+              initialSelectedText={pageData.selectedText}
+              initialText={pageData.text}
+            />
+          </div>
+        )}
         {activeTab === 'search' && <SearchPanel />}
         {activeTab === 'ask' && <AskPanel />}
         {activeTab === 'recent' && <RecentPanel />}

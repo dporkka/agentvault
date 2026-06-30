@@ -107,3 +107,68 @@ type GitModifiedFile struct {
 	Status string `json:"status"`
 	Staged bool   `json:"staged"`
 }
+
+// NoteLink is a single backlink or outgoing link entry for a note.
+type NoteLink struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Path  string `json:"path"`
+}
+
+// NoteLinksResponse is the body returned by GET /notes/{id}/links.
+type NoteLinksResponse struct {
+	Backlinks []NoteLink `json:"backlinks"`
+	Outgoing  []NoteLink `json:"outgoing"`
+}
+
+// TaskResult is the shape of a single task returned by /tasks and /dashboard.
+type TaskResult struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Path     string `json:"path"`
+	Status   string `json:"status"`
+	Priority string `json:"priority"`
+	DueDate  string `json:"dueDate"`
+	Project  string `json:"project"`
+}
+
+// DecisionResult is the shape of a single decision returned by /decisions
+// (future) and /dashboard.
+type DecisionResult struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Path   string `json:"path"`
+	Status string `json:"status"`
+}
+
+// MeetingResult is the shape of a single meeting returned by /meetings (future).
+type MeetingResult struct {
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	Path      string   `json:"path"`
+	Attendees []string `json:"attendees"`
+}
+
+// CaptureSummary is a lightweight entry for recent captures on the dashboard.
+type CaptureSummary struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	CaptureType string `json:"captureType"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+// DashboardResponse is the body returned by GET /dashboard.
+type DashboardResponse struct {
+	OverdueTasks     []TaskResult     `json:"overdueTasks"`
+	UpcomingTasks    []TaskResult     `json:"upcomingTasks"`
+	PendingDecisions []DecisionResult `json:"pendingDecisions"`
+	RecentCaptures   []CaptureSummary `json:"recentCaptures"`
+}
+
+// TaskQuery holds filter parameters for the Tasks search method.
+type TaskQuery struct {
+	Status   string
+	DueBefore string
+	DueAfter  string
+	Limit     int
+}

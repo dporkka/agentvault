@@ -13,11 +13,28 @@ AgentVault is an early application with a working Go core, CLI, local HTTP API, 
 
 Notable current gaps:
 
-- Packaging, release artifacts, and installation paths are not yet defined.
-- Desktop bundle size still triggers one Vite chunk-size warning on the `codemirror-vendor` chunk.
-- Capture-sync state visibility and desktop auth status are not yet surfaced in the Wails app.
+- Desktop bundle size still triggers one Vite chunk-size warning on the `codemirror-vendor` chunk; the warning is intentionally budgeted in `apps/desktop-wails/frontend/vite.config.ts`.
+- Desktop app does not yet mirror the browser extension's capture-sync status.
 
 Go verification runs locally with the toolchain on `PATH`; GitHub Actions is configured to run Go 1.23 tests, vet, and builds.
+
+## Install
+
+Install the AgentVault CLI with the install script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/agentvault/agentvault/main/scripts/install.sh | sh
+```
+
+The script downloads the latest release for your platform from GitHub and installs `agentvault` into `$HOME/.local/bin`. Make sure that directory is on your `PATH`.
+
+You can also download a pre-built binary manually from the [GitHub Releases](https://github.com/agentvault/agentvault/releases) page. Release archives follow the pattern:
+
+```text
+https://github.com/agentvault/agentvault/releases/download/v0.1.0/agentvault_v0.1.0_linux_amd64.tar.gz
+```
+
+Linux and macOS archives are `.tar.gz`; Windows archives are `.zip`. Extract the archive and place the `agentvault` binary (or `agentvault.exe` on Windows) somewhere on your `PATH`.
 
 ## Features
 
@@ -37,30 +54,31 @@ Go verification runs locally with the toolchain on `PATH`; GitHub Actions is con
 ## Quick Start
 
 ```bash
-# Build the CLI
-cd core
-go build -o ../bin/agentvault ./cmd/agentvault
-
 # Initialize a vault
-../bin/agentvault init ../my-vault
-cd ../my-vault
+agentvault init ./my-vault
+cd ./my-vault
 
 # Optional starter templates
-../bin/agentvault init ../founder-vault --template founder
-../bin/agentvault init ../developer-vault --template developer
+agentvault init ./founder-vault --template founder
+agentvault init ./developer-vault --template developer
 
 # Create notes
-../bin/agentvault new note --title "My first note"
-../bin/agentvault new decision --project platform --title "Use Postgres"
-../bin/agentvault new task --project platform --title "Build API"
+agentvault new note --title "My first note"
+agentvault new decision --project platform --title "Use Postgres"
+agentvault new task --project platform --title "Build API"
 
 # Index and search
-../bin/agentvault index
-../bin/agentvault search "Postgres"
+agentvault index
+agentvault search "Postgres"
 
 # Validate
-../bin/agentvault doctor
+agentvault doctor
+
+# Start the web app
+agentvault serve
 ```
+
+Running `agentvault serve` starts the local API at `http://127.0.0.1:47321` and opens it in your browser automatically. Use `agentvault serve --no-open` to skip opening the browser.
 
 ## CLI Reference
 
@@ -239,13 +257,19 @@ agentvault/
 
 ## Development
 
+### Build from source
+
 ```bash
 # Go core
 cd core
 go test ./...
 go vet ./...
 go build -o ../bin/agentvault ./cmd/agentvault
+```
 
+### App builds
+
+```bash
 # Local web app
 cd apps/web-local
 npm ci

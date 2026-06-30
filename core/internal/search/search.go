@@ -3,6 +3,7 @@ package search
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -273,6 +274,19 @@ func (s *Searcher) Recent(limit int) ([]Result, error) {
 	return s.scanResults(rows)
 }
 
+// NoteLinks returns the backlinks and outgoing links for a note.
+func (s *Searcher) NoteLinks(noteID string) (backlinks []contract.NoteLink, outgoing []contract.NoteLink, err error) {
+	backlinks, err = s.db.GetBacklinks(noteID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load backlinks: %w", err)
+	}
+	outgoing, err = s.db.GetOutgoingLinks(noteID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load outgoing links: %w", err)
+	}
+	return backlinks, outgoing, nil
+}
+
 // Stale returns notes not updated in the last N days.
 func (s *Searcher) Stale(days, limit int) ([]Result, error) {
 	if days <= 0 {
@@ -404,4 +418,242 @@ func (s *Searcher) scanSingle(row *sql.Row) (*Result, error) {
 		r.Snippet = body.String
 	}
 	return &r, nil
+}
+
+// TaskResult is an alias of contract.TaskResult so callers can use the
+// search package directly without importing contract.
+type TaskResult = contract.TaskResult
+
+// DecisionResult is an alias of contract.DecisionResult.
+type DecisionResult = contract.DecisionResult
+
+// MeetingResult is an alias of contract.MeetingResult.
+type MeetingResult = contract.MeetingResult
+
+// TaskQuery is an alias of contract.TaskQuery.
+type TaskQuery = contract.TaskQuery
+
+// Tasks returns actionable tasks filtered by status and due date.
+func (s *Searcher) Tasks(q TaskQuery) ([]TaskResult, error) {
+	if q.Limit <= 0 {
+		q.Limit = 50
+	}
+
+	args := []interface{}{"task"}
+	query := `
+		SELECT
+			notes.id,
+			notes.title,
+			files.path,
+			notes.status,
+			coalesce(json_extract(frontmatter_json, '$.priority'), ''),
+			coalesce(json_extract(frontmatter_json, '$.due_date'), ''),
+			notes.project
+		FROM notes
+		JOIN files ON files.id = notes.file_id
+		WHERE notes.type = ?
+	`
+
+	if q.Status != "" {
+		query += " AND notes.status = ?"
+		args = append(args, q.Status)
+	}
+	if q.DueBefore != "" {
+		query += " AND json_extract(frontmatter_json, '$.due_date') != '' AND json_extract(frontmatter_json, '$.due_date') < ?"
+		args = append(args, q.DueBefore)
+	}
+	if q.DueAfter != "" {
+		query += " AND json_extract(frontmatter_json, '$.due_date') != '' AND json_extract(frontmatter_json, '$.due_date') >= ?"
+		args = append(args, q.DueAfter)
+	}
+
+	query += `
+		ORDER BY
+			case when json_extract(frontmatter_json, '$.due_date') = '' then 1 else 0 end,
+			json_extract(frontmatter_json, '$.due_date') ASC,
+			case json_extract(frontmatter_json, '$.priority')
+				when 'high' then 0
+				when 'medium' then 1
+				when 'low' then 2
+				else 3
+			end
+		LIMIT ?
+	`
+	args = append(args, q.Limit)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("tasks query failed: %w", err)
+	}
+	defer rows.Close()
+
+	results := []TaskResult{}
+	for rows.Next() {
+		var r TaskResult
+		if err := rows.Scan(&r.ID, &r.Title, &r.Path, &r.Status, &r.Priority, &r.DueDate, &r.Project); err != nil {
+			return nil, fmt.Errorf("tasks scan failed: %w", err)
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
+// Decisions returns decisions, optionally filtered by status.
+func (s *Searcher) Decisions(status string, limit int) ([]DecisionResult, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	args := []interface{}{"decision"}
+	query := `
+		SELECT
+			notes.id,
+			notes.title,
+			files.path,
+			notes.status
+		FROM notes
+		JOIN files ON files.id = notes.file_id
+		WHERE notes.type = ?
+	`
+	if status != "" {
+		query += " AND notes.status = ?"
+		args = append(args, status)
+	}
+	query += " ORDER BY notes.updated_at DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("decisions query failed: %w", err)
+	}
+	defer rows.Close()
+
+	results := []DecisionResult{}
+	for rows.Next() {
+		var r DecisionResult
+		if err := rows.Scan(&r.ID, &r.Title, &r.Path, &r.Status); err != nil {
+			return nil, fmt.Errorf("decisions scan failed: %w", err)
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
+// Meetings returns meetings with attendees extracted from frontmatter_json.
+func (s *Searcher) Meetings(limit int) ([]MeetingResult, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	rows, err := s.db.Query(`
+		SELECT
+			notes.id,
+			notes.title,
+			files.path,
+			coalesce(json_extract(frontmatter_json, '$.attendees'), '[]')
+		FROM notes
+		JOIN files ON files.id = notes.file_id
+		WHERE notes.type = ?
+		ORDER BY notes.updated_at DESC
+		LIMIT ?
+	`, "meeting", limit)
+	if err != nil {
+		return nil, fmt.Errorf("meetings query failed: %w", err)
+	}
+	defer rows.Close()
+
+	results := []MeetingResult{}
+	for rows.Next() {
+		var r MeetingResult
+		var attendeesJSON string
+		if err := rows.Scan(&r.ID, &r.Title, &r.Path, &attendeesJSON); err != nil {
+			return nil, fmt.Errorf("meetings scan failed: %w", err)
+		}
+		if attendeesJSON != "" {
+			_ = json.Unmarshal([]byte(attendeesJSON), &r.Attendees)
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
+// ChunkContext represents one chunk of a note, with position relative to a
+// matched chunk, for expanding RAG source context.
+type ChunkContext struct {
+	Text     string
+	Index    int
+	IsCenter bool
+}
+
+// LoadAdjacentChunks returns the chunks surrounding chunkIndex for a note.
+// The window argument controls how many chunks before and after the center
+// are included. If the note has one or fewer chunks, only the center chunk is
+// returned and no extra lookup is performed.
+func (s *Searcher) LoadAdjacentChunks(noteID string, chunkIndex int, window int) ([]ChunkContext, error) {
+	if window < 0 {
+		window = 0
+	}
+
+	rows, err := s.db.Query(`
+		SELECT chunk_index, text
+		FROM chunks
+		WHERE note_id = ?
+		ORDER BY chunk_index
+	`, noteID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load chunks: %w", err)
+	}
+	defer rows.Close()
+
+	var chunks []ChunkContext
+	for rows.Next() {
+		var idx int
+		var text string
+		if err := rows.Scan(&idx, &text); err != nil {
+			return nil, fmt.Errorf("failed to scan chunk: %w", err)
+		}
+		chunks = append(chunks, ChunkContext{Text: text, Index: idx})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(chunks) == 0 {
+		return nil, nil
+	}
+	if len(chunks) <= 1 {
+		chunks[0].IsCenter = true
+		return chunks, nil
+	}
+
+	var out []ChunkContext
+	centerFound := false
+	for _, c := range chunks {
+		if c.Index == chunkIndex {
+			centerFound = true
+		}
+		if c.Index >= chunkIndex-window && c.Index <= chunkIndex+window {
+			c.IsCenter = c.Index == chunkIndex
+			out = append(out, c)
+		}
+	}
+	if !centerFound {
+		return nil, nil
+	}
+	return out, nil
+}
+
+// FindChunkIndex returns the chunk_index for a note whose text exactly matches
+// the supplied snippet. It is used to locate the chunk a search result matched
+// so adjacent chunks can be loaded for context expansion.
+func (s *Searcher) FindChunkIndex(noteID, text string) (int, bool) {
+	row := s.db.QueryRow(`
+		SELECT chunk_index FROM chunks
+		WHERE note_id = ? AND text = ?
+	`, noteID, text)
+	var idx int
+	if err := row.Scan(&idx); err != nil {
+		return 0, false
+	}
+	return idx, true
 }

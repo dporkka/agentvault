@@ -351,3 +351,75 @@ func TestSearchResultFields(t *testing.T) {
 		}
 	}
 }
+
+func TestTasks(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Insert task notes with frontmatter_json
+	tasks := []struct {
+		id, fileID, title, status, project, dueDate, priority string
+	}{
+		{"task_001", "note_001", "Overdue Task", "open", "webapp", "2024-01-01", "high"},
+		{"task_002", "note_002", "Upcoming Task", "open", "webapp", "2099-12-31", "medium"},
+		{"task_003", "note_003", "Done Task", "done", "webapp", "2024-01-01", "low"},
+	}
+	for _, task := range tasks {
+		fm := `{"due_date":"` + task.dueDate + `","priority":"` + task.priority + `"}`
+		_, err := database.Exec(
+			`INSERT INTO notes (id, file_id, title, type, status, project, updated_at, frontmatter_json, body) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)`,
+			task.id, task.fileID, task.title, "task", task.status, task.project, fm, "task body",
+		)
+		if err != nil {
+			t.Fatalf("failed to insert task %s: %v", task.id, err)
+		}
+	}
+
+	s := New(database)
+
+	t.Run("status filter", func(t *testing.T) {
+		results, err := s.Tasks(TaskQuery{Status: "open"})
+		if err != nil {
+			t.Fatalf("Tasks failed: %v", err)
+		}
+		if len(results) != 2 {
+			t.Errorf("expected 2 open tasks, got %d", len(results))
+		}
+		for _, r := range results {
+			if r.Status != "open" {
+				t.Errorf("expected status=open, got %s", r.Status)
+			}
+		}
+	})
+
+	t.Run("due before filter", func(t *testing.T) {
+		results, err := s.Tasks(TaskQuery{Status: "open", DueBefore: "2024-01-02"})
+		if err != nil {
+			t.Fatalf("Tasks due_before failed: %v", err)
+		}
+		if len(results) != 1 {
+			t.Errorf("expected 1 overdue open task, got %d", len(results))
+		}
+		if results[0].ID != "task_001" {
+			t.Errorf("expected task_001, got %s", results[0].ID)
+		}
+	})
+
+	t.Run("ordering", func(t *testing.T) {
+		results, err := s.Tasks(TaskQuery{Limit: 10})
+		if err != nil {
+			t.Fatalf("Tasks ordering failed: %v", err)
+		}
+		if len(results) != 3 {
+			t.Errorf("expected 3 tasks, got %d", len(results))
+		}
+		// Earliest due date first; empty dates last. task_001 (2024-01-01),
+		// task_003 (2024-01-01, low), task_002 (2099-12-31).
+		if results[0].ID != "task_001" {
+			t.Errorf("expected first task task_001, got %s", results[0].ID)
+		}
+		if results[2].ID != "task_002" {
+			t.Errorf("expected last task task_002 (empty due date), got %s", results[2].ID)
+		}
+	})
+}
