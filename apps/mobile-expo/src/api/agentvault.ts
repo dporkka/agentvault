@@ -7,7 +7,9 @@ import {
   createClient,
   type ApiClient,
   type AuthVerifyResponse,
+  type DashboardResponse,
   type NoteDetail,
+  type NoteLinksResponse,
   type SearchParams,
   type SearchResult,
   DEFAULT_BASE_URL,
@@ -36,7 +38,7 @@ function tokenStore() {
   };
 }
 
-const client: ApiClient = createClient({
+export const client: ApiClient = createClient({
   baseUrl: currentBaseUrl,
   tokenStore: tokenStore(),
 });
@@ -93,6 +95,7 @@ export async function sendCapture(
     type: payload.type,
     title: payload.title,
     text: payload.text,
+    url: payload.url,
     project: payload.project,
     tags: payload.tags,
   });
@@ -127,6 +130,18 @@ export async function getRecentNotes(limit?: number, url?: string): Promise<Sear
   if (url) client.setBaseUrl(url);
   else await resolveBaseUrl();
   return client.getRecent({ limit });
+}
+
+export async function getDashboard(url?: string): Promise<DashboardResponse> {
+  if (url) client.setBaseUrl(url);
+  else await resolveBaseUrl();
+  return client.getDashboard();
+}
+
+export async function getNoteLinks(id: string, url?: string): Promise<NoteLinksResponse> {
+  if (url) client.setBaseUrl(url);
+  else await resolveBaseUrl();
+  return client.getNoteLinks(id);
 }
 
 export async function verifyToken(url?: string): Promise<AuthVerifyResponse | null> {

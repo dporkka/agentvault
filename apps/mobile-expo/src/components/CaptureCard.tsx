@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, radii, typography } from '../theme';
 import type { Capture } from '../types';
@@ -14,6 +14,7 @@ const TYPE_LABELS: Record<string, string> = {
   text: 'Aa',
   voice: 'Mic',
   photo: 'Cam',
+  webpage: 'Link',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -65,6 +66,20 @@ export default function CaptureCard({ capture, onPress, onDelete }: CaptureCardP
         <Text style={styles.preview} numberOfLines={2}>
           {capture.text}
         </Text>
+      ) : null}
+
+      {capture.url ? (
+        <TouchableOpacity
+          style={styles.urlRow}
+          onPress={() => Linking.openURL(capture.url!)}
+          accessibilityLabel="Open link"
+          accessibilityRole="link"
+        >
+          <Ionicons name="link-outline" size={14} color={colors.accent} />
+          <Text style={styles.urlText} numberOfLines={1}>
+            {capture.url}
+          </Text>
+        </TouchableOpacity>
       ) : null}
 
       <View style={styles.footer}>
@@ -133,6 +148,17 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     lineHeight: 18,
     marginBottom: spacing.sm,
+  },
+  urlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: 6,
+  },
+  urlText: {
+    flex: 1,
+    color: colors.accent,
+    fontSize: typography.sizes.md,
   },
   footer: {
     flexDirection: 'row',

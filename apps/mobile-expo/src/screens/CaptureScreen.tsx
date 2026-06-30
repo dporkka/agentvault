@@ -17,10 +17,19 @@ import ProjectPicker from '../components/ProjectPicker';
 import TagPicker from '../components/TagPicker';
 import { colors, spacing, radii, typography } from '../theme';
 
+type CaptureType = 'text' | 'webpage';
+
+const CAPTURE_TYPES: { key: CaptureType; label: string }[] = [
+  { key: 'text', label: 'Text' },
+  { key: 'webpage', label: 'Webpage' },
+];
+
 export default function CaptureScreen() {
   const { settings } = useSettings();
+  const [captureType, setCaptureType] = useState<CaptureType>('text');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [url, setUrl] = useState('');
   const [project, setProject] = useState(settings.defaultProject || '');
   const [tags, setTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -34,8 +43,10 @@ export default function CaptureScreen() {
   }, [settings.defaultProject]);
 
   const reset = () => {
+    setCaptureType('text');
     setTitle('');
     setBody('');
+    setUrl('');
     setProject(settings.defaultProject || '');
     setTags([]);
     setMessage('');
@@ -47,17 +58,41 @@ export default function CaptureScreen() {
     if (!error) setTimeout(() => setMessage(''), 2500);
   };
 
-  const buildPayload = () => ({
-    type: 'text' as const,
-    title: title.trim() || body.trim().slice(0, 50) || 'Untitled',
-    text: body.trim(),
-    project: project || undefined,
-    tags,
-  });
+  const buildPayload = () => {
+    const trimmedTitle = title.trim();
+    const trimmedBody = body.trim();
+    const trimmedUrl = url.trim();
+    if (captureType === 'webpage') {
+      return {
+        type: 'webpage' as const,
+        title: trimmedTitle || trimmedUrl.slice(0, 50) || 'Untitled',
+        url: trimmedUrl,
+        project: project || undefined,
+        tags,
+      };
+    }
+    return {
+      type: 'text' as const,
+      title: trimmedTitle || trimmedBody.slice(0, 50) || 'Untitled',
+      text: trimmedBody,
+      project: project || undefined,
+      tags,
+    };
+  };
+
+  const isPayloadEmpty = () => {
+    if (captureType === 'webpage') {
+      return !title.trim() && !url.trim();
+    }
+    return !title.trim() && !body.trim();
+  };
 
   const handleSaveLocal = async () => {
-    if (!title.trim() && !body.trim()) {
-      showMessage('Enter a title or body', true);
+    if (isPayloadEmpty()) {
+      showMessage(
+        captureType === 'webpage' ? 'Enter a title or URL' : 'Enter a title or body',
+        true,
+      );
       return;
     }
     setLoading(true);
@@ -68,8 +103,11 @@ export default function CaptureScreen() {
   };
 
   const handleSendNow = async () => {
-    if (!title.trim() && !body.trim()) {
-      showMessage('Enter a title or body', true);
+    if (isPayloadEmpty()) {
+      showMessage(
+        captureType === 'webpage' ? 'Enter a title or URL' : 'Enter a title or body',
+        true,
+      );
       return;
     }
     setLoading(true);
@@ -104,6 +142,21 @@ export default function CaptureScreen() {
             </View>
           ) : null}
 
+          <View style={styles.typeToggle}>
+            {CAPTURE_TYPES.map(({ key, label }) => (
+              <TouchableOpacity
+                key={key}
+                style={[styles.typeBtn, captureType === key && styles.typeBtnActive]}
+                onPress={() => setCaptureType(key)}
+                accessibilityState={{ selected: captureType === key }}
+              >
+                <Text style={[styles.typeBtnText, captureType === key && styles.typeBtnTextActive]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           <Text style={styles.label}>Title</Text>
           <TextInput
             style={styles.input}
@@ -114,18 +167,38 @@ export default function CaptureScreen() {
             maxLength={200}
           />
 
-          <Text style={styles.label}>Body</Text>
-          <TextInput
-            style={[styles.input, styles.textarea]}
-            placeholder="Write your thoughts..."
-            placeholderTextColor={colors.textMuted}
-            value={body}
-            onChangeText={setBody}
-            multiline
-            textAlignVertical="top"
-            maxLength={5000}
-          />
-          <Text style={styles.charCount}>{body.length}/5000</Text>
+          {captureType === 'webpage' ? (
+            <>
+              <Text style={styles.label}>URL</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="https://..."
+                placeholderTextColor={colors.textMuted}
+                value={url}
+                onChangeText={setUrl}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                maxLength={2048}
+              />
+              <Text style={styles.charCount}>{url.length}/2048</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.label}>Body</Text>
+              <TextInput
+                style={[styles.input, styles.textarea]}
+                placeholder="Write your thoughts..."
+                placeholderTextColor={colors.textMuted}
+                value={body}
+                onChangeText={setBody}
+                multiline
+                textAlignVertical="top"
+                maxLength={5000}
+              />
+              <Text style={styles.charCount}>{body.length}/5000</Text>
+            </>
+          )}
 
           <ProjectPicker selected={project} onChange={setProject} />
 
@@ -176,6 +249,32 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.extrabold,
     marginBottom: spacing.lg,
+  },
+  typeToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radii.lg,
+    padding: 4,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  typeBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: radii.md,
+  },
+  typeBtnActive: {
+    backgroundColor: colors.accent,
+  },
+  typeBtnText: {
+    color: colors.textSecondary,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+  },
+  typeBtnTextActive: {
+    color: '#fff',
   },
   toast: {
     backgroundColor: colors.successMuted,

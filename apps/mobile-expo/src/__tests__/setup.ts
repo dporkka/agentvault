@@ -31,5 +31,8 @@ jest.mock('@agentvault/contract', () => ({
     getRecent: jest.fn(),
     getStale: jest.fn(),
     getGitStatus: jest.fn(),
+    getTasks: jest.fn(),
+    getDashboard: jest.fn(),
+    getNoteLinks: jest.fn(),
   })),
 }));

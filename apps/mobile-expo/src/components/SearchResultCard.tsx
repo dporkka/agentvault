@@ -8,15 +8,40 @@ interface SearchResultCardProps {
   onPress?: (r: SearchResult) => void;
 }
 
+function getPriorityColor(snippet: string): string | null {
+  const lower = snippet.toLowerCase();
+  if (lower.includes('p1') || lower.includes('urgent') || lower.includes('high')) {
+    return colors.error;
+  }
+  if (lower.includes('p2') || lower.includes('medium')) {
+    return colors.warning;
+  }
+  if (lower.includes('p3') || lower.includes('low')) {
+    return colors.success;
+  }
+  return null;
+}
+
 export default function SearchResultCard({ result, onPress }: SearchResultCardProps) {
+  const showStatus = result.type === 'task' || result.type === 'decision';
+  const priorityColor = getPriorityColor(result.snippet);
+
   return (
     <TouchableOpacity style={styles.card} onPress={() => onPress?.(result)} activeOpacity={0.7}>
       <View style={styles.header}>
         <Text style={styles.title} numberOfLines={1}>
           {result.title}
         </Text>
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeText}>{result.type}</Text>
+        <View style={styles.badges}>
+          {showStatus && (
+            <View style={styles.statusBadge}>
+              <Text style={styles.statusText}>{result.status}</Text>
+            </View>
+          )}
+          <View style={styles.typeBadge}>
+            <Text style={styles.typeText}>{result.type}</Text>
+          </View>
+          {priorityColor && <View style={[styles.priorityDot, { backgroundColor: priorityColor }]} />}
         </View>
       </View>
       <Text style={styles.snippet} numberOfLines={3}>
@@ -47,18 +72,41 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
   },
+  badges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
   typeBadge: {
     backgroundColor: colors.bgTertiary,
     borderRadius: radii.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
-    marginLeft: 10,
   },
   typeText: {
     color: colors.accent,
     fontSize: typography.sizes.xs,
     fontWeight: typography.weights.semibold,
     textTransform: 'uppercase',
+  },
+  statusBadge: {
+    backgroundColor: colors.bgTertiary,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    marginRight: spacing.sm,
+  },
+  statusText: {
+    color: colors.textSecondary,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    textTransform: 'uppercase',
+  },
+  priorityDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    marginLeft: spacing.sm,
   },
   snippet: {
     color: colors.textSecondary,

@@ -61,6 +61,7 @@ export async function syncCaptures(options: SyncOptions = {}): Promise<SyncResul
         type: cap.type,
         title: cap.title,
         text: cap.text,
+        url: cap.url,
         project: cap.project,
         tags: cap.tags,
       });

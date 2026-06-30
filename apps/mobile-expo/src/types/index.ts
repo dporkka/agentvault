@@ -8,9 +8,10 @@ export type CaptureSyncStatus = 'unsynced' | 'syncing' | 'synced' | 'failed';
 
 export interface Capture {
   id: string;
-  type: 'text' | 'voice' | 'photo';
+  type: 'text' | 'voice' | 'photo' | 'webpage';
   title: string;
   text?: string;
+  url?: string;
   project?: string;
   tags: string[];
   createdAt: string;

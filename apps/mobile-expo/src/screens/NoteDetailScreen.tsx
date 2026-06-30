@@ -8,8 +8,8 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { NoteDetail } from '@agentvault/contract';
-import { getNote } from '../api/agentvault';
+import type { NoteDetail, NoteLink, NoteLinksResponse } from '@agentvault/contract';
+import { getNote, getNoteLinks } from '../api/agentvault';
 import type { RootStackScreenProps } from '../navigation/types';
 import { colors, spacing, radii, typography } from '../theme';
 
@@ -21,6 +21,9 @@ export default function NoteDetailScreen({
   const [note, setNote] = useState<NoteDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [links, setLinks] = useState<NoteLinksResponse | null>(null);
+  const [linksLoading, setLinksLoading] = useState(false);
+  const [linksError, setLinksError] = useState('');
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -44,6 +47,50 @@ export default function NoteDetailScreen({
       mounted = false;
     };
   }, [id, navigation]);
+
+  useEffect(() => {
+    if (!note) return;
+    let mounted = true;
+    setLinksLoading(true);
+    setLinksError('');
+    getNoteLinks(note.id)
+      .then((data) => {
+        if (mounted) setLinks(data);
+      })
+      .catch((err) => {
+        if (mounted) {
+          setLinksError(err instanceof Error ? err.message : 'Could not load linked notes');
+        }
+      })
+      .finally(() => {
+        if (mounted) setLinksLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [note]);
+
+  const handleLinkPress = (link: NoteLink) => {
+    navigation.navigate('NoteDetail', { id: link.id, title: link.title });
+  };
+
+  const renderLinkItem = (link: NoteLink) => (
+    <TouchableOpacity
+      key={link.id}
+      style={styles.linkItem}
+      onPress={() => handleLinkPress(link)}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.linkTitle} numberOfLines={1}>
+        {link.title}
+      </Text>
+      <Text style={styles.linkPath} numberOfLines={1}>
+        {link.path}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const hasLinks = links && (links.backlinks.length > 0 || links.outgoing.length > 0);
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
@@ -96,6 +143,32 @@ export default function NoteDetailScreen({
           <View style={styles.divider} />
 
           <Text style={styles.body}>{note.content}</Text>
+
+          <View style={styles.linksSection}>
+            <Text style={styles.linksTitle}>Linked notes</Text>
+            {linksLoading ? (
+              <ActivityIndicator style={styles.linksLoader} color={colors.accent} size="small" />
+            ) : linksError ? (
+              <Text style={styles.linksError}>{linksError}</Text>
+            ) : hasLinks ? (
+              <>
+                {links!.backlinks.length > 0 && (
+                  <View style={styles.linkSubsection}>
+                    <Text style={styles.linkSubsectionTitle}>Linked mentions</Text>
+                    {links!.backlinks.map(renderLinkItem)}
+                  </View>
+                )}
+                {links!.outgoing.length > 0 && (
+                  <View style={styles.linkSubsection}>
+                    <Text style={styles.linkSubsectionTitle}>Outgoing links</Text>
+                    {links!.outgoing.map(renderLinkItem)}
+                  </View>
+                )}
+              </>
+            ) : (
+              <Text style={styles.noLinks}>No linked notes</Text>
+            )}
+          </View>
         </ScrollView>
       )}
     </View>
@@ -229,5 +302,57 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: typography.sizes.lg,
     lineHeight: 22,
+  },
+  linksSection: {
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.lg,
+    marginTop: spacing.xl,
+  },
+  linksTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    marginBottom: spacing.md,
+  },
+  linksLoader: {
+    marginVertical: spacing.md,
+  },
+  linksError: {
+    color: colors.error,
+    fontSize: typography.sizes.md,
+    marginTop: spacing.sm,
+  },
+  linkSubsection: {
+    marginTop: spacing.md,
+  },
+  linkSubsectionTitle: {
+    color: colors.textMuted,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.bold,
+    textTransform: 'uppercase',
+    marginBottom: spacing.sm,
+  },
+  linkItem: {
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+  },
+  linkTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    marginBottom: 2,
+  },
+  linkPath: {
+    color: colors.textMuted,
+    fontSize: typography.sizes.sm,
+  },
+  noLinks: {
+    color: colors.textSecondary,
+    fontSize: typography.sizes.md,
+    fontStyle: 'italic',
   },
 });
