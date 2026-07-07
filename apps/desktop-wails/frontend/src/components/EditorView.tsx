@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
-import { markdown } from '@codemirror/lang-markdown';
+import type { Extension } from '@codemirror/state';
 import { oneDark } from '@codemirror/theme-one-dark';
 import ReactMarkdown from 'react-markdown';
-import { Save, PanelRight, PanelRightClose, FileText } from './Icons';
+import { Save, PanelRight, PanelRightClose, FileText, Loader2 } from './Icons';
 
 interface Props {
   notePath: string | null;
@@ -22,6 +22,21 @@ export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: P
   // the prop; for a new note it is assigned a unique path on first save so
   // repeated saves update one file instead of overwriting a fixed name.
   const [savePath, setSavePath] = useState<string | null>(notePath);
+  const [markdownExt, setMarkdownExt] = useState<Extension | null>(null);
+
+  // Lazy-load the markdown language support so it becomes a separate chunk
+  // and does not bloat the core CodeMirror bundle.
+  useEffect(() => {
+    let cancelled = false;
+    import('@codemirror/lang-markdown').then((mod) => {
+      if (!cancelled) {
+        setMarkdownExt(mod.markdown());
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setSavePath(notePath);
@@ -133,20 +148,27 @@ export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: P
       {/* Editor + Preview */}
       <div className="flex flex-1 overflow-hidden">
         <div className={`${showPreview ? 'w-3/5' : 'w-full'} overflow-auto`}>
-          <CodeMirror
-            value={content}
-            height="100%"
-            extensions={[markdown()]}
-            theme={oneDark}
-            onChange={handleChange}
-            basicSetup={{
-              lineNumbers: true,
-              highlightActiveLineGutter: true,
-              highlightActiveLine: true,
-              foldGutter: false,
-            }}
-            className="h-full text-sm"
-          />
+          {markdownExt ? (
+            <CodeMirror
+              value={content}
+              height="100%"
+              extensions={[markdownExt]}
+              theme={oneDark}
+              onChange={handleChange}
+              basicSetup={{
+                lineNumbers: true,
+                highlightActiveLineGutter: true,
+                highlightActiveLine: true,
+                foldGutter: false,
+              }}
+              className="h-full text-sm"
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-[var(--text-muted)] text-sm gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading editor...
+            </div>
+          )}
         </div>
 
         {showPreview && (

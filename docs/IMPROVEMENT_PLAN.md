@@ -61,7 +61,7 @@ Phase 1's two highest-leverage P1 items landed alongside the contract work:
 | --- | --- | --- | --- |
 | P1 | ~~Expose vector/hybrid search consistently~~ **Done** | Core vector capabilities are now surfaced in CLI, API, web, extension, mobile, and desktop. | CLI `--vector`/`--hybrid-weight`/`--topk`; API `/search` params; client UIs all expose toggle/weight. |
 | P1 | ~~Improve token onboarding for local clients~~ **Done** | Web, extension, and mobile now prompt/verify the token printed by `agentvault serve`. | `ConnectionModal`, extension token status, mobile "Verify Token". |
-| P2 | Reduce desktop bundle size | Improves startup and packaging. | Manual chunks split React/CodeMirror/markdown; `codemirror-vendor` chunk still ~605 kB. |
+| P2 | ~~Reduce desktop bundle size~~ **Done** | CodeMirror is split into dedicated chunks; markdown language support is lazy-loaded; the remaining `codemirror-core` chunk is intentionally budgeted at 600 kB. | `vite.config.ts`, `EditorView.tsx`, `docs/CODEBASE_ANALYSIS.md`. |
 | P2 | ~~Define release/install paths~~ **Done** | CI now produces CLI, desktop, extension, and mobile artifacts; installation docs live in `docs/INSTALL.md`. | `make release`, `.github/workflows/release.yml`, `docs/INSTALL.md`. |
 | P2 | Expand doctor and diagnostics | Makes local-first support easier. | Doctor exists; app-surface and API-contract checks are not yet included. |
 | P2 | ~~Desktop settings/status parity~~ **Done** | The desktop app now surfaces local API server status, auth token, and inbox/capture state alongside AI/index status. | `ServerService`, `ServerStatus`, `SettingsView.tsx`, `Layout.tsx`. |
@@ -188,10 +188,7 @@ vector/hybrid + token-onboarding work are all complete.
 
 Next suggested PRs, in priority order:
 
-1. **Budget the remaining desktop bundle size.** Either lazy-load the CodeMirror
-   markdown language support or raise `build.chunkSizeWarningLimit` intentionally
-   and document the budget.
-2. **Signed desktop installers.** Add macOS `.app` signing/notarization and
+1. **Signed desktop installers.** Add macOS `.app` signing/notarization and
    Windows installer builds on platform-specific CI runners.
 3. **Store publishing.** Automate Chrome Web Store, App Store, and Play Store
    submissions once developer accounts and credentials are available.
