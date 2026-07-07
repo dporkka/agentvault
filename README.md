@@ -193,7 +193,7 @@ AgentVault ships with several first-party clients, all built against the shared
 
 | Component | Technology |
 | --- | --- |
-| Core engine | Go 1.23+ (`core`), Go 1.24+ (`apps/desktop-wails`) |
+| Core engine | Go 1.23+ (`core`), Go 1.25+ (`apps/desktop-wails`) |
 | Database | SQLite + FTS5 via `modernc.org/sqlite` |
 | Markdown | YAML frontmatter |
 | CLI | Cobra |
