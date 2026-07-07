@@ -26,7 +26,7 @@ jobs:
         with:
           go-version-file: core/go.mod
           cache-dependency-path: core/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -66,7 +66,7 @@ jobs:
         with:
           go-version-file: apps/desktop-wails/go.mod
           cache-dependency-path: apps/desktop-wails/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache-dependency-path: apps/desktop-wails/frontend/package-lock.json
@@ -140,7 +140,7 @@ jobs:
         with:
           go-version-file: apps/desktop-wails/go.mod
           cache-dependency-path: apps/desktop-wails/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache-dependency-path: apps/desktop-wails/frontend/package-lock.json
