@@ -2,8 +2,8 @@ import { useState, useCallback, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import MainContent from './MainContent';
 import AIPanel from './AIPanel';
-import { Loader2, CheckCircle, AlertTriangle } from './Icons';
-import type { VaultStatus, ViewName, IndexingStatus, AIStatus } from '../types';
+import { Loader2, CheckCircle, AlertTriangle, Server, Inbox, Shield } from './Icons';
+import type { VaultStatus, ViewName, IndexingStatus, AIStatus, ServerStatus } from '../types';
 
 interface Props {
   vaultStatus: VaultStatus;
@@ -17,6 +17,7 @@ export default function Layout({ vaultStatus, onVaultChanged }: Props) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [indexStatus, setIndexStatus] = useState<IndexingStatus>({ isIndexing: false, noteCount: vaultStatus.noteCount });
   const [aiStatus, setAiStatus] = useState<AIStatus | null>(null);
+  const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
 
   const handleOpenNote = useCallback((path: string) => {
     setSelectedNotePath(path);
@@ -42,9 +43,15 @@ export default function Layout({ vaultStatus, onVaultChanged }: Props) {
       } catch (err) {
         console.error('Failed to load AI status:', err);
       }
+      try {
+        const status = await window.go.main.ServerService.GetServerStatus();
+        setServerStatus(status);
+      } catch (err) {
+        console.error('Failed to load server status:', err);
+      }
     };
     refresh();
-    const id = setInterval(refresh, 5000);
+    const id = setInterval(refresh, 3000);
     return () => clearInterval(id);
   }, []);
 
@@ -90,6 +97,31 @@ export default function Layout({ vaultStatus, onVaultChanged }: Props) {
             <span>{indexStatus.noteCount} notes</span>
           </div>
           <div className="flex items-center gap-3">
+            {serverStatus?.running ? (
+              <span className="flex items-center gap-1 text-[var(--success)]" title={`Local API running on ${serverStatus.address}`}>
+                <Server className="w-3 h-3" />
+                API {serverStatus.address.replace(/^127\.0\.0\.1:/, ':')}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[var(--text-muted)]" title="Local API not running">
+                <Server className="w-3 h-3" />
+                API off
+              </span>
+            )}
+            {serverStatus?.running && (
+              <>
+                <span className="flex items-center gap-1 text-[var(--success)]" title="Auth token configured">
+                  <Shield className="w-3 h-3" />
+                  Auth
+                </span>
+                {serverStatus.inboxCount > 0 && (
+                  <span className="flex items-center gap-1 text-[var(--accent)]" title={`${serverStatus.inboxCount} capture(s) in inbox`}>
+                    <Inbox className="w-3 h-3" />
+                    {serverStatus.inboxCount}
+                  </span>
+                )}
+              </>
+            )}
             {indexStatus.isIndexing ? (
               <span className="flex items-center gap-1 text-[var(--accent)]" title="Indexing vault">
                 <Loader2 className="w-3 h-3 animate-spin" />

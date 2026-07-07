@@ -14,6 +14,8 @@ import type {
   Answer,
   IndexingStatus,
   AIStatus,
+  ServerStatus,
+  CaptureInfo,
 } from './types';
 
 declare global {
@@ -25,6 +27,7 @@ declare global {
         NoteService: NoteServiceBindings;
         IndexService: IndexServiceBindings;
         AIService: AIServiceBindings;
+        ServerService: ServerServiceBindings;
       };
     };
     runtime: any;
@@ -62,6 +65,16 @@ interface AIServiceBindings {
   IsAIEnabled(): Promise<boolean>;
   GetStatus(): Promise<AIStatus>;
   SaveAIConfig(provider: string, baseUrl: string, chatModel: string): Promise<void>;
+}
+
+interface ServerServiceBindings {
+  StartServer(addr: string): Promise<void>;
+  StopServer(): Promise<void>;
+  GetServerStatus(): Promise<ServerStatus>;
+  GetAuthToken(): Promise<string>;
+  IsAuthValid(token: string): Promise<boolean>;
+  GetInboxCount(): Promise<number>;
+  GetRecentCaptures(limit: number): Promise<CaptureInfo[]>;
 }
 
 export {};

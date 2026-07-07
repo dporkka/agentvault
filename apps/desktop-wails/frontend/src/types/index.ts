@@ -34,6 +34,20 @@ export interface AIStatus {
   error: string;
 }
 
+export interface CaptureInfo {
+  path: string;
+  title: string;
+  createdAt: string;
+}
+
+export interface ServerStatus {
+  running: boolean;
+  address: string;
+  token: string;
+  inboxCount: number;
+  recentCaptures: CaptureInfo[];
+}
+
 export type ViewName =
   | 'editor'
   | 'search'

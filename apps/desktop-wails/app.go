@@ -3,13 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/agentvault/core/internal/ai"
+	"github.com/agentvault/core/internal/api"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/db"
@@ -30,10 +33,15 @@ type App struct {
 	searcher  *search.Searcher
 	indexer   *indexer.Indexer
 
-	vaultService *VaultService
-	noteService  *NoteService
-	indexService *IndexService
-	aiService    *AIService
+	vaultService  *VaultService
+	noteService   *NoteService
+	indexService  *IndexService
+	aiService     *AIService
+	serverService *ServerService
+
+	serverMu   sync.Mutex
+	server     *api.Server
+	serverAddr string
 }
 
 // NewApp creates a new App application struct
@@ -43,6 +51,7 @@ func NewApp() *App {
 	app.noteService = &NoteService{app: app}
 	app.indexService = &IndexService{app: app}
 	app.aiService = &AIService{app: app}
+	app.serverService = &ServerService{app: app}
 	return app
 }
 
@@ -588,4 +597,198 @@ func (s *AIService) SaveAIConfig(provider string, baseURL string, chatModel stri
 	cfg.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
 	return config.Save(s.app.vaultPath, cfg)
+}
+
+// === ServerService ===
+
+// ServerService exposes the local HTTP API server state and capture/inbox
+// status to the Wails frontend.
+type ServerService struct {
+	app *App
+}
+
+// CaptureInfo describes a single capture file in the inbox.
+type CaptureInfo struct {
+	Path      string `json:"path"`
+	Title     string `json:"title"`
+	CreatedAt string `json:"createdAt"`
+}
+
+// ServerStatus reports whether the local HTTP API is running and the
+// current auth/capture state exposed to connected clients.
+type ServerStatus struct {
+	Running        bool          `json:"running"`
+	Address        string        `json:"address"`
+	Token          string        `json:"token"`
+	InboxCount     int           `json:"inboxCount"`
+	RecentCaptures []CaptureInfo `json:"recentCaptures"`
+}
+
+// StartServer starts the local HTTP API server in the background on the
+// given address (e.g. "127.0.0.1:47321").
+func (s *ServerService) StartServer(addr string) error {
+	s.app.serverMu.Lock()
+	defer s.app.serverMu.Unlock()
+
+	if s.app.server != nil {
+		return fmt.Errorf("server is already running on %s", s.app.serverAddr)
+	}
+	if s.app.db == nil || s.app.vaultPath == "" {
+		return fmt.Errorf("no vault is open")
+	}
+	if addr == "" {
+		addr = "127.0.0.1:47321"
+	}
+
+	server := api.NewServer(s.app.vaultPath, s.app.db)
+	server.RegisterRoutes()
+	s.app.server = server
+	s.app.serverAddr = addr
+
+	go func() {
+		if err := server.Start(addr); err != nil && err != http.ErrServerClosed {
+			// Log asynchronously; the frontend will see running=false on the
+			// next status poll and can surface the error there.
+			fmt.Fprintf(os.Stderr, "local API server error: %v\n", err)
+		}
+	}()
+
+	// Wait a moment for the listener to come up.
+	time.Sleep(50 * time.Millisecond)
+	return nil
+}
+
+// StopServer gracefully shuts down the local HTTP API server.
+func (s *ServerService) StopServer() error {
+	s.app.serverMu.Lock()
+	server := s.app.server
+	addr := s.app.serverAddr
+	s.app.server = nil
+	s.app.serverAddr = ""
+	s.app.serverMu.Unlock()
+
+	if server == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("failed to stop server on %s: %w", addr, err)
+	}
+	return nil
+}
+
+// GetServerStatus returns the current API server and inbox state.
+func (s *ServerService) GetServerStatus() ServerStatus {
+	s.app.serverMu.Lock()
+	running := s.app.server != nil
+	addr := s.app.serverAddr
+	var token string
+	if s.app.server != nil {
+		token = s.app.server.AuthToken()
+	}
+	s.app.serverMu.Unlock()
+
+	return ServerStatus{
+		Running:        running,
+		Address:        addr,
+		Token:          token,
+		InboxCount:     s.GetInboxCount(),
+		RecentCaptures: s.GetRecentCaptures(5),
+	}
+}
+
+// GetAuthToken returns the running server's auth token, or an empty string
+// if the server is not running.
+func (s *ServerService) GetAuthToken() string {
+	s.app.serverMu.Lock()
+	defer s.app.serverMu.Unlock()
+	if s.app.server == nil {
+		return ""
+	}
+	return s.app.server.AuthToken()
+}
+
+// IsAuthValid reports whether the supplied token matches the running
+// server's auth token.
+func (s *ServerService) IsAuthValid(token string) bool {
+	s.app.serverMu.Lock()
+	defer s.app.serverMu.Unlock()
+	if s.app.server == nil {
+		return false
+	}
+	return s.app.server.AuthToken() == token
+}
+
+// GetInboxCount returns the number of capture files in the inbox.
+func (s *ServerService) GetInboxCount() int {
+	if s.app.vaultPath == "" {
+		return 0
+	}
+	inboxPath := filepath.Join(s.app.vaultPath, "00-inbox")
+	entries, err := os.ReadDir(inboxPath)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+			count++
+		}
+	}
+	return count
+}
+
+// GetRecentCaptures returns the most recent inbox capture files.
+func (s *ServerService) GetRecentCaptures(limit int) []CaptureInfo {
+	if limit <= 0 {
+		limit = 5
+	}
+	if s.app.vaultPath == "" {
+		return nil
+	}
+	inboxPath := filepath.Join(s.app.vaultPath, "00-inbox")
+	entries, err := os.ReadDir(inboxPath)
+	if err != nil {
+		return nil
+	}
+
+	type item struct {
+		info    os.DirEntry
+		created time.Time
+	}
+	var items []item
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		items = append(items, item{info: e, created: info.ModTime()})
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].created.After(items[j].created)
+	})
+
+	if len(items) > limit {
+		items = items[:limit]
+	}
+
+	out := make([]CaptureInfo, 0, len(items))
+	for _, it := range items {
+		title := strings.TrimSuffix(it.info.Name(), ".md")
+		title = strings.ReplaceAll(title, "-", " ")
+		title = strings.ReplaceAll(title, "_", " ")
+		out = append(out, CaptureInfo{
+			Path:      filepath.Join("00-inbox", it.info.Name()),
+			Title:     title,
+			CreatedAt: it.created.UTC().Format(time.RFC3339),
+		})
+	}
+	return out
 }

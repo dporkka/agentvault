@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { HardDrive, Sparkles, CheckCircle, AlertTriangle, X, Loader2, Info, RefreshCw } from './Icons';
-import type { AIStatus, IndexingStatus } from '../types';
+import { HardDrive, Sparkles, CheckCircle, AlertTriangle, X, Loader2, Info, RefreshCw, Server, Shield, Inbox, Copy, Check } from './Icons';
+import type { AIStatus, IndexingStatus, ServerStatus, CaptureInfo } from '../types';
 
 interface Props {
   vaultPath: string;
@@ -37,6 +37,12 @@ export default function SettingsView({ vaultPath }: Props) {
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
 
+  const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
+  const [serverToggling, setServerToggling] = useState(false);
+  const [serverAddr, setServerAddr] = useState('127.0.0.1:47321');
+  const [tokenCopied, setTokenCopied] = useState(false);
+  const [authTesting, setAuthTesting] = useState(false);
+
   const clearFeedback = useCallback(() => {
     setToast('');
     setError('');
@@ -64,6 +70,15 @@ export default function SettingsView({ vaultPath }: Props) {
       setIndexStatus(status);
     } catch (err) {
       console.error('Failed to load index status:', err);
+    }
+    try {
+      const status = await window.go.main.ServerService.GetServerStatus();
+      setServerStatus(status);
+      if (status.address) {
+        setServerAddr(status.address);
+      }
+    } catch (err) {
+      console.error('Failed to load server status:', err);
     }
   }, []);
 
@@ -122,6 +137,54 @@ export default function SettingsView({ vaultPath }: Props) {
       setTesting(false);
     }
   }, [clearFeedback, showToast]);
+
+  const handleToggleServer = useCallback(async () => {
+    clearFeedback();
+    setServerToggling(true);
+    try {
+      if (serverStatus?.running) {
+        await window.go.main.ServerService.StopServer();
+        showToast('Local API server stopped');
+      } else {
+        await window.go.main.ServerService.StartServer(serverAddr);
+        showToast(`Local API server started on ${serverAddr}`);
+      }
+      await loadStatus();
+    } catch (err: any) {
+      setError(err.message || 'Failed to toggle local API server');
+    } finally {
+      setServerToggling(false);
+    }
+  }, [clearFeedback, serverStatus?.running, serverAddr, loadStatus, showToast]);
+
+  const handleCopyToken = useCallback(async () => {
+    if (!serverStatus?.token) return;
+    try {
+      await navigator.clipboard.writeText(serverStatus.token);
+      setTokenCopied(true);
+      setTimeout(() => setTokenCopied(false), 2000);
+    } catch {
+      setError('Failed to copy token to clipboard');
+    }
+  }, [serverStatus?.token]);
+
+  const handleTestAuth = useCallback(async () => {
+    if (!serverStatus?.token) return;
+    clearFeedback();
+    setAuthTesting(true);
+    try {
+      const valid = await window.go.main.ServerService.IsAuthValid(serverStatus.token);
+      if (valid) {
+        showToast('Auth token is valid');
+      } else {
+        setError('Auth token is invalid');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to validate auth token');
+    } finally {
+      setAuthTesting(false);
+    }
+  }, [clearFeedback, serverStatus?.token, showToast]);
 
   const handleProviderChange = useCallback((next: string) => {
     setProvider(next);
@@ -183,6 +246,115 @@ export default function SettingsView({ vaultPath }: Props) {
               )}
               {reindexing ? 'Reindexing...' : 'Force Reindex'}
             </button>
+          </section>
+
+          {/* Local API Server */}
+          <section className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border)] p-4">
+            <h2 className="text-sm font-medium text-[var(--text-primary)] mb-3 flex items-center gap-2">
+              <Server className="w-4 h-4 text-[var(--accent)]" />
+              Local API Server
+              {serverStatus?.running ? (
+                <CheckCircle className="w-3.5 h-3.5 text-[var(--success)]" title="Server running" />
+              ) : (
+                <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" title="Server not running" />
+              )}
+            </h2>
+
+            {serverStatus && (
+              <div className={`mb-3 px-3 py-2 rounded-lg border text-xs ${
+                serverStatus.running
+                  ? 'bg-green-500/10 border-green-500/20 text-green-400'
+                  : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {serverStatus.running ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                  <span className="font-medium">
+                    {serverStatus.running ? `Running on ${serverStatus.address}` : 'Local API server is stopped'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  Bind address
+                </label>
+                <input
+                  type="text"
+                  value={serverAddr}
+                  onChange={(e) => setServerAddr(e.target.value)}
+                  disabled={serverStatus?.running}
+                  className="w-full input disabled:opacity-50"
+                  placeholder="127.0.0.1:47321"
+                />
+              </div>
+
+              {serverStatus?.running && serverStatus.token && (
+                <div>
+                  <label className="block text-xs text-[var(--text-muted)] mb-1">
+                    Auth token
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 px-3 py-2 rounded bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-secondary)] text-xs font-mono truncate">
+                      {serverStatus.token}
+                    </div>
+                    <button
+                      onClick={handleCopyToken}
+                      className="btn-secondary text-xs flex items-center gap-1.5"
+                      title="Copy token to clipboard"
+                    >
+                      {tokenCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {tokenCopied ? 'Copied' : 'Copy'}
+                    </button>
+                    <button
+                      onClick={handleTestAuth}
+                      disabled={authTesting}
+                      className="btn-secondary text-xs flex items-center gap-1.5"
+                    >
+                      {authTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+                      {authTesting ? 'Testing...' : 'Test'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {serverStatus && serverStatus.inboxCount > 0 && (
+                <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                  <Inbox className="w-3.5 h-3.5 text-[var(--accent)]" />
+                  <span>{serverStatus.inboxCount} capture(s) in inbox</span>
+                </div>
+              )}
+
+              {serverStatus && serverStatus.recentCaptures.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-xs text-[var(--text-muted)]">Recent captures</div>
+                  {serverStatus.recentCaptures.map((cap: CaptureInfo) => (
+                    <div key={cap.path} className="flex items-center justify-between px-2 py-1 rounded bg-[var(--bg-tertiary)] text-xs">
+                      <span className="text-[var(--text-secondary)] truncate" title={cap.path}>{cap.title}</span>
+                      <span className="text-[var(--text-muted)]">{new Date(cap.createdAt).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="text-xs text-[var(--text-muted)] flex items-start gap-2">
+                <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>
+                  Start the server to let the browser extension and mobile app connect to this vault.
+                  Write endpoints require the auth token above.
+                </span>
+              </div>
+
+              <button
+                onClick={handleToggleServer}
+                disabled={serverToggling}
+                className={`btn-primary text-xs flex items-center gap-1.5 ${serverStatus?.running ? 'bg-red-500 hover:bg-red-600' : ''}`}
+              >
+                {serverToggling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Server className="w-3.5 h-3.5" />}
+                {serverToggling ? 'Working...' : serverStatus?.running ? 'Stop Server' : 'Start Server'}
+              </button>
+            </div>
           </section>
 
           {/* AI Settings */}
