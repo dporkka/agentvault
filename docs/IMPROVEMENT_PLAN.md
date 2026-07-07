@@ -64,7 +64,7 @@ Phase 1's two highest-leverage P1 items landed alongside the contract work:
 | P2 | Reduce desktop bundle size | Improves startup and packaging. | Manual chunks split React/CodeMirror/markdown; `codemirror-vendor` chunk still ~605 kB. |
 | P2 | Define release/install paths | Converts builds into usable distribution. | CI builds pieces but no release artifact flow is documented. |
 | P2 | Expand doctor and diagnostics | Makes local-first support easier. | Doctor exists; app-surface and API-contract checks are not yet included. |
-| P2 | Desktop settings/status parity | The desktop app added AI/index status in Settings; surface auth and capture-sync states next. | `SettingsView.tsx`, `IndexingStatus`, `AIStatus`. |
+| P2 | ~~Desktop settings/status parity~~ **Done** | The desktop app now surfaces local API server status, auth token, and inbox/capture state alongside AI/index status. | `ServerService`, `ServerStatus`, `SettingsView.tsx`, `Layout.tsx`. |
 
 ## Phase 0 - Contract Stabilization
 
@@ -113,8 +113,8 @@ Target: 1-2 weeks.
 Deliverables:
 
 - Done — add a first-run connection/token flow for web, extension, and mobile.
-- Partially done — show server health, vault status, auth status, and indexing status in clients. Web, extension, and mobile surface health/auth; desktop surfaces vault and AI/index status.
-- Not started — make capture sync states explicit: unsynced, syncing, synced, failed.
+- Done — show server health, vault status, auth status, and indexing status in clients. Web, extension, and mobile surface health/auth; desktop now surfaces vault, AI/index, local API server, auth token, and inbox/capture status.
+- Not started — make capture sync states explicit in mobile/extension: unsynced, syncing, synced, failed.
 - Done — align project pickers and note filters across web, extension, mobile, and desktop (all use the shared `@agentvault/contract` types and consistent filter sets).
 - Done — share request/response types from one contract source (`@agentvault/contract`).
 - Partially done — improve desktop bundle splitting for CodeMirror/markdown-heavy paths. The main chunk is no longer the offender; the `codemirror-core` chunk still triggers a warning.
@@ -141,9 +141,6 @@ The token-onboarding and local-client reliability work is complete:
 
 What remains for Phase 2:
 
-- Surface auth status and capture-sync states in the desktop app (the Wails
-  desktop does not use the HTTP API, so it needs its own token/status plumbing
-  or a Wails-backed status panel).
 - Budget or eliminate the remaining desktop `codemirror-core` chunk warning
   (~562 kB after minification).
 
@@ -194,9 +191,6 @@ Next suggested PRs, in priority order:
 1. **Budget the remaining desktop bundle size.** Either lazy-load the CodeMirror
    markdown language support or raise `build.chunkSizeWarningLimit` intentionally
    and document the budget.
-2. **Desktop auth/status parity.** Surface auth state and capture-sync status in
-   the Wails desktop (it does not use the HTTP API, so this needs Wails service
-   plumbing or a status panel).
-3. **Release readiness scaffolding.** Define CLI binary artifacts, desktop
+2. **Release readiness scaffolding.** Define CLI binary artifacts, desktop
    installer strategy, extension packaging, and mobile distribution in CI and
    documentation.

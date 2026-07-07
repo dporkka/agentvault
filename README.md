@@ -334,8 +334,6 @@ detailed status live in:
 Notable remaining work:
 
 - Packaging, release artifacts, and installation paths are not yet defined.
-- Capture-sync state visibility and desktop auth status are not yet surfaced in
-  the Wails app.
 
 CI runs `make test`, `make contract-check`, frontend builds, mobile type-checks,
 and the desktop Go build with the `webkit2_41` tag.
