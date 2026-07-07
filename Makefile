@@ -1,4 +1,4 @@
-.PHONY: build test test-ci lint fmt tidy dev-core clean install help desktop desktop-dev ci contract-check contract-list-snake
+.PHONY: build test test-ci lint fmt tidy dev-core clean install help desktop desktop-dev ci contract-check contract-list-snake release release-cli release-cli-linux release-cli-darwin release-cli-windows release-extension release-desktop-linux release-mobile
 
 VAULT := ./test-vault
 CORE := ./core
@@ -87,3 +87,52 @@ contract-check: ## Verify @agentvault/contract is the only source of API types i
 
 contract-list-snake: ## Print the snake_case JSON field list derived from Go struct tags
 	@scripts/contract-snake-list.sh core/internal/contract/contract.go
+
+# Release scaffolding
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.1.0")
+DIST_DIR := $(CURDIR)/dist
+
+release: release-cli release-extension release-desktop-linux release-mobile ## Build all release artifacts
+
+release-cli: release-cli-linux release-cli-darwin release-cli-windows ## Build CLI archives for all platforms
+
+release-cli-linux: ## Build Linux CLI archives
+	@mkdir -p $(DIST_DIR)/cli
+	cd $(CORE) && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o $(DIST_DIR)/cli/agentvault-linux-amd64 ./cmd/agentvault
+	cd $(CORE) && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o $(DIST_DIR)/cli/agentvault-linux-arm64 ./cmd/agentvault
+	cp LICENSE $(DIST_DIR)/cli/LICENSE
+	cd $(DIST_DIR)/cli && tar -czf agentvault-$(VERSION)-linux-amd64.tar.gz agentvault-linux-amd64 LICENSE
+	cd $(DIST_DIR)/cli && tar -czf agentvault-$(VERSION)-linux-arm64.tar.gz agentvault-linux-arm64 LICENSE
+
+release-cli-darwin: ## Build macOS CLI archives
+	@mkdir -p $(DIST_DIR)/cli
+	cd $(CORE) && GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o $(DIST_DIR)/cli/agentvault-darwin-amd64 ./cmd/agentvault
+	cd $(CORE) && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o $(DIST_DIR)/cli/agentvault-darwin-arm64 ./cmd/agentvault
+	cp LICENSE $(DIST_DIR)/cli/LICENSE
+	cd $(DIST_DIR)/cli && tar -czf agentvault-$(VERSION)-darwin-amd64.tar.gz agentvault-darwin-amd64 LICENSE
+	cd $(DIST_DIR)/cli && tar -czf agentvault-$(VERSION)-darwin-arm64.tar.gz agentvault-darwin-arm64 LICENSE
+
+release-cli-windows: ## Build Windows CLI archives
+	@mkdir -p $(DIST_DIR)/cli
+	cd $(CORE) && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o $(DIST_DIR)/cli/agentvault-windows-amd64.exe ./cmd/agentvault
+	cp LICENSE $(DIST_DIR)/cli/LICENSE
+	cd $(DIST_DIR)/cli && zip agentvault-$(VERSION)-windows-amd64.zip agentvault-windows-amd64.exe LICENSE
+
+release-extension: ## Build and package the browser extension
+	@mkdir -p $(DIST_DIR)/extension
+	cd apps/browser-extension && npm run build
+	cd apps/browser-extension/dist && zip -r $(DIST_DIR)/extension/agentvault-extension-$(VERSION).zip .
+
+release-desktop-linux: ## Build the Linux desktop binary (requires libgtk-3-dev, libwebkit2gtk-4.1-dev)
+	@mkdir -p $(DIST_DIR)/desktop
+	cd $(DESKTOP)/frontend && npm ci && npm run build
+	cd $(DESKTOP) && go build -tags $(WAILS_TAGS) -o $(DIST_DIR)/desktop/agentvault-desktop-linux-amd64 .
+	cp LICENSE $(DIST_DIR)/desktop/LICENSE
+
+release-mobile: ## Export mobile bundles (requires Expo/EAS setup for store builds)
+	@mkdir -p $(DIST_DIR)/mobile
+	cd apps/mobile-expo && npm ci
+	cd apps/mobile-expo && npx expo export --platform ios --output-dir $(DIST_DIR)/mobile/ios
+	cd apps/mobile-expo && npx expo export --platform android --output-dir $(DIST_DIR)/mobile/android
+	cd $(DIST_DIR)/mobile && zip -r agentvault-mobile-$(VERSION)-ios.zip ios
+	cd $(DIST_DIR)/mobile && zip -r agentvault-mobile-$(VERSION)-android.zip android

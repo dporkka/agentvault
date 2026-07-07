@@ -11,6 +11,7 @@ import (
 
 var (
 	vaultPath string
+	version   = "dev"
 	rootCmd   = &cobra.Command{
 		Use:   "agentvault",
 		Short: "AgentVault — local-first AI knowledge operating system",
@@ -20,6 +21,7 @@ It turns a folder of Markdown/YAML files into an intelligent, searchable,
 source-grounded, agent-accessible knowledge base.
 
 The user owns the data. The app is only an interface over durable files.`,
+		Version: version,
 	}
 )
 

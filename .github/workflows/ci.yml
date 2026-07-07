@@ -74,6 +74,17 @@ jobs:
         run: npm ci
       - name: Type-check and build
         run: npm run build
+      - name: Package browser extension
+        if: matrix.app == 'browser-extension'
+        working-directory: apps/browser-extension
+        run: npm run package
+      - name: Upload browser extension artifact
+        if: matrix.app == 'browser-extension'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentvault-browser-extension
+          path: apps/browser-extension/agentvault-extension-v*.zip
+          if-no-files-found: error
 
   mobile:
     name: Mobile (Expo type-check and bundle)
@@ -95,6 +106,16 @@ jobs:
         run: npm run typecheck
       - name: Bundle iOS with Metro
         run: npx expo export --platform ios
+      - name: Bundle Android with Metro
+        run: npx expo export --platform android
+      - name: Upload mobile bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentvault-mobile-bundles
+          path: |
+            apps/mobile-expo/dist/ios
+            apps/mobile-expo/dist/android
+          if-no-files-found: error
 
   desktop:
     name: Desktop (Wails build)
@@ -130,6 +151,15 @@ jobs:
         working-directory: apps/desktop-wails
         # Ubuntu ships webkit2gtk 4.1, so the webkit2_41 build tag is required.
         run: go build -tags webkit2_41 ./...
+      - name: Build desktop Linux binary
+        working-directory: apps/desktop-wails
+        run: go build -tags webkit2_41 -o /tmp/agentvault-desktop .
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentvault-desktop-linux-amd64
+          path: /tmp/agentvault-desktop
+          if-no-files-found: error
 
   contract:
     name: Contract (shared client types)

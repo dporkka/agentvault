@@ -12,7 +12,11 @@
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
-    "test": "jest"
+    "test": "jest",
+    "build:android": "eas build --platform android --profile production",
+    "build:ios": "eas build --platform ios --profile production",
+    "export:android": "expo export --platform android",
+    "export:ios": "expo export --platform ios"
   },
   "dependencies": {
     "@agentvault/contract": "file:../../packages/contract",

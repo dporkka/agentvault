@@ -42,30 +42,28 @@ Key design choices:
 
 ## Quick Start
 
-```bash
-# Build the CLI
-cd core
-go build -o ../bin/agentvault ./cmd/agentvault
+Install the CLI from a [release binary](docs/INSTALL.md#cli) or [build from source](docs/INSTALL.md#building-from-source).
 
+```bash
 # Initialize a vault
-../bin/agentvault init ../my-vault
-cd ../my-vault
+agentvault init ./my-vault
+cd ./my-vault
 
 # Optional starter templates
-../bin/agentvault init ../founder-vault --template founder
-../bin/agentvault init ../developer-vault --template developer
+agentvault init ../founder-vault --template founder
+agentvault init ../developer-vault --template developer
 
 # Create notes
-../bin/agentvault new note --title "My first note"
-../bin/agentvault new decision --project platform --title "Use Postgres"
-../bin/agentvault new task --project platform --title "Build API"
+agentvault new note --title "My first note"
+agentvault new decision --project platform --title "Use Postgres"
+agentvault new task --project platform --title "Build API"
 
 # Index and search
-../bin/agentvault index
-../bin/agentvault search "Postgres"
+agentvault index
+agentvault search "Postgres"
 
 # Validate vault health
-../bin/agentvault doctor
+agentvault doctor
 ```
 
 ## CLI Reference
@@ -281,7 +279,12 @@ make lint
 
 # Verify the shared API contract across all clients
 make contract-check
+
+# Build all release artifacts
+make release
 ```
+
+See [`docs/INSTALL.md`](docs/INSTALL.md) for installation instructions for each component.
 
 ### Frontend clients
 

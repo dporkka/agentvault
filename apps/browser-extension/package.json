@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "dev": "vite"
+    "dev": "vite",
+    "package": "npm run build && cd dist && zip -r ../agentvault-extension-v$npm_package_version.zip ."
   },
   "dependencies": {
     "@agentvault/contract": "file:../../packages/contract",
