@@ -271,3 +271,29 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+func TestSplitWhitespaceOnly(t *testing.T) {
+	c := New()
+	chunks := c.Split("   \n\t  ")
+	if chunks != nil {
+		t.Error("Expected nil for whitespace-only text")
+	}
+}
+
+func TestSplitMarkdownMergesSmallSections(t *testing.T) {
+	c := NewWithSize(100, 10)
+
+	text := `# Header 1
+Short section one.
+
+# Header 2
+Short section two.`
+
+	chunks := c.SplitMarkdown(text)
+	if len(chunks) != 1 {
+		t.Fatalf("Expected 1 merged chunk for small sections, got %d", len(chunks))
+	}
+	if !strings.Contains(chunks[0].Text, "Header 1") || !strings.Contains(chunks[0].Text, "Header 2") {
+		t.Errorf("Expected merged chunk to contain both headers, got %q", chunks[0].Text)
+	}
+}

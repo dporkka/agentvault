@@ -1,4 +1,4 @@
-.PHONY: build test test-ci lint fmt tidy dev-core clean install help desktop desktop-dev ci contract-check contract-list-snake release release-cli release-cli-linux release-cli-darwin release-cli-windows release-extension release-desktop-linux release-mobile
+.PHONY: build test test-ci lint fmt tidy dev-core clean install help desktop desktop-dev ci contract-check contract-list-snake release release-cli release-cli-linux release-cli-darwin release-cli-windows release-extension release-desktop-linux release-desktop-linux-tar release-mobile
 
 VAULT := ./test-vault
 CORE := ./core
@@ -128,6 +128,9 @@ release-desktop-linux: ## Build the Linux desktop binary (requires libgtk-3-dev,
 	cd $(DESKTOP)/frontend && npm ci && npm run build
 	cd $(DESKTOP) && go build -tags $(WAILS_TAGS) -o $(DIST_DIR)/desktop/agentvault-desktop-linux-amd64 .
 	cp LICENSE $(DIST_DIR)/desktop/LICENSE
+
+release-desktop-linux-tar: release-desktop-linux ## Package the Linux desktop binary as a tar.gz
+	cd $(DIST_DIR)/desktop && tar -czf agentvault-desktop-$(VERSION)-linux-amd64.tar.gz agentvault-desktop-linux-amd64 LICENSE
 
 release-mobile: ## Export mobile bundles (requires Expo/EAS setup for store builds)
 	@mkdir -p $(DIST_DIR)/mobile

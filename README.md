@@ -66,6 +66,17 @@ agentvault search "Postgres"
 agentvault doctor
 ```
 
+## Releases
+
+AgentVault publishes release artifacts on every `v*.*.*` tag:
+
+- CLI archives for Linux, macOS, and Windows
+- Desktop apps for Linux, macOS (`.dmg`), and Windows (installer `.exe`)
+- Browser extension zip
+- Mobile iOS/Android export bundles
+
+See [`docs/INSTALL.md`](docs/INSTALL.md) for installation instructions and [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for the secrets and accounts required for signed installers and store submissions.
+
 ## CLI Reference
 
 | Command | Description |
@@ -258,7 +269,9 @@ agentvault/
 ├── docs/
 │   ├── API_CONTRACT.md
 │   ├── CODEBASE_ANALYSIS.md
-│   └── IMPROVEMENT_PLAN.md
+│   ├── IMPROVEMENT_PLAN.md
+│   ├── INSTALL.md
+│   └── PUBLISHING.md
 ├── Makefile
 └── README.md
 ```
@@ -336,10 +349,13 @@ detailed status live in:
 
 Notable remaining work:
 
-- Packaging, release artifacts, and installation paths are not yet defined.
+- Add compatibility matrix for OS, Go, Node, Wails, Expo, browsers, and local AI providers.
+- Add smoke tests for packaged CLI and desktop artifacts.
+- Document security boundaries for the localhost API, auth token handling, CORS, and extension permissions.
 
-CI runs `make test`, `make contract-check`, frontend builds, mobile type-checks,
-and the desktop Go build with the `webkit2_41` tag.
+CI runs `make ci`, frontend builds, mobile type-checks, and the desktop Go build
+with the `webkit2_41` tag. Signed macOS/Windows installers and store publishing
+workflows are secret-gated; see [`docs/PUBLISHING.md`](docs/PUBLISHING.md).
 
 ## License
 

@@ -1,11 +1,16 @@
 package search
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/agentvault/core/internal/db"
+	"github.com/agentvault/core/internal/embeddings"
 )
 
 func setupTestDB(t *testing.T) (*db.DB, func()) {
@@ -349,5 +354,262 @@ func TestSearchResultFields(t *testing.T) {
 		if r.Tags == nil {
 			t.Errorf("Result %s has nil Tags", r.ID)
 		}
+	}
+}
+
+func TestStatusFilter(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	s := New(database)
+
+	results, err := s.Search(Query{Status: "active"})
+	if err != nil {
+		t.Fatalf("Search with status filter failed: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("Expected results for status=active")
+	}
+	for _, r := range results {
+		if r.Status != "active" {
+			t.Errorf("Expected status='active', got '%s' for '%s'", r.Status, r.Title)
+		}
+	}
+}
+
+func TestSearchOffset(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	s := New(database)
+
+	all, err := s.Search(Query{Limit: 100})
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if len(all) < 3 {
+		t.Skip("Need at least 3 notes to test offset")
+	}
+
+	page, err := s.Search(Query{Limit: 2, Offset: 1})
+	if err != nil {
+		t.Fatalf("Search with offset failed: %v", err)
+	}
+	if len(page) != 2 {
+		t.Errorf("Expected 2 results, got %d", len(page))
+	}
+	if page[0].ID == all[0].ID {
+		t.Error("Offset page should not start with the first overall result")
+	}
+}
+
+func TestBuildFTSMatch(t *testing.T) {
+	cases := []struct {
+		name     string
+		query    string
+		expected string
+	}{
+		{"single word", "sqlite", "sqlite"},
+		{"multiple words", "mobile app", "mobile OR app"},
+		{"empty", "", ""},
+		{"quoted", `say "hello"`, `say OR ""hello""`},
+		{"with wildcard", "web*", "web*"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := buildFTSMatch(Query{Q: tc.query})
+			if got != tc.expected {
+				t.Errorf("buildFTSMatch(%q) = %q, want %q", tc.query, got, tc.expected)
+			}
+		})
+	}
+}
+
+func embeddingServer(response []float32) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"embedding": response})
+	}))
+}
+
+func TestConfigureEmbeddings(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	s := New(database)
+	s.ConfigureEmbeddings(t.TempDir())
+	if s.embedClient == nil {
+		t.Error("ConfigureEmbeddings should set an embedding client")
+	}
+}
+
+func TestHasEmbeddingsAndChunkStorage(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	s := New(database)
+	if s.HasEmbeddings() {
+		t.Error("Expected no embeddings initially")
+	}
+
+	emb := []float32{1, 0, 0, 0}
+	if err := s.StoreChunkEmbedding("chunk_001", "note_001", 0, "idea", "test", emb); err != nil {
+		t.Fatalf("StoreChunkEmbedding failed: %v", err)
+	}
+	if !s.HasEmbeddings() {
+		t.Error("Expected embeddings after storing a chunk")
+	}
+
+	if err := s.DeleteNoteChunks("note_001"); err != nil {
+		t.Fatalf("DeleteNoteChunks failed: %v", err)
+	}
+	if s.HasEmbeddings() {
+		t.Error("Expected no embeddings after deleting note chunks")
+	}
+}
+
+func TestLoadTags(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	s := New(database)
+
+	tags, err := s.LoadTags("note_001")
+	if err != nil {
+		t.Fatalf("LoadTags failed: %v", err)
+	}
+	if len(tags) == 0 {
+		t.Error("Expected tags for note_001")
+	}
+}
+
+func TestVectorSearchFallbackNoEmbeddings(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	s := New(database)
+	server := embeddingServer([]float32{1, 0, 0, 0})
+	defer server.Close()
+	s.SetEmbedClient(embeddings.NewClient(server.URL, "test"))
+
+	results, err := s.VectorSearch(context.Background(), "idea", 10)
+	if err != nil {
+		t.Fatalf("VectorSearch failed: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("Expected fallback FTS results")
+	}
+}
+
+func TestVectorSearchWithEmbeddings(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	s := New(database)
+
+	queryEmb := []float32{1, 0, 0, 0}
+	server := embeddingServer(queryEmb)
+	defer server.Close()
+	s.SetEmbedClient(embeddings.NewClient(server.URL, "test"))
+
+	// Store a chunk whose embedding exactly matches the query embedding.
+	if err := s.StoreChunkEmbedding("chunk_001", "note_001", 0, "idea text", "test", queryEmb); err != nil {
+		t.Fatalf("StoreChunkEmbedding failed: %v", err)
+	}
+
+	results, err := s.VectorSearch(context.Background(), "idea", 10)
+	if err != nil {
+		t.Fatalf("VectorSearch failed: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("Expected vector search results")
+	}
+	if results[0].ID != "note_001" {
+		t.Errorf("Expected note_001 first, got %s", results[0].ID)
+	}
+	if results[0].Score < 0.99 {
+		t.Errorf("Expected high similarity score, got %f", results[0].Score)
+	}
+}
+
+func TestHybridSearchFallback(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	s := New(database)
+	server := embeddingServer([]float32{1, 0, 0, 0})
+	defer server.Close()
+	s.SetEmbedClient(embeddings.NewClient(server.URL, "test"))
+
+	results, err := s.HybridSearch(context.Background(), VectorQuery{
+		Query:        Query{Q: "idea", Limit: 10},
+		VectorSearch: true,
+		QueryText:    "idea",
+		TopK:         10,
+		HybridWeight: 0.5,
+	})
+	if err != nil {
+		t.Fatalf("HybridSearch failed: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("Expected fallback FTS results")
+	}
+}
+
+func TestHybridSearchCombined(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	s := New(database)
+
+	queryEmb := []float32{1, 0, 0, 0}
+	server := embeddingServer(queryEmb)
+	defer server.Close()
+	s.SetEmbedClient(embeddings.NewClient(server.URL, "test"))
+
+	// Store matching chunk for note_001.
+	if err := s.StoreChunkEmbedding("chunk_001", "note_001", 0, "idea text", "test", queryEmb); err != nil {
+		t.Fatalf("StoreChunkEmbedding failed: %v", err)
+	}
+
+	results, err := s.HybridSearch(context.Background(), VectorQuery{
+		Query:        Query{Q: "idea", Limit: 10},
+		VectorSearch: true,
+		QueryText:    "idea",
+		TopK:         10,
+		HybridWeight: 0.5,
+	})
+	if err != nil {
+		t.Fatalf("HybridSearch failed: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("Expected hybrid search results")
+	}
+	found := false
+	for _, r := range results {
+		if r.ID == "note_001" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Expected note_001 in hybrid results, got: %v", results)
+	}
+}
+
+func TestSearchWithVectorConvenience(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	s := New(database)
+	server := embeddingServer([]float32{1, 0, 0, 0})
+	defer server.Close()
+	s.SetEmbedClient(embeddings.NewClient(server.URL, "test"))
+
+	results, err := s.SearchWithVector(context.Background(), "idea", 10)
+	if err != nil {
+		t.Fatalf("SearchWithVector failed: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("Expected results from SearchWithVector")
 	}
 }

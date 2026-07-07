@@ -1,0 +1,90 @@
+name: Publish Mobile Apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      submit_to_stores:
+        description: 'Submit builds to App Store / Play Store (requires secrets)'
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish-mobile:
+    name: Build and optionally submit mobile apps
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      ASC_API_KEY_PATH: ${{ secrets.ASC_API_KEY_PATH }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/mobile-expo/package-lock.json
+      - name: Install Expo/EAS CLI
+        run: npm install -g eas-cli
+      - name: Install dependencies
+        working-directory: apps/mobile-expo
+        run: npm ci
+      - name: Determine store submission availability
+        run: |
+          if [ -n "$EXPO_TOKEN" ]; then
+            echo "EAS_BUILD_ENABLED=true" >> "$GITHUB_ENV"
+          else
+            echo "EAS_BUILD_ENABLED=false" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$EXPO_TOKEN" ] && [ -n "$ASC_API_KEY_PATH" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_ID" ]; then
+            echo "IOS_SUBMIT_ENABLED=true" >> "$GITHUB_ENV"
+          else
+            echo "IOS_SUBMIT_ENABLED=false" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$EXPO_TOKEN" ] && [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
+            echo "ANDROID_SUBMIT_ENABLED=true" >> "$GITHUB_ENV"
+          else
+            echo "ANDROID_SUBMIT_ENABLED=false" >> "$GITHUB_ENV"
+          fi
+      - name: Build iOS (and submit if configured)
+        if: env.EAS_BUILD_ENABLED == 'true'
+        working-directory: apps/mobile-expo
+        run: |
+          if [ "$IOS_SUBMIT_ENABLED" == "true" ] && ( [ "${{ github.event_name }}" == "push" ] || [ "${{ inputs.submit_to_stores }}" == "true" ] ); then
+            eas build --platform ios --profile production --auto-submit --non-interactive
+          else
+            eas build --platform ios --profile production --non-interactive
+          fi
+      - name: Build Android (and submit if configured)
+        if: env.EAS_BUILD_ENABLED == 'true'
+        working-directory: apps/mobile-expo
+        run: |
+          if [ "$ANDROID_SUBMIT_ENABLED" == "true" ] && ( [ "${{ github.event_name }}" == "push" ] || [ "${{ inputs.submit_to_stores }}" == "true" ] ); then
+            eas build --platform android --profile production --auto-submit --non-interactive
+          else
+            eas build --platform android --profile production --non-interactive
+          fi
+      - name: Export mobile bundles (fallback when EAS is not configured)
+        if: env.EAS_BUILD_ENABLED == 'false'
+        working-directory: apps/mobile-expo
+        run: |
+          npx expo export --platform ios
+          npx expo export --platform android
+      - name: Upload mobile bundle artifacts (fallback)
+        if: env.EAS_BUILD_ENABLED == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentvault-mobile-bundles
+          path: |
+            apps/mobile-expo/dist/ios
+            apps/mobile-expo/dist/android
+          if-no-files-found: error

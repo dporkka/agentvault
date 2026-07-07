@@ -63,6 +63,7 @@ Phase 1's two highest-leverage P1 items landed alongside the contract work:
 | P1 | ~~Improve token onboarding for local clients~~ **Done** | Web, extension, and mobile now prompt/verify the token printed by `agentvault serve`. | `ConnectionModal`, extension token status, mobile "Verify Token". |
 | P2 | ~~Reduce desktop bundle size~~ **Done** | CodeMirror is split into dedicated chunks; markdown language support is lazy-loaded; the remaining `codemirror-core` chunk is intentionally budgeted at 600 kB. | `vite.config.ts`, `EditorView.tsx`, `docs/CODEBASE_ANALYSIS.md`. |
 | P2 | ~~Define release/install paths~~ **Done** | CI now produces CLI, desktop, extension, and mobile artifacts; installation docs live in `docs/INSTALL.md`. | `make release`, `.github/workflows/release.yml`, `docs/INSTALL.md`. |
+| P2 | ~~Signed desktop installers and store publishing~~ **Scaffolded** | macOS `.app` signing/notarization, Windows NSIS signing, and Chrome Web Store / App Store / Play Store workflows are secret-gated in CI. Credentials are not yet configured. | `.github/workflows/release.yml`, `.github/workflows/publish-extension.yml`, `.github/workflows/publish-mobile.yml`, `docs/PUBLISHING.md`. |
 | P2 | Expand doctor and diagnostics | Makes local-first support easier. | Doctor exists; app-surface and API-contract checks are not yet included. |
 | P2 | ~~Desktop settings/status parity~~ **Done** | The desktop app now surfaces local API server status, auth token, and inbox/capture state alongside AI/index status. | `ServerService`, `ServerStatus`, `SettingsView.tsx`, `Layout.tsx`. |
 
@@ -168,11 +169,12 @@ Target: after the app surfaces are stable.
 
 Deliverables:
 
-- Define release artifacts: CLI binaries, desktop installers, browser extension package, and mobile distribution strategy.
-- Add install/update documentation for each platform.
-- Add compatibility matrix for OS, Go, Node, Wails, Expo, browsers, and local AI providers.
-- Add smoke tests for packaged CLI and desktop artifacts.
-- Document security boundaries for localhost API, auth token handling, CORS, and extension permissions.
+- Done — define release artifacts: CLI binaries, desktop installers, browser extension package, and mobile distribution strategy.
+- Done — add install/update documentation for each platform.
+- Scaffolded — signed desktop installers (macOS `.app` + `.dmg`, Windows NSIS `.exe`) and store publishing workflows (Chrome Web Store, App Store, Play Store) are secret-gated in CI.
+- Not started — add compatibility matrix for OS, Go, Node, Wails, Expo, browsers, and local AI providers.
+- Not started — add smoke tests for packaged CLI and desktop artifacts.
+- Not started — document security boundaries for localhost API, auth token handling, CORS, and extension permissions.
 
 Exit criteria:
 
@@ -188,7 +190,12 @@ vector/hybrid + token-onboarding work are all complete.
 
 Next suggested PRs, in priority order:
 
-1. **Signed desktop installers.** Add macOS `.app` signing/notarization and
-   Windows installer builds on platform-specific CI runners.
-3. **Store publishing.** Automate Chrome Web Store, App Store, and Play Store
-   submissions once developer accounts and credentials are available.
+1. ~~**Signed desktop installers.**~~ Scaffolded: macOS `.app` signing/notarization and
+   Windows NSIS installer signing are now built on platform-specific CI runners.
+2. ~~**Store publishing.**~~ Scaffolded: Chrome Web Store, App Store, and Play Store
+   submission workflows are in place and secret-gated.
+3. **Expand doctor and diagnostics (Phase 3).** Add API-auth, index-freshness,
+   duplicate-ID, broken-link, orphan-chunk, and embedding-availability checks so
+   vault health is visible from one command.
+4. **Capture sync states (Phase 2).** Make capture sync states explicit in mobile
+   and extension: unsynced, syncing, synced, and failed.

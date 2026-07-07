@@ -59,9 +59,29 @@ chmod +x agentvault-desktop-linux-amd64
 ./agentvault-desktop-linux-amd64
 ```
 
-### macOS and Windows
+A tar.gz archive (`agentvault-desktop-<version>-linux-amd64.tar.gz`) is also available on the release page.
 
-Prebuilt macOS `.app` bundles and Windows installers are not yet produced by CI. Build them from source with the Wails CLI:
+### macOS
+
+Releases include a macOS `.app` bundle and a `.dmg` disk image in the `dist/macos/` assets.
+
+- If signing secrets are configured in CI, download `AgentVault.dmg` — the `.app` is signed and the `.dmg` is notarized.
+- If signing secrets are not yet configured, download `AgentVault-unsigned.dmg`.
+
+See [`docs/PUBLISHING.md`](PUBLISHING.md) for the Apple Developer certificate and notarization setup required to produce signed releases.
+
+### Windows
+
+Releases include an NSIS installer `.exe` in the `dist/windows/` assets.
+
+- If a code-signing certificate is configured in CI, the installer is signed.
+- If no certificate is configured, the installer is unsigned but otherwise identical.
+
+See [`docs/PUBLISHING.md`](PUBLISHING.md) for Windows certificate setup.
+
+### Building from source
+
+To build the desktop app locally with the Wails CLI:
 
 ```bash
 cd apps/desktop-wails
@@ -140,7 +160,14 @@ dist/
 │   ├── agentvault-<version>-darwin-arm64.tar.gz
 │   └── agentvault-<version>-windows-amd64.zip
 ├── desktop/
-│   └── agentvault-desktop-linux-amd64
+│   ├── agentvault-desktop-linux-amd64
+│   └── agentvault-desktop-<version>-linux-amd64.tar.gz
+├── macos/
+│   ├── AgentVault.app
+│   ├── AgentVault.dmg
+│   └── AgentVault-unsigned.dmg
+├── windows/
+│   └── AgentVault-<version>-windows-amd64-installer.exe
 ├── extension/
 │   └── agentvault-extension-<version>.zip
 └── mobile/
@@ -151,10 +178,11 @@ dist/
 ### Build individual artifacts
 
 ```bash
-make release-cli           # CLI archives for all platforms
-make release-desktop-linux # Linux desktop binary
-make release-extension     # Browser extension zip
-make release-mobile        # Mobile export bundles
+make release-cli              # CLI archives for all platforms
+make release-desktop-linux    # Linux desktop binary
+make release-desktop-linux-tar # Linux desktop tar.gz package
+make release-extension        # Browser extension zip
+make release-mobile           # Mobile export bundles
 ```
 
 ### Run tests and checks

@@ -1,0 +1,67 @@
+name: Publish Browser Extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_to_store:
+        description: 'Publish to Chrome Web Store (requires secrets)'
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish-extension:
+    name: Build and publish browser extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CHROME_WEBSTORE_CLIENT_ID: ${{ secrets.CHROME_WEBSTORE_CLIENT_ID }}
+      CHROME_WEBSTORE_CLIENT_SECRET: ${{ secrets.CHROME_WEBSTORE_CLIENT_SECRET }}
+      CHROME_WEBSTORE_REFRESH_TOKEN: ${{ secrets.CHROME_WEBSTORE_REFRESH_TOKEN }}
+      CHROME_WEBSTORE_EXTENSION_ID: ${{ secrets.CHROME_WEBSTORE_EXTENSION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/browser-extension/package-lock.json
+      - name: Install dependencies
+        working-directory: apps/browser-extension
+        run: npm ci
+      - name: Build extension
+        working-directory: apps/browser-extension
+        run: npm run build
+      - name: Package extension
+        working-directory: apps/browser-extension
+        run: npm run package
+      - name: Determine store publish availability
+        run: |
+          if [ -n "$CHROME_WEBSTORE_CLIENT_ID" ] && [ -n "$CHROME_WEBSTORE_CLIENT_SECRET" ] && [ -n "$CHROME_WEBSTORE_REFRESH_TOKEN" ] && [ -n "$CHROME_WEBSTORE_EXTENSION_ID" ]; then
+            echo "CHROME_STORE_PUBLISH_ENABLED=true" >> "$GITHUB_ENV"
+          else
+            echo "CHROME_STORE_PUBLISH_ENABLED=false" >> "$GITHUB_ENV"
+          fi
+      - name: Upload to Chrome Web Store
+        if: env.CHROME_STORE_PUBLISH_ENABLED == 'true' && (github.event_name == 'push' || inputs.publish_to_store == true)
+        working-directory: apps/browser-extension
+        run: |
+          npx --yes chrome-webstore-upload upload \
+            --source agentvault-extension-v*.zip \
+            --extension-id "$CHROME_WEBSTORE_EXTENSION_ID" \
+            --client-id "$CHROME_WEBSTORE_CLIENT_ID" \
+            --client-secret "$CHROME_WEBSTORE_CLIENT_SECRET" \
+            --refresh-token "$CHROME_WEBSTORE_REFRESH_TOKEN"
+      - name: Upload extension artifact
+        if: env.CHROME_STORE_PUBLISH_ENABLED == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentvault-browser-extension
+          path: apps/browser-extension/agentvault-extension-v*.zip
+          if-no-files-found: error

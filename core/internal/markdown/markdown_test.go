@@ -84,3 +84,68 @@ Body content here.
 		t.Errorf("Expected title 'File Test', got '%s'", doc.Frontmatter.Title)
 	}
 }
+
+func TestRenderMarkdown(t *testing.T) {
+	html, err := RenderMarkdown("Hello world")
+	if err != nil {
+		t.Fatalf("RenderMarkdown failed: %v", err)
+	}
+	if !strings.Contains(html, "Hello world") {
+		t.Errorf("Expected rendered HTML to contain input text, got %q", html)
+	}
+}
+
+func TestParseBytesNoFrontmatter(t *testing.T) {
+	content := "Just a plain markdown body.\n\nNo frontmatter here."
+	doc, err := ParseBytes([]byte(content))
+	if err != nil {
+		t.Fatalf("ParseBytes failed: %v", err)
+	}
+	if doc.Body != content {
+		t.Errorf("Expected body to equal input when no frontmatter, got %q", doc.Body)
+	}
+	if doc.RawFrontmatter != "" {
+		t.Errorf("Expected empty raw frontmatter, got %q", doc.RawFrontmatter)
+	}
+}
+
+func TestParseBytesInvalidYAML(t *testing.T) {
+	content := `---
+foo: [unclosed
+---
+body
+`
+	_, err := ParseBytes([]byte(content))
+	if err == nil {
+		t.Error("Expected error for invalid YAML frontmatter")
+	}
+}
+
+func TestParseFilesInDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "a.md"), []byte("---\nid: a\n---\nA"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "b.md"), []byte("---\nid: b\n---\nB"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := ParseFilesInDir(tmpDir)
+	if err != nil {
+		t.Fatalf("ParseFilesInDir failed: %v", err)
+	}
+	if len(results) != 2 {
+		t.Errorf("Expected 2 documents, got %d", len(results))
+	}
+	if results["a.md"] == nil || results["a.md"].Frontmatter.ID != "a" {
+		t.Error("Expected document a")
+	}
+}
+
+func TestExtractWikiLinksDeduplicates(t *testing.T) {
+	body := "See [[Note A]] and [[Note A]] again."
+	links := ExtractWikiLinks(body)
+	if len(links) != 1 {
+		t.Errorf("Expected 1 unique wiki link, got %d", len(links))
+	}
+}

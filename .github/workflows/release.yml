@@ -12,9 +12,12 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  WAILS_VERSION: v2.9.2
+
 jobs:
-  build:
-    name: Build release artifacts
+  build-linux:
+    name: Build CLI, Linux desktop, extension, and mobile artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -27,6 +30,7 @@ jobs:
         with:
           node-version: '20'
           cache: npm
+          cache-dependency-path: apps/**/package-lock.json
       - name: Install GTK/WebKit system libraries
         run: |
           sudo apt-get update
@@ -37,27 +41,169 @@ jobs:
           (cd apps/browser-extension && npm ci)
           (cd apps/desktop-wails/frontend && npm ci)
           (cd apps/mobile-expo && npm ci)
-      - name: Build all release artifacts
+      - name: Build all Linux release artifacts
         run: make release
-      - name: Upload release artifact bundle
+      - name: Upload Linux artifact bundle
         uses: actions/upload-artifact@v4
         with:
-          name: release-artifacts
+          name: release-artifacts-linux
           path: dist/**
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS desktop app
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+      MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+      MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/desktop-wails/go.mod
+          cache-dependency-path: apps/desktop-wails/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache-dependency-path: apps/desktop-wails/frontend/package-lock.json
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+      - name: Install frontend dependencies
+        working-directory: apps/desktop-wails/frontend
+        run: npm ci
+      - name: Build macOS .app bundle
+        working-directory: apps/desktop-wails
+        run: wails build -platform darwin
+      - name: Determine signing availability
+        run: |
+          if [ -n "$MACOS_CERTIFICATE" ]; then
+            echo "MACOS_SIGN_ENABLED=true" >> "$GITHUB_ENV"
+          else
+            echo "MACOS_SIGN_ENABLED=false" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$MACOS_CERTIFICATE" ] && [ -n "$MACOS_NOTARIZATION_APPLE_ID" ]; then
+            echo "MACOS_NOTARIZE_ENABLED=true" >> "$GITHUB_ENV"
+          else
+            echo "MACOS_NOTARIZE_ENABLED=false" >> "$GITHUB_ENV"
+          fi
+      - name: Import signing certificate
+        if: env.MACOS_SIGN_ENABLED == 'true'
+        run: |
+          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+      - name: Sign macOS .app
+        if: env.MACOS_SIGN_ENABLED == 'true'
+        working-directory: apps/desktop-wails/build/bin
+        run: codesign --deep --force --verify --verbose --sign "Developer ID Application" AgentVault.app
+      - name: Create .dmg
+        if: env.MACOS_SIGN_ENABLED == 'false'
+        working-directory: apps/desktop-wails/build/bin
+        run: hdiutil create -volname AgentVault -srcfolder AgentVault.app -ov -format UDZO AgentVault-unsigned.dmg
+      - name: Create signed .dmg
+        if: env.MACOS_SIGN_ENABLED == 'true'
+        working-directory: apps/desktop-wails/build/bin
+        run: hdiutil create -volname AgentVault -srcfolder AgentVault.app -ov -format UDZO AgentVault.dmg
+      - name: Notarize .dmg
+        if: env.MACOS_NOTARIZE_ENABLED == 'true'
+        working-directory: apps/desktop-wails/build/bin
+        run: |
+          xcrun notarytool submit AgentVault.dmg --apple-id "$MACOS_NOTARIZATION_APPLE_ID" --team-id "$MACOS_NOTARIZATION_TEAM_ID" --password "$MACOS_NOTARIZATION_PASSWORD" --wait
+          xcrun stapler staple AgentVault.dmg
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-macos
+          path: |
+            apps/desktop-wails/build/bin/AgentVault.app
+            apps/desktop-wails/build/bin/*.dmg
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows desktop app
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/desktop-wails/go.mod
+          cache-dependency-path: apps/desktop-wails/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache-dependency-path: apps/desktop-wails/frontend/package-lock.json
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+      - name: Install NSIS
+        run: choco install nsis -y
+      - name: Install frontend dependencies
+        working-directory: apps/desktop-wails/frontend
+        run: npm ci
+      - name: Build Windows installer
+        working-directory: apps/desktop-wails
+        run: wails build -platform windows -nsis
+      - name: Determine signing availability
+        shell: bash
+        run: |
+          if [ -n "$WINDOWS_CERTIFICATE" ]; then
+            echo "WINDOWS_SIGN_ENABLED=true" >> "$GITHUB_ENV"
+          else
+            echo "WINDOWS_SIGN_ENABLED=false" >> "$GITHUB_ENV"
+          fi
+      - name: Sign Windows installer
+        if: env.WINDOWS_SIGN_ENABLED == 'true'
+        working-directory: apps/desktop-wails/build/bin
+        shell: pwsh
+        run: |
+          $certBytes = [Convert]::FromBase64String("$env:WINDOWS_CERTIFICATE")
+          [IO.File]::WriteAllBytes("certificate.pfx", $certBytes)
+          Get-ChildItem -Filter "*.exe" | ForEach-Object {
+            signtool sign /f certificate.pfx /p "$env:WINDOWS_CERTIFICATE_PASSWORD" /tr http://timestamp.digicert.com /td sha256 /fd sha256 $_.FullName
+          }
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-windows
+          path: apps/desktop-wails/build/bin/*.exe
           if-no-files-found: error
 
   release:
     name: Create GitHub release
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: build
+    needs:
+      - build-linux
+      - build-macos
+      - build-windows
     steps:
       - uses: actions/checkout@v4
-      - name: Download release artifacts
+      - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
-          name: release-artifacts
+          name: release-artifacts-linux
           path: dist
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts-macos
+          path: dist/macos
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts-windows
+          path: dist/windows
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -67,4 +213,5 @@ jobs:
             --title "AgentVault $TAG" \
             --generate-notes \
             --draft \
-            dist/cli/* dist/desktop/* dist/extension/* dist/mobile/*.zip
+            dist/cli/* dist/desktop/* dist/extension/* dist/mobile/*.zip \
+            dist/macos/* dist/windows/*
