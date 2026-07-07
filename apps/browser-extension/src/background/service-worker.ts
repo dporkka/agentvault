@@ -1,4 +1,5 @@
 import type { PageData } from '@shared/local';
+import { retryQueuedCaptures } from '@shared/capture-queue';
 
 interface ContextMenuInfo {
   menuItemId: string | number;
@@ -140,18 +141,18 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     return true;
   }
   if (request.action === 'retryCaptures') {
-    import('@shared/capture-queue').then(({ retryQueuedCaptures }) => {
-      retryQueuedCaptures().then((count) => sendResponse({ synced: count }));
-    });
+    retryQueuedCaptures().then((count) => sendResponse({ synced: count }));
     return true;
   }
   return false;
 });
 
-chrome.alarms?.onAlarm.addListener((alarm) => {
+chrome.alarms?.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'retry-captures') {
-    import('@shared/capture-queue').then(({ retryQueuedCaptures }) => {
-      retryQueuedCaptures().catch(() => { /* ignore background retry errors */ });
-    });
+    try {
+      await retryQueuedCaptures();
+    } catch {
+      // ignore background retry errors
+    }
   }
 });

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
     "dev": "vite"
   },
   "dependencies": {

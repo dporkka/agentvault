@@ -49,11 +49,11 @@ func (s *Server) handleVaultStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"path":      s.vaultPath,
-		"isVault":   isVault,
-		"noteCount": noteCount,
-		"version": indexedAt,
+	writeJSON(w, http.StatusOK, contract.VaultStatus{
+		Path:      s.vaultPath,
+		IsVault:   isVault,
+		NoteCount: noteCount,
+		Version:   indexedAt,
 	})
 }
 

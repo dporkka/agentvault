@@ -1,6 +1,6 @@
 # AgentVault Codebase Analysis
 
-Last reviewed: 2026-06-28
+Last reviewed: 2026-07-07
 
 ## Evidence Reviewed
 
@@ -136,10 +136,11 @@ AgentVault is a local-first Markdown vault with agent-facing retrieval and multi
      client can check a stored token without making a write request.
 
 7. Desktop bundle splitting reduced the main chunk but one vendor chunk is still large.
-   - `vite.config.ts` now splits `react-vendor`, `editor-vendor`, and a generic
-     `vendor` chunk, so the main `index` chunk is no longer the >500 kB offender.
-   - The `codemirror-vendor` chunk still triggers a Vite chunk-size warning
-     (~605 kB after minification). This is a known P2 budget item.
+   - `vite.config.ts` now splits `react-vendor`, `markdown-vendor`, and several
+     CodeMirror chunks (`codemirror-core`, `codemirror-lang`, etc.), so the main
+     `index` chunk is no longer the >500 kB offender.
+   - The `codemirror-core` chunk still triggers a Vite chunk-size warning
+     (~562 kB after minification). This is a known P2 budget item.
 
 8. Documentation was stale before this pass.
    - README listed completed areas as upcoming.
@@ -155,8 +156,8 @@ AgentVault is a local-first Markdown vault with agent-facing retrieval and multi
 | --- | --- | --- |
 | `apps/web-local npm run build` | Pass | Vite production build succeeded. |
 | `apps/browser-extension npm run build` | Pass | Vite production build succeeded. |
-| `apps/desktop-wails/frontend npm run build` | Pass with warning | `codemirror-vendor` chunk is ~605 kB after minification. |
-| `apps/mobile-expo npx tsc --noEmit` | Pass | No TypeScript output. |
+| `apps/desktop-wails/frontend npm run build` | Pass with warning | `codemirror-core` chunk is ~562 kB after minification. |
+| `apps/mobile-expo npm run typecheck` | Pass | No TypeScript errors. |
 | `core go test ./...` | Pass | `go vet ./...` clean. CI installs Go 1.23. |
 | `apps/desktop-wails go vet ./...` | Pass | Wails bindings regenerated after adding vector params to `NoteService.Search`. |
 | `make contract-check` | Pass | No snake_case keys or hard-coded base URLs detected in clients.

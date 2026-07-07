@@ -52,7 +52,7 @@
     "jest-expo": "^56.0.5",
     "prettier": "^3.3.2",
     "react-test-renderer": "19.2.3",
-    "typescript": "^6.0.3"
+    "typescript": "^5.4.5"
   },
   "overrides": {
     "uuid": "^11.1.1"

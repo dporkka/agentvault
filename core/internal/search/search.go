@@ -14,7 +14,7 @@ import (
 
 // Searcher performs searches against the vault database.
 type Searcher struct {
-	db         *db.DB
+	db          *db.DB
 	embedClient *embeddings.Client
 }
 

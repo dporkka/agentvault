@@ -175,7 +175,7 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
       return call<HealthResponse>('GET', '/health', undefined, false);
     },
     verifyAuth() {
-      return call<AuthVerifyResponse>('GET', '/auth/verify', undefined, false);
+      return call<AuthVerifyResponse>('GET', '/auth/verify', undefined, true);
     },
     getVaultStatus() {
       return call<VaultStatus>('GET', '/vault/status', undefined, false);

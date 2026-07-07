@@ -5,6 +5,14 @@ dist/
 apps/desktop-wails/build/
 apps/desktop-wails/desktop
 
+# Go coverage and tool-chain archives
+coverage.out
+*.cover
+*.cov
+go1.*.linux-*.tar.gz
+go1.*.darwin-*.tar.gz
+go1.*.windows-*.zip
+
 # Expo local state and build output
 .expo/
 *.jks
@@ -22,6 +30,19 @@ node_modules/
 
 # WSL/Windows metadata
 *:Zone.Identifier
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
 
 # Local test vault
 test-vault/

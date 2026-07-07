@@ -1,4 +1,4 @@
-.PHONY: build test lint dev-core clean install help desktop desktop-dev contract-check contract-list-snake
+.PHONY: build test test-ci lint fmt tidy dev-core clean install help desktop desktop-dev ci contract-check contract-list-snake
 
 VAULT := ./test-vault
 CORE := ./core
@@ -9,15 +9,36 @@ WAILS_TAGS := webkit2_41
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
+ci: lint test-ci contract-check ## Run the same checks as CI locally
+
 build: ## Build the agentvault CLI binary
 	cd $(CORE) && go build -o ../bin/agentvault ./cmd/agentvault
 
-test: ## Run all Go tests
+test: ## Run all Go tests (verbose)
 	cd $(CORE) && go test ./... -v
 
-lint: ## Run go vet and fmt
+test-ci: ## Run Go tests with race detection and cache disabled (CI mode)
+	cd $(CORE) && go test -race -count=1 ./...
+
+lint: ## Run read-only Go checks (vet + gofmt)
 	cd $(CORE) && go vet ./...
+	cd $(DESKTOP) && go vet ./...
+	@UNFMT_CORE=$$(cd $(CORE) && gofmt -l .); \
+	UNFMT_DESKTOP=$$(cd $(DESKTOP) && gofmt -l .); \
+	if [ -n "$$UNFMT_CORE" ] || [ -n "$$UNFMT_DESKTOP" ]; then \
+		echo "Go files not formatted:"; \
+		printf '%s\n' "$$UNFMT_CORE" "$$UNFMT_DESKTOP"; \
+		exit 1; \
+	fi
+	@echo "Go lint passed."
+
+fmt: ## Format all Go files
 	cd $(CORE) && gofmt -w .
+	cd $(DESKTOP) && gofmt -w .
+
+tidy: ## Tidy and verify Go modules
+	cd $(CORE) && go mod tidy && go mod verify
+	cd $(DESKTOP) && go mod tidy && go mod verify
 
 dev-core: ## Run CLI commands against test vault
 	@echo "Example: go run ./core/cmd/agentvault init $(VAULT)"
@@ -44,10 +65,10 @@ search-test: build ## Search the test vault
 contract-check: ## Verify @agentvault/contract is the only source of API types in clients
 	@echo "Checking @agentvault/contract usage..."
 	@cd packages/contract && npx --yes -p typescript@5.4.5 tsc --noEmit
-	@cd apps/web-local && npx --yes tsc --noEmit
-	@cd apps/browser-extension && npx --yes tsc --noEmit
-	@cd apps/mobile-expo && npx --yes tsc --noEmit
-	@cd apps/desktop-wails/frontend && npx --yes tsc --noEmit
+	@cd apps/web-local && npx tsc --noEmit
+	@cd apps/browser-extension && npx tsc --noEmit
+	@cd apps/mobile-expo && npx tsc --noEmit
+	@cd apps/desktop-wails/frontend && npx tsc --noEmit
 	@echo "Checking for snake_case fields in client code (server emits camelCase)..."
 	@SNAKE_RE=$$(scripts/contract-snake-list.sh core/internal/contract/contract.go | paste -sd'|' -); \
 	if [ -n "$$SNAKE_RE" ]; then \

@@ -13,6 +13,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // Desktop assets are embedded, so a ~550 kB vendor chunk is fine; raise
+    // the warning threshold rather than splitting into many tiny chunks.
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -23,13 +26,22 @@ export default defineConfig({
             if (id.includes('react') || id.includes('react-dom')) {
               return 'react-vendor';
             }
-            if (
-              id.includes('@codemirror') ||
-              id.includes('codemirror') ||
-              id.includes('@lezer') ||
-              id.includes('@uiw/react-codemirror')
-            ) {
-              return 'codemirror-vendor';
+            // Split CodeMirror into smaller chunks so no single embedded vendor
+            // chunk trips Vite's default 500 kB warning.
+            if (id.includes('@codemirror/view')) {
+              return 'codemirror-view';
+            }
+            if (id.includes('@codemirror/state')) {
+              return 'codemirror-state';
+            }
+            if (id.includes('@uiw/react-codemirror')) {
+              return 'codemirror-uiw';
+            }
+            if (id.includes('@codemirror/lang-markdown') || id.includes('@lezer')) {
+              return 'codemirror-lang';
+            }
+            if (id.includes('@codemirror') || id.includes('codemirror')) {
+              return 'codemirror-core';
             }
             return 'vendor';
           }

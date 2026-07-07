@@ -34,10 +34,11 @@ type EmbedConfig struct {
 
 // IndexOptions controls indexing behavior.
 type IndexOptions struct {
-	Force   bool   // reindex even if hash matches
-	Rebuild bool   // drop and recreate all indexes
-	Path    string // index only this subpath
-	Embed   bool   // generate embeddings during index
+	Force    bool   // reindex even if hash matches
+	Rebuild  bool   // drop and recreate all indexes
+	Path     string // index only this subpath
+	Embed    bool   // generate embeddings during index
+	embedCfg *EmbedConfig
 }
 
 // IndexResult holds the outcome of an indexing run. It is an alias of
@@ -74,12 +75,19 @@ func (idx *Indexer) Index(opts IndexOptions) (*IndexResult, error) {
 	// Build embed config if requested
 	var embedCfg *EmbedConfig
 	if opts.Embed {
-		embedCfg = idx.buildEmbedConfig()
+		if opts.embedCfg != nil {
+			embedCfg = opts.embedCfg
+		} else {
+			embedCfg = idx.buildEmbedConfig()
+		}
 		if embedCfg == nil || !embedCfg.Enabled {
 			// Embedding requested but can't configure - log and continue without
 			// This is non-fatal; we just won't generate embeddings
 		}
 	}
+
+	// Rebuild implies a forced reindex so cleared indexes are repopulated.
+	force := opts.Force || opts.Rebuild
 
 	searchPath := idx.vaultPath
 	if opts.Path != "" {
@@ -111,7 +119,7 @@ func (idx *Indexer) Index(opts IndexOptions) (*IndexResult, error) {
 			return nil
 		}
 
-		fileResult, err := idx.indexFile(relPath, opts.Force, embedCfg)
+		fileResult, err := idx.indexFile(relPath, force, embedCfg)
 		if err != nil {
 			result.Errors = append(result.Errors, IndexError{Path: relPath, Error: err.Error()})
 		} else {
@@ -167,12 +175,12 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 	// Check if file already indexed with same hash
 	var existingHash string
 	row := idx.db.QueryRow("SELECT content_hash FROM files WHERE id = ?", fileID)
-	if err := row.Scan(&existingHash); err == nil && existingHash == hash && !force {
-		// File unchanged
-		result.skipped = true
-		return result, nil
-	}
-	if err == nil {
+	if err := row.Scan(&existingHash); err == nil {
+		if existingHash == hash && !force {
+			// File unchanged
+			result.skipped = true
+			return result, nil
+		}
 		result.updated = true
 	}
 

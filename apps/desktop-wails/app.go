@@ -115,6 +115,10 @@ func (s *VaultService) OpenVault(path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
+	if err := database.RunMigrations(); err != nil {
+		database.Close()
+		return fmt.Errorf("failed to run migrations: %w", err)
+	}
 
 	s.app.vaultPath = path
 	s.app.db = database
@@ -265,6 +269,9 @@ func (s *NoteService) GetNoteContent(path string) (string, error) {
 	if s.app.vaultPath == "" {
 		return "", fmt.Errorf("no vault is open")
 	}
+	if !filepath.IsLocal(path) {
+		return "", fmt.Errorf("invalid note path")
+	}
 
 	fullPath := filepath.Join(s.app.vaultPath, path)
 	content, err := os.ReadFile(fullPath)
@@ -279,8 +286,14 @@ func (s *NoteService) SaveNote(path string, content string) error {
 	if s.app.vaultPath == "" {
 		return fmt.Errorf("no vault is open")
 	}
+	if !filepath.IsLocal(path) {
+		return fmt.Errorf("invalid note path")
+	}
 
 	fullPath := filepath.Join(s.app.vaultPath, path)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		return fmt.Errorf("failed to create note directory: %w", err)
+	}
 	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to save note: %w", err)
 	}
@@ -422,6 +435,14 @@ type IndexService struct {
 type IndexingStatus struct {
 	IsIndexing bool `json:"isIndexing"`
 	NoteCount  int  `json:"noteCount"`
+}
+
+// AIStatus represents the current AI provider configuration and reachability.
+type AIStatus struct {
+	Enabled  bool   `json:"enabled"`
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+	Error    string `json:"error"`
 }
 
 // Index triggers a vault index

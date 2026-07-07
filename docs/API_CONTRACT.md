@@ -1,6 +1,6 @@
 # AgentVault Local HTTP API Contract
 
-Last updated: 2026-06-15
+Last updated: 2026-07-07
 
 This is the single source of truth for the local HTTP API exposed by
 `agentvault serve` (package `core/internal/api`). It documents every route, its
@@ -306,9 +306,6 @@ shape as [`/search`](#get-search).
 
 Query parameters (all optional):
 - `limit`: max results (default 10)
-- `vector`: enable vector/hybrid search (`true` or `1`)
-- `hybrid_weight`: weight for vector vs FTS (0=FTS only, 1=vector only, default 0.5)
-- `topk`: number of vector candidates to fetch (default limit*3)
 
 ## GET /stale
 
@@ -318,9 +315,6 @@ Same camelCase `[]search.Result` shape as [`/search`](#get-search).
 Query parameters (all optional):
 - `days`: staleness window in days (default 30)
 - `limit`: max results (default 20)
-- `vector`: enable vector/hybrid search (`true` or `1`)
-- `hybrid_weight`: weight for vector vs FTS (0=FTS only, 1=vector only, default 0.5)
-- `topk`: number of vector candidates to fetch (default 60)
 
 ## GET /git/status
 

@@ -163,15 +163,9 @@ export interface SearchParams {
 
 export interface RecentParams {
   limit?: number;
-  vector?: boolean;
-  hybridWeight?: number;
-  topk?: number;
 }
 
 export interface StaleParams {
   days?: number;
   limit?: number;
-  vector?: boolean;
-  hybridWeight?: number;
-  topk?: number;
 }

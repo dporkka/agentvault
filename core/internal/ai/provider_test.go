@@ -51,8 +51,8 @@ func TestLoadProvider(t *testing.T) {
 		{
 			name: "openai provider",
 			cfg: &config.AIConfig{
-				Provider: "openai",
-				APIKey:   "sk-test",
+				Provider:  "openai",
+				APIKey:    "sk-test",
 				ChatModel: "gpt-4o",
 			},
 			wantName: "openai",
@@ -61,8 +61,8 @@ func TestLoadProvider(t *testing.T) {
 		{
 			name: "anthropic provider",
 			cfg: &config.AIConfig{
-				Provider: "anthropic",
-				APIKey:   "sk-ant-test",
+				Provider:  "anthropic",
+				APIKey:    "sk-ant-test",
 				ChatModel: "claude-3-opus",
 			},
 			wantName: "anthropic",
@@ -71,8 +71,8 @@ func TestLoadProvider(t *testing.T) {
 		{
 			name: "openrouter provider",
 			cfg: &config.AIConfig{
-				Provider: "openrouter",
-				APIKey:   "sk-or-test",
+				Provider:  "openrouter",
+				APIKey:    "sk-or-test",
 				ChatModel: "anthropic/claude-3.5-sonnet",
 			},
 			wantName: "openrouter",

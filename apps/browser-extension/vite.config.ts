@@ -5,6 +5,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    target: 'es2022',
     rollupOptions: {
       input: {
         popup: resolve(__dirname, 'popup/index.html'),

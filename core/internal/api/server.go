@@ -164,7 +164,9 @@ func (s *Server) RegisterRoutes() {
 func (s *Server) Start(addr string) error {
 	s.addr = addr
 
-	// Apply middleware chain: logging → cors → auth → rate limit → routes
+	// Apply middleware chain: rate limit → logging → cors → auth → routes.
+	// Each new handler wraps the previous one, so the last wrapper added is
+	// the outermost layer executed first for an incoming request.
 	var handler http.Handler = s.mux
 	handler = s.authMiddleware(handler)
 	handler = s.corsMiddleware(handler)

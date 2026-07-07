@@ -256,5 +256,3 @@ func extractAliases(doc *markdown.ParsedDocument) []string {
 
 	return aliases
 }
-
-

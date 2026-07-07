@@ -40,16 +40,16 @@ type NoteDetail struct {
 // IndexResult is the body returned by POST /vault/index. duration is the
 // Go time.Duration serialized as integer nanoseconds.
 type IndexResult struct {
-	Scanned     int           `json:"scanned"`
-	Added       int           `json:"added"`
-	Updated     int           `json:"updated"`
-	Removed     int           `json:"removed"`
-	Skipped     int           `json:"skipped"`
-	Errors      []IndexError  `json:"errors"`
-	ChunksAdded int           `json:"chunksAdded"`
-	EmbedErrors int           `json:"embedErrors"`
+	Scanned     int          `json:"scanned"`
+	Added       int          `json:"added"`
+	Updated     int          `json:"updated"`
+	Removed     int          `json:"removed"`
+	Skipped     int          `json:"skipped"`
+	Errors      []IndexError `json:"errors"`
+	ChunksAdded int          `json:"chunksAdded"`
+	EmbedErrors int          `json:"embedErrors"`
 	// Duration is the wall-clock indexing time serialized as integer nanoseconds (time.Duration).
-	Duration    time.Duration `json:"duration"`
+	Duration time.Duration `json:"duration"`
 }
 
 // IndexError records a single file that failed during an indexing run.
@@ -93,12 +93,12 @@ type VaultStatus struct {
 // file arrays empty) and the server returns an empty repo state rather
 // than an error.
 type GitStatus struct {
-	IsGitRepo      bool               `json:"isGitRepo"`
-	Branch         string             `json:"branch"`
-	Clean          bool               `json:"clean"`
-	AheadBehind    string             `json:"aheadBehind"`
-	ModifiedFiles  []GitModifiedFile  `json:"modifiedFiles"`
-	UntrackedFiles []string           `json:"untrackedFiles"`
+	IsGitRepo      bool              `json:"isGitRepo"`
+	Branch         string            `json:"branch"`
+	Clean          bool              `json:"clean"`
+	AheadBehind    string            `json:"aheadBehind"`
+	ModifiedFiles  []GitModifiedFile `json:"modifiedFiles"`
+	UntrackedFiles []string          `json:"untrackedFiles"`
 }
 
 // GitModifiedFile is a single entry in GitStatus.ModifiedFiles.

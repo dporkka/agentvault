@@ -2,10 +2,18 @@
 # contract-snake-list.sh — emit unique snake_case JSON field names extracted
 # from Go struct tags. Only fields that are NOT already snake_case are emitted.
 # Usage: contract-snake-list.sh <file.go>
-if [[ -z "$1" ]]; then
+set -euo pipefail
+
+if [[ $# -eq 0 ]]; then
   echo "usage: contract-snake-list.sh <file.go>" >&2
   exit 1
 fi
+
+if [[ ! -f "$1" ]]; then
+  echo "error: file not found: $1" >&2
+  exit 1
+fi
+
 awk '
 {
   line = $0

@@ -85,8 +85,8 @@ func TestMarkdownImporter_ImportMultipleFiles(t *testing.T) {
 
 	// Create multiple source files
 	files := map[string]string{
-		"note1.md": "---\nid: n1\ntype: note\ntitle: Note One\n---\n\nBody one.\n",
-		"note2.md": "---\nid: n2\ntype: note\ntitle: Note Two\n---\n\nBody two.\n",
+		"note1.md":        "---\nid: n1\ntype: note\ntitle: Note One\n---\n\nBody one.\n",
+		"note2.md":        "---\nid: n2\ntype: note\ntitle: Note Two\n---\n\nBody two.\n",
 		"subdir/note3.md": "---\nid: n3\ntype: note\ntitle: Note Three\n---\n\nBody three.\n",
 	}
 

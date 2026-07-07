@@ -1,6 +1,6 @@
 # AgentVault Improvement Plan
 
-Last updated: 2026-06-28
+Last updated: 2026-07-07
 
 ## Goal
 
@@ -117,7 +117,7 @@ Deliverables:
 - Not started — make capture sync states explicit: unsynced, syncing, synced, failed.
 - Done — align project pickers and note filters across web, extension, mobile, and desktop (all use the shared `@agentvault/contract` types and consistent filter sets).
 - Done — share request/response types from one contract source (`@agentvault/contract`).
-- Partially done — improve desktop bundle splitting for CodeMirror/markdown-heavy paths. The main chunk is no longer the offender; the `codemirror-vendor` chunk still triggers a warning.
+- Partially done — improve desktop bundle splitting for CodeMirror/markdown-heavy paths. The main chunk is no longer the offender; the `codemirror-core` chunk still triggers a warning.
 
 Exit criteria:
 
@@ -144,8 +144,8 @@ What remains for Phase 2:
 - Surface auth status and capture-sync states in the desktop app (the Wails
   desktop does not use the HTTP API, so it needs its own token/status plumbing
   or a Wails-backed status panel).
-- Budget or eliminate the remaining desktop `codemirror-vendor` chunk warning
-  (~605 kB after minification).
+- Budget or eliminate the remaining desktop `codemirror-core` chunk warning
+  (~562 kB after minification).
 
 ## Phase 3 - Vault Lifecycle And Data Quality
 

@@ -14,7 +14,7 @@ type VaultConfig struct {
 	VaultPath      string            `json:"vaultPath"`
 	DefaultProject string            `json:"defaultProject,omitempty"`
 	AI             *AIConfig         `json:"ai,omitempty"`
-	Templates      map[string]string `json:"templates,omitempty"`
+	Templates      map[string]string `json:"templates"`
 	CreatedAt      string            `json:"createdAt"`
 	UpdatedAt      string            `json:"updatedAt"`
 }
@@ -44,7 +44,11 @@ func Load(vaultPath string) (*VaultConfig, error) {
 
 // Save writes the config to the vault directory.
 func Save(vaultPath string, cfg *VaultConfig) error {
-	configPath := filepath.Join(vaultPath, ".agentvault", "config.json")
+	configDir := filepath.Join(vaultPath, ".agentvault")
+	configPath := filepath.Join(configDir, "config.json")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("could not create config directory: %w", err)
+	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("could not marshal config: %w", err)

@@ -29,6 +29,7 @@ export function Popup() {
   const [pageData, setPageData] = useState<PageData>({ title: '', url: '', selectedText: '' });
   const [showSettings, setShowSettings] = useState(false);
   const [token, setTokenState] = useState('');
+  const [tokenInput, setTokenInput] = useState('');
   const [serverUrl, setServerUrl] = useState(API_BASE);
   const [baseUrlInput, setBaseUrlInput] = useState(API_BASE);
   const [vault, setVault] = useState<VaultStatus | null>(null);
@@ -73,7 +74,10 @@ export function Popup() {
 
   useEffect(() => {
     refreshStatus();
-    getToken().then(setTokenState);
+    getToken().then((t) => {
+      setTokenState(t);
+      setTokenInput(t);
+    });
     getBaseUrl().then((url) => {
       setServerUrl(url);
       setBaseUrlInput(url);
@@ -183,8 +187,9 @@ export function Popup() {
             </label>
             <input
               type="password"
-              value={token}
-              onChange={(e) => saveToken(e.target.value)}
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              onBlur={(e) => saveToken(e.target.value)}
               placeholder="X-AgentVault-Token (printed by 'serve')"
               style={inputStyle}
             />
