@@ -5,6 +5,10 @@
 [![Go Version](https://img.shields.io/badge/Go-1.23%2B-blue.svg)](https://go.dev)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
+<p align="center">
+  <img src="docs/assets/logo.png" alt="AgentVault logo" width="160">
+</p>
+
 **A local-first knowledge operating system for notes, decisions, research, tasks, and agent-readable context.**
 
 AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The same files are readable by you, editable in any editor, and indexable by the Go core for fast full-text, semantic, and hybrid search. A single shared API contract keeps the CLI, local HTTP API, MCP server, desktop app, web app, browser extension, and mobile app in sync.
@@ -17,6 +21,7 @@ AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The sam
 ## Table of Contents
 
 - [Features](#features)
+- [Screenshot](#screenshot)
 - [Quick Start](#quick-start)
 - [Install](#install)
 - [CLI Reference](#cli-reference)
@@ -41,6 +46,14 @@ AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The sam
 | **MCP server** | Expose vault search, read, create, capture, and ask as Model Context Protocol tools. |
 | **Multi-client support** | First-party desktop (Wails), web (Vite), browser extension (MV3), and mobile (Expo) apps. |
 | **Vault diagnostics** | `agentvault doctor` checks config, database, migrations, links, orphan chunks, embeddings, and API auth. |
+
+## Screenshot
+
+<p align="center">
+  <img src="docs/assets/screenshot.png" alt="AgentVault desktop app screenshot" width="960">
+</p>
+
+The desktop app shows the inbox, a Markdown editor with live preview, and sync-state indicators for each note.
 
 ## Quick Start
 
