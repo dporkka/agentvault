@@ -30,6 +30,20 @@ The token is printed at startup.`,
 var servePort int
 var serveHost string
 
+// serveStopSignal returns a channel that is closed when the server should shut
+// down. It is overridable in tests so the serve loop can be stopped without
+// sending signals to the test process.
+var serveStopSignal = func() <-chan struct{} {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() {
+		<-quit
+		close(done)
+	}()
+	return done
+}
+
 func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.Flags().IntVar(&servePort, "port", 47321, "Port to listen on")
@@ -69,9 +83,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}()
 
 	// 6. Wait for interrupt signal for graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	<-serveStopSignal()
 
 	fmt.Println("\nShutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

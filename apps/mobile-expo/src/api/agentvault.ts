@@ -29,7 +29,10 @@ interface ClientOverrides {
  */
 export async function createMobileClient(overrides?: ClientOverrides): Promise<ApiClient> {
   const settings = await getSettings();
-  const baseUrl = (overrides?.baseUrl ?? (settings.serverUrl || DEFAULT_BASE_URL)).replace(/\/$/, '');
+  const baseUrl = (overrides?.baseUrl ?? (settings.serverUrl || DEFAULT_BASE_URL)).replace(
+    /\/$/,
+    '',
+  );
   const token = overrides?.token ?? settings.token ?? '';
   return createClient({ baseUrl, token });
 }
@@ -61,11 +64,11 @@ export async function searchVault(
   query: string | (SearchParams & { q?: string }),
   url?: string,
 ): Promise<SearchResult[]> {
-  const client = await createMobileClient(url ? { baseUrl: url } : undefined);
-
   const params: SearchParams = typeof query === 'string' ? { q: query } : query;
   const q = params.q ?? '';
   if (!String(q).trim()) return [];
+
+  const client = await createMobileClient(url ? { baseUrl: url } : undefined);
   return client.search(params);
 }
 

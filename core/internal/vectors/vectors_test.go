@@ -186,3 +186,59 @@ func TestEuclideanDistance(t *testing.T) {
 		t.Errorf("Expected distance %f, got %f", expected, dist)
 	}
 }
+
+func TestDotProductDifferentLengths(t *testing.T) {
+	a := []float32{1.0, 2.0, 3.0}
+	b := []float32{1.0, 2.0}
+
+	result := DotProduct(a, b)
+	if result != 0 {
+		t.Errorf("Expected dot product 0 for different length vectors, got %f", result)
+	}
+}
+
+func TestDotProductEmpty(t *testing.T) {
+	result := DotProduct([]float32{}, []float32{})
+	if result != 0 {
+		t.Errorf("Expected dot product 0 for empty vectors, got %f", result)
+	}
+}
+
+func TestEuclideanDistanceDifferentLengths(t *testing.T) {
+	a := []float32{1.0, 2.0, 3.0}
+	b := []float32{1.0, 2.0}
+
+	dist := EuclideanDistance(a, b)
+	if dist != 0 {
+		t.Errorf("Expected distance 0 for different length vectors, got %f", dist)
+	}
+}
+
+func TestEuclideanDistanceEmpty(t *testing.T) {
+	dist := EuclideanDistance([]float32{}, []float32{})
+	if dist != 0 {
+		t.Errorf("Expected distance 0 for empty vectors, got %f", dist)
+	}
+}
+
+func TestCosineSimilarityZeroNorm(t *testing.T) {
+	a := []float32{0.0, 0.0, 0.0}
+	b := []float32{1.0, 2.0, 3.0}
+
+	sim := CosineSimilarity(a, b)
+	if sim != 0 {
+		t.Errorf("Expected similarity 0 for zero norm vector, got %f", sim)
+	}
+}
+
+func TestTopKEmptyVectors(t *testing.T) {
+	matches := TopK([]float32{1.0, 0.0}, [][]float32{}, 5)
+	if len(matches) != 0 {
+		t.Errorf("Expected 0 matches for empty vectors slice, got %d", len(matches))
+	}
+}
+
+func TestNormalizeNil(t *testing.T) {
+	var v []float32
+	Normalize(v) // should not panic
+}

@@ -3,6 +3,9 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -466,5 +469,363 @@ func TestStripHTMLTags(t *testing.T) {
 		if result != c.expected {
 			t.Errorf("stripHTMLTags(%q) = %q, want %q", c.input, result, c.expected)
 		}
+	}
+}
+
+func TestNewServer(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".agentvault"), 0755); err != nil {
+		t.Fatalf("create .agentvault dir: %v", err)
+	}
+
+	database, err := db.Open(tmpDir)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer database.Close()
+
+	srv := NewServer(tmpDir, database)
+	if srv == nil {
+		t.Fatal("NewServer returned nil")
+	}
+	if srv.vaultPath != tmpDir {
+		t.Errorf("expected vaultPath %q, got %q", tmpDir, srv.vaultPath)
+	}
+	if srv.db != database {
+		t.Error("expected db field to be set")
+	}
+	if srv.searcher == nil {
+		t.Error("expected searcher to be initialized")
+	}
+	if srv.indexer == nil {
+		t.Error("expected indexer to be initialized")
+	}
+	if len(srv.tools) != 0 {
+		t.Errorf("expected empty tools map before registration, got %d", len(srv.tools))
+	}
+
+	srv.RegisterTools()
+	if len(srv.tools) != 12 {
+		t.Errorf("expected 12 tools after RegisterTools, got %d", len(srv.tools))
+	}
+}
+
+func TestServeHTTP_MethodNotAllowed(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, rec.Code)
+	}
+}
+
+func TestServeHTTP_Auth(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+	srv.SetAuthToken("secret-token")
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize"}`
+
+	// Missing token
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 without token, got %d", rec.Code)
+	}
+
+	// Wrong token via custom header
+	req = httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	req.Header.Set("X-AgentVault-Token", "wrong")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 with wrong token, got %d", rec.Code)
+	}
+
+	// Correct token via Authorization header
+	req = httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer secret-token")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 with correct token, got %d", rec.Code)
+	}
+}
+
+func TestServeHTTP_SingleRequest(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+
+	body := `{"jsonrpc":"2.0","id":42,"method":"initialize"}`
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("expected Content-Type application/json, got %q", ct)
+	}
+
+	var resp JSONRPCResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.ID != float64(42) {
+		t.Errorf("expected id=42, got %v", resp.ID)
+	}
+	if resp.Error != nil {
+		t.Errorf("unexpected error: %v", resp.Error)
+	}
+}
+
+func TestServeHTTP_BatchRequest(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+
+	body := `[{"jsonrpc":"2.0","id":1,"method":"initialize"},{"jsonrpc":"2.0","id":2,"method":"tools/list"}]`
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var resps []JSONRPCResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resps); err != nil {
+		t.Fatalf("unmarshal batch: %v", err)
+	}
+	if len(resps) != 2 {
+		t.Fatalf("expected 2 responses, got %d", len(resps))
+	}
+	if resps[0].ID != float64(1) {
+		t.Errorf("expected first id=1, got %v", resps[0].ID)
+	}
+	if resps[1].ID != float64(2) {
+		t.Errorf("expected second id=2, got %v", resps[1].ID)
+	}
+}
+
+func TestServeHTTP_ParseError(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("not valid json"))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	var resp JSONRPCResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.Error == nil {
+		t.Fatal("expected parse error")
+	}
+	if resp.Error.Code != -32700 {
+		t.Errorf("expected code -32700, got %d", resp.Error.Code)
+	}
+}
+
+func TestHandleInvalidJSONRPCVersion(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+
+	req := JSONRPCRequest{JSONRPC: "1.0", ID: float64(1), Method: "initialize"}
+	resp := srv.Handle(context.Background(), req)
+	if resp.Error == nil {
+		t.Fatal("expected error for invalid JSON-RPC version")
+	}
+	if resp.Error.Code != -32600 {
+		t.Errorf("expected code -32600, got %d", resp.Error.Code)
+	}
+}
+
+func TestHandleToolsCall_MissingParams(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+
+	req := JSONRPCRequest{JSONRPC: "2.0", ID: float64(1), Method: "tools/call"}
+	resp := srv.Handle(context.Background(), req)
+	if resp.Error == nil {
+		t.Fatal("expected error for missing params")
+	}
+	if resp.Error.Code != -32602 {
+		t.Errorf("expected code -32602, got %d", resp.Error.Code)
+	}
+	if !strings.Contains(resp.Error.Message, "Missing params") {
+		t.Errorf("expected 'Missing params' message, got %q", resp.Error.Message)
+	}
+}
+
+func TestHandleToolsCall_MissingName(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+
+	req := JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      float64(1),
+		Method:  "tools/call",
+		Params:  map[string]interface{}{"arguments": map[string]interface{}{}},
+	}
+	resp := srv.Handle(context.Background(), req)
+	if resp.Error == nil {
+		t.Fatal("expected error for missing tool name")
+	}
+	if resp.Error.Code != -32602 {
+		t.Errorf("expected code -32602, got %d", resp.Error.Code)
+	}
+	if !strings.Contains(resp.Error.Message, "Missing or invalid tool name") {
+		t.Errorf("expected missing tool name message, got %q", resp.Error.Message)
+	}
+}
+
+func TestHandleToolsCall_InvalidNameType(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+
+	req := JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      float64(1),
+		Method:  "tools/call",
+		Params:  map[string]interface{}{"name": float64(123)},
+	}
+	resp := srv.Handle(context.Background(), req)
+	if resp.Error == nil {
+		t.Fatal("expected error for invalid tool name type")
+	}
+	if resp.Error.Code != -32602 {
+		t.Errorf("expected code -32602, got %d", resp.Error.Code)
+	}
+}
+
+func TestHandleToolsCall_ArgumentsNotMap(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+
+	req := JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      float64(1),
+		Method:  "tools/call",
+		Params: map[string]interface{}{
+			"name":      "agentvault.search",
+			"arguments": "not a map",
+		},
+	}
+	resp := srv.Handle(context.Background(), req)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+	if _, ok := resp.Result.(toolCallResult); !ok {
+		t.Fatalf("expected toolCallResult, got %T", resp.Result)
+	}
+}
+
+func TestHandleToolsCall_HandlerError(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+
+	req := JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      float64(1),
+		Method:  "tools/call",
+		Params: map[string]interface{}{
+			"name":      "agentvault.read_note",
+			"arguments": map[string]interface{}{"id": ""},
+		},
+	}
+	resp := srv.Handle(context.Background(), req)
+	if resp.Error != nil {
+		t.Fatalf("expected no JSON-RPC error, got %v", resp.Error)
+	}
+	result, ok := resp.Result.(toolCallResult)
+	if !ok {
+		t.Fatalf("expected toolCallResult, got %T", resp.Result)
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("expected content")
+	}
+	if !strings.Contains(result.Content[0].Text, "Error:") {
+		t.Errorf("expected error content, got %q", result.Content[0].Text)
+	}
+}
+
+func TestStringSliceArg_NonArray(t *testing.T) {
+	args := map[string]interface{}{"tags": "not an array"}
+	if stringSliceArg(args, "tags") != nil {
+		t.Error("expected nil for non-array value")
+	}
+}
+
+func TestStringSliceArg_SkipsNonStrings(t *testing.T) {
+	args := map[string]interface{}{"tags": []interface{}{"go", 123, "ai"}}
+	result := stringSliceArg(args, "tags")
+	if len(result) != 2 || result[0] != "go" || result[1] != "ai" {
+		t.Errorf("unexpected result: %v", result)
+	}
+}
+
+func TestServeStdio(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	// Redirect stdio so we can drive ServeStdio without a subprocess.
+	oldStdin := os.Stdin
+	oldStdout := os.Stdout
+	defer func() {
+		os.Stdin = oldStdin
+		os.Stdout = oldStdout
+	}()
+
+	rIn, wIn, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stdin pipe: %v", err)
+	}
+	os.Stdin = rIn
+
+	rOut, wOut, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stdout pipe: %v", err)
+	}
+	os.Stdout = wOut
+
+	done := make(chan struct{})
+	go func() {
+		s.ServeStdio()
+		wOut.Close()
+		close(done)
+	}()
+
+	req := `{"jsonrpc":"2.0","id":99,"method":"initialize"}` + "\n"
+	if _, err := wIn.WriteString(req); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+	wIn.Close()
+
+	<-done
+
+	data, err := io.ReadAll(rOut)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+
+	var resp JSONRPCResponse
+	if err := json.Unmarshal(data, &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.ID != float64(99) {
+		t.Errorf("expected id=99, got %v", resp.ID)
+	}
+	if resp.Error != nil {
+		t.Errorf("unexpected error: %v", resp.Error)
 	}
 }

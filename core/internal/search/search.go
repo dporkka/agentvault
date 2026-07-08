@@ -120,17 +120,6 @@ func (s *Searcher) Search(q Query) ([]Result, error) {
 		`
 	}
 
-	// Tag filter requires additional join
-	tagJoin := ""
-	if q.Tag != "" {
-		tagJoin = ` JOIN tags ON tags.note_id = notes.id `
-		// Insert tag join before WHERE clause
-		idx := strings.LastIndex(query, "WHERE")
-		if idx >= 0 {
-			query = query[:idx] + tagJoin + query[idx:]
-		}
-	}
-
 	// Apply filters
 	if q.Type != "" {
 		query += " AND notes.type = ?"
@@ -145,13 +134,12 @@ func (s *Searcher) Search(q Query) ([]Result, error) {
 		args = append(args, q.Status)
 	}
 	if q.Tag != "" {
-		query += " AND tags.tag = ?"
+		// Use an EXISTS subquery instead of joining tags. A JOIN changes the
+		// query shape in ways that break the FTS5 snippet() function when a
+		// text query is also present, and it requires GROUP BY to avoid
+		// duplicates. EXISTS avoids both issues.
+		query += " AND EXISTS (SELECT 1 FROM tags WHERE tags.note_id = notes.id AND tags.tag = ?)"
 		args = append(args, q.Tag)
-	}
-
-	// Group by to handle tag joins
-	if q.Tag != "" {
-		query += " GROUP BY notes.id"
 	}
 
 	// Order by rank for FTS, updated_at otherwise

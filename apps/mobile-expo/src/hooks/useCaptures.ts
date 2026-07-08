@@ -18,6 +18,8 @@ export function useCaptures(limit?: number): UseCapturesResult {
     try {
       const list = await getCaptures();
       setCaptures(limit ? list.slice(0, limit) : list);
+    } catch {
+      setCaptures([]);
     } finally {
       setLoading(false);
     }

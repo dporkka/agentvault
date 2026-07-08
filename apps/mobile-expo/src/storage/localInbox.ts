@@ -87,7 +87,18 @@ export async function getUnsyncedCaptures(): Promise<Capture[]> {
 
 export async function updateCapture(id: string, patch: Partial<Capture>): Promise<void> {
   const captures = await getCaptures();
-  const updated = captures.map((c) => (c.id === id ? { ...c, ...patch } : c));
+  const updated = captures.map((c) => {
+    if (c.id !== id) return c;
+    const next = { ...c, ...patch };
+    // Explicitly remove keys set to undefined so they are dropped from storage
+    // instead of being silently ignored by JSON.stringify.
+    for (const key of Object.keys(patch)) {
+      if (patch[key as keyof Capture] === undefined) {
+        delete (next as Record<string, unknown>)[key];
+      }
+    }
+    return next;
+  });
   await AsyncStorage.setItem(INBOX_KEY, JSON.stringify(updated));
 }
 

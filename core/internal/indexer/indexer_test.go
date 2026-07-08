@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/embeddings"
 )
@@ -336,4 +338,278 @@ type roundTripFunc func(req *http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+// ============================================================================
+// EmbedConfig tests
+// ============================================================================
+
+func TestBuildEmbedConfig(t *testing.T) {
+	t.Run("no config uses defaults", func(t *testing.T) {
+		vaultPath, database, cleanup := setupTestVault(t)
+		defer cleanup()
+		idx := New(database, vaultPath)
+
+		cfg := idx.buildEmbedConfig()
+		if cfg == nil {
+			t.Fatal("expected non-nil EmbedConfig")
+		}
+		if !cfg.Enabled {
+			t.Error("expected Enabled=true")
+		}
+		if cfg.Client.BaseURL() != "http://localhost:11434" {
+			t.Errorf("BaseURL = %q, want %q", cfg.Client.BaseURL(), "http://localhost:11434")
+		}
+		if cfg.Client.Model() != "nomic-embed-text" {
+			t.Errorf("Model = %q, want %q", cfg.Client.Model(), "nomic-embed-text")
+		}
+	})
+
+	t.Run("config values are used", func(t *testing.T) {
+		vaultPath, database, cleanup := setupTestVault(t)
+		defer cleanup()
+		idx := New(database, vaultPath)
+
+		if err := config.Save(vaultPath, &config.VaultConfig{
+			AI: &config.AIConfig{
+				BaseURL:        "http://ollama:11434",
+				EmbeddingModel: "all-minilm",
+			},
+		}); err != nil {
+			t.Fatalf("failed to save config: %v", err)
+		}
+
+		cfg := idx.buildEmbedConfig()
+		if cfg == nil {
+			t.Fatal("expected non-nil EmbedConfig")
+		}
+		if cfg.Client.BaseURL() != "http://ollama:11434" {
+			t.Errorf("BaseURL = %q, want %q", cfg.Client.BaseURL(), "http://ollama:11434")
+		}
+		if cfg.Client.Model() != "all-minilm" {
+			t.Errorf("Model = %q, want %q", cfg.Client.Model(), "all-minilm")
+		}
+	})
+
+	t.Run("config without AI section uses defaults", func(t *testing.T) {
+		vaultPath, database, cleanup := setupTestVault(t)
+		defer cleanup()
+		idx := New(database, vaultPath)
+
+		if err := config.Save(vaultPath, &config.VaultConfig{}); err != nil {
+			t.Fatalf("failed to save config: %v", err)
+		}
+
+		cfg := idx.buildEmbedConfig()
+		if cfg.Client.Model() != "nomic-embed-text" {
+			t.Errorf("Model = %q, want %q", cfg.Client.Model(), "nomic-embed-text")
+		}
+	})
+}
+
+// ============================================================================
+// embedNote edge-case tests
+// ============================================================================
+
+func TestEmbedNoteEdgeCases(t *testing.T) {
+	vaultPath, database, cleanup := setupTestVault(t)
+	defer cleanup()
+	idx := New(database, vaultPath)
+	embedCfg := &EmbedConfig{
+		Enabled: true,
+		Client:  embeddings.NewClient("http://localhost:11434", "nomic-embed-text"),
+	}
+
+	t.Run("empty body returns zero", func(t *testing.T) {
+		n, err := idx.embedNote("note1", "", embedCfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if n != 0 {
+			t.Errorf("expected 0 chunks, got %d", n)
+		}
+	})
+
+	t.Run("nil embed config returns zero", func(t *testing.T) {
+		n, err := idx.embedNote("note1", "some content", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if n != 0 {
+			t.Errorf("expected 0 chunks, got %d", n)
+		}
+	})
+
+	t.Run("embedding generation error with multiple chunks", func(t *testing.T) {
+		// Use an OpenAI-compatible endpoint so GenerateBatch sends all texts in one request.
+		client := embeddings.NewClient("http://localhost:11434/v1", "nomic-embed-text")
+		client.SetHTTPClient(&http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				body := map[string]interface{}{
+					"data": []map[string]interface{}{
+						{"embedding": []float32{0.1, 0.2, 0.3}, "index": 0},
+					},
+				}
+				b, _ := json.Marshal(body)
+				return &http.Response{
+					StatusCode: 200,
+					Body:       io.NopCloser(bytes.NewReader(b)),
+					Header:     make(http.Header),
+				}, nil
+			}),
+		})
+		cfg := &EmbedConfig{Enabled: true, Client: client}
+
+		// Generate enough words to force more than one chunk.
+		body := "# Heading\n\n" + strings.Repeat("This is a sentence with enough words to produce multiple chunks. ", 100)
+		_, err := idx.embedNote("note1", body, cfg)
+		if err == nil {
+			t.Fatal("expected error for embedding generation, got nil")
+		}
+		if !strings.Contains(err.Error(), "embedding generation failed") {
+			t.Errorf("unexpected error message: %q", err.Error())
+		}
+	})
+}
+
+// ============================================================================
+// Index edge-case tests
+// ============================================================================
+
+func TestIndexEmbedDisabled(t *testing.T) {
+	vaultPath, database, cleanup := setupTestVault(t)
+	defer cleanup()
+	idx := New(database, vaultPath)
+
+	writeNote(t, vaultPath, "10-notes/idea.md", "---\ntitle: My Idea\ntype: note\n---\n\nContent long enough to chunk.")
+
+	result, err := idx.Index(IndexOptions{Embed: true, embedCfg: &EmbedConfig{Enabled: false}})
+	if err != nil {
+		t.Fatalf("Index failed: %v", err)
+	}
+	if result.Added != 1 {
+		t.Errorf("expected Added=1, got %d", result.Added)
+	}
+	if result.ChunksAdded != 0 {
+		t.Errorf("expected ChunksAdded=0, got %d", result.ChunksAdded)
+	}
+	if result.EmbedErrors != 0 {
+		t.Errorf("expected EmbedErrors=0, got %d", result.EmbedErrors)
+	}
+}
+
+func TestIndexRebuildWithEmbed(t *testing.T) {
+	vaultPath, database, cleanup := setupTestVault(t)
+	defer cleanup()
+	idx := New(database, vaultPath)
+
+	writeNote(t, vaultPath, "10-notes/idea.md", "---\ntitle: My Idea\ntype: note\n---\n\nContent long enough to chunk.")
+
+	client := embeddings.NewClient("http://localhost:11434", "nomic-embed-text")
+	client.SetHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			body := map[string]interface{}{
+				"embedding": []float32{0.1, 0.2, 0.3},
+			}
+			b, _ := json.Marshal(body)
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewReader(b)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	})
+	embedCfg := &EmbedConfig{Enabled: true, Client: client}
+
+	if _, err := idx.Index(IndexOptions{Embed: true, embedCfg: embedCfg}); err != nil {
+		t.Fatalf("initial index failed: %v", err)
+	}
+
+	result, err := idx.Index(IndexOptions{Rebuild: true, Embed: true, embedCfg: embedCfg})
+	if err != nil {
+		t.Fatalf("Index failed: %v", err)
+	}
+	if result.Updated != 1 {
+		t.Errorf("expected Updated=1, got %d", result.Updated)
+	}
+	if result.Skipped != 0 {
+		t.Errorf("expected Skipped=0, got %d", result.Skipped)
+	}
+
+	var chunkCount int
+	row := database.QueryRow("SELECT COUNT(*) FROM chunks")
+	if err := row.Scan(&chunkCount); err != nil {
+		t.Fatalf("failed to count chunks: %v", err)
+	}
+	if chunkCount == 0 {
+		t.Error("expected chunks to be repopulated after rebuild")
+	}
+}
+
+func TestIndexNonExistentPath(t *testing.T) {
+	vaultPath, database, cleanup := setupTestVault(t)
+	defer cleanup()
+	idx := New(database, vaultPath)
+
+	_, err := idx.Index(IndexOptions{Path: "does-not-exist"})
+	if err == nil {
+		t.Fatal("expected error for non-existent path, got nil")
+	}
+}
+
+func TestIndexFileReadError(t *testing.T) {
+	vaultPath, database, cleanup := setupTestVault(t)
+	defer cleanup()
+	idx := New(database, vaultPath)
+
+	writeNote(t, vaultPath, "10-notes/locked.md", "---\ntitle: Locked\ntype: note\n---\n\nContent.")
+	fullPath := filepath.Join(vaultPath, "10-notes/locked.md")
+	if err := os.Chmod(fullPath, 0000); err != nil {
+		t.Fatalf("failed to chmod file: %v", err)
+	}
+	defer os.Chmod(fullPath, 0644)
+
+	result, err := idx.Index(IndexOptions{})
+	if err != nil {
+		t.Fatalf("Index returned unexpected error: %v", err)
+	}
+	if result.Scanned != 1 {
+		t.Errorf("expected Scanned=1, got %d", result.Scanned)
+	}
+	if len(result.Errors) != 1 {
+		t.Errorf("expected 1 error, got %d: %v", len(result.Errors), result.Errors)
+	}
+}
+
+func TestIndexNonMarkdownSkipped(t *testing.T) {
+	vaultPath, database, cleanup := setupTestVault(t)
+	defer cleanup()
+	idx := New(database, vaultPath)
+
+	fullPath := filepath.Join(vaultPath, "readme.txt")
+	if err := os.WriteFile(fullPath, []byte("not markdown"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	result := mustIndex(t, idx, IndexOptions{})
+	if result.Scanned != 0 {
+		t.Errorf("expected Scanned=0, got %d", result.Scanned)
+	}
+	if result.Added != 0 {
+		t.Errorf("expected Added=0, got %d", result.Added)
+	}
+}
+
+func TestFilepathToIDNested(t *testing.T) {
+	id := filepathToID("10-notes/sub/my note.md")
+	if id != "10-notes_sub_my note" {
+		t.Errorf("expected '10-notes_sub_my note', got %q", id)
+	}
+}
+
+func TestComputeHashEmpty(t *testing.T) {
+	h := ComputeHash([]byte{})
+	if len(h) != 64 {
+		t.Errorf("expected sha256 hex length 64, got %d", len(h))
+	}
 }

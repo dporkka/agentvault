@@ -147,7 +147,9 @@ export default function VaultPicker({ onVaultOpened }: Props) {
           type: 'info',
           message: `This folder is no longer an AgentVault. Use "Create New Vault" to initialize it.`,
         });
-        setRecentVaults((prev) => prev.filter((p) => p !== path));
+        const trimmed = recentVaults.filter((p) => p !== path);
+        setRecentVaults(trimmed);
+        saveRecentVaults(trimmed);
       }
     } catch (err: any) {
       setNotice({

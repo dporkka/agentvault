@@ -533,6 +533,9 @@ func (s *Server) handleListProjects(args map[string]interface{}) (string, error)
 		sb.WriteString(fmt.Sprintf("| %s | %d |\n", project, count))
 		total += count
 	}
+	if err := rows.Err(); err != nil {
+		return "", fmt.Errorf("project query failed: %w", err)
+	}
 
 	sb.WriteString(fmt.Sprintf("\n**Total project notes:** %d\n", total))
 

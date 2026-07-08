@@ -143,3 +143,117 @@ func TestRunConfigShowMasksAPIKey(t *testing.T) {
 		t.Error("config file should still contain the unmasked API key")
 	}
 }
+
+func TestRunConfigGetMissingConfig(t *testing.T) {
+	vp := setupTestVault(t)
+	vaultPath = vp
+
+	cmd := cobraCommandArgs([]string{"ai"})
+	err := runConfigGet(cmd, []string{"ai"})
+	if err == nil {
+		t.Fatal("runConfigGet expected error when config is missing")
+	}
+	if !strings.Contains(err.Error(), "could not load config") {
+		t.Errorf("error should mention 'could not load config', got: %v", err)
+	}
+}
+
+func TestRunConfigSetKeyAliases(t *testing.T) {
+	vp := setupVaultWithConfig(t)
+	vaultPath = vp
+
+	aliases := []struct {
+		key   string
+		field string
+		value string
+	}{
+		{"ai.base_url", "BaseURL", "https://example.com"},
+		{"ai.base-url", "BaseURL", "https://example.org"},
+		{"ai.chat_model", "ChatModel", "gpt-4o"},
+		{"ai.chat-model", "ChatModel", "gpt-4o-mini"},
+		{"ai.embedding_model", "EmbeddingModel", "text-embedding-3-small"},
+		{"ai.embedding-model", "EmbeddingModel", "nomic-embed-text"},
+	}
+
+	for _, tt := range aliases {
+		t.Run(tt.key, func(t *testing.T) {
+			cmd := cobraCommandArgs([]string{tt.key, tt.value})
+			if err := runConfigSet(cmd, []string{tt.key, tt.value}); err != nil {
+				t.Fatalf("runConfigSet(%q) returned error: %v", tt.key, err)
+			}
+
+			cfg, err := config.Load(vp)
+			if err != nil {
+				t.Fatalf("failed to load config: %v", err)
+			}
+			if cfg.AI == nil {
+				t.Fatal("expected AI config to be created")
+			}
+			var got string
+			switch tt.field {
+			case "BaseURL":
+				got = cfg.AI.BaseURL
+			case "ChatModel":
+				got = cfg.AI.ChatModel
+			case "EmbeddingModel":
+				got = cfg.AI.EmbeddingModel
+			}
+			if got != tt.value {
+				t.Errorf("%s = %q, want %q", tt.field, got, tt.value)
+			}
+		})
+	}
+}
+
+func TestRunConfigSetAPIKey(t *testing.T) {
+	vp := setupVaultWithConfig(t)
+	vaultPath = vp
+
+	cmd := cobraCommandArgs([]string{"ai.apiKey", "sk-test"})
+	if err := runConfigSet(cmd, []string{"ai.apiKey", "sk-test"}); err != nil {
+		t.Fatalf("runConfigSet returned error: %v", err)
+	}
+
+	cfg, err := config.Load(vp)
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+	if cfg.AI == nil || cfg.AI.APIKey != "sk-test" {
+		t.Errorf("expected API key to be saved, got %q", cfg.AI.APIKey)
+	}
+
+	// Verify get masks the key.
+	cmd = cobraCommandArgs([]string{"ai.apiKey"})
+	if err := runConfigGet(cmd, []string{"ai.apiKey"}); err != nil {
+		t.Fatalf("runConfigGet returned error: %v", err)
+	}
+}
+
+func TestRunConfigGetEnvAPIKey(t *testing.T) {
+	vp := setupVaultWithConfig(t)
+	vaultPath = vp
+
+	t.Setenv("AGENTVAULT_API_KEY", "sk-env")
+	cmd := cobraCommandArgs([]string{"ai.apiKey"})
+	if err := runConfigGet(cmd, []string{"ai.apiKey"}); err != nil {
+		t.Fatalf("runConfigGet returned error: %v", err)
+	}
+}
+
+func TestRunConfigSetNoConfigCreatesDefault(t *testing.T) {
+	vp := setupTestVault(t)
+	vaultPath = vp
+
+	cmd := cobraCommandArgs([]string{"ai.provider", "mock"})
+	if err := runConfigSet(cmd, []string{"ai.provider", "mock"}); err != nil {
+		t.Fatalf("runConfigSet returned error: %v", err)
+	}
+
+	cfg, err := config.Load(vp)
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+	if cfg.AI == nil || cfg.AI.Provider != "mock" {
+		t.Errorf("expected provider mock, got %v", cfg.AI)
+	}
+}

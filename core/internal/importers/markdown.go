@@ -161,15 +161,15 @@ func (m *MarkdownImporter) determineBaseTargetPath(sourcePath string, opts Impor
 func normalizeFrontmatter(doc *markdown.ParsedDocument, opts ImportOptions) {
 	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
 
-	if doc.Frontmatter.ID == "" {
-		doc.Frontmatter.ID = GenerateID("note", doc.Frontmatter.Title)
-	}
 	if doc.Frontmatter.Type == "" {
 		doc.Frontmatter.Type = "note"
 	}
 	if doc.Frontmatter.Title == "" {
 		// Extract title from first heading or use filename
 		doc.Frontmatter.Title = extractTitle(doc.Body)
+	}
+	if doc.Frontmatter.ID == "" {
+		doc.Frontmatter.ID = GenerateID("note", doc.Frontmatter.Title)
 	}
 	if doc.Frontmatter.Created == "" {
 		doc.Frontmatter.Created = now

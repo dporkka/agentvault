@@ -90,7 +90,7 @@ contract-check: ## Verify @agentvault/contract is the only source of API types i
 	fi
 	@echo "Checking for hard-coded API base URLs outside of @agentvault/contract..."
 	@! grep -RIn 'http://127.0.0.1:47321' apps/web-local/src apps/browser-extension/src apps/mobile-expo/src apps/desktop-wails/frontend/src \
-	  --include='*.ts' --include='*.tsx' | grep -v 'contract/src' || (echo "Found hard-coded base URL; use @agentvault/contract client." && exit 1)
+	  --include='*.ts' --include='*.tsx' --exclude='*.test.ts' --exclude='*.test.tsx' | grep -v 'contract/src' || (echo "Found hard-coded base URL; use @agentvault/contract client." && exit 1)
 	@echo "Contract check passed."
 
 contract-list-snake: ## Print the snake_case JSON field list derived from Go struct tags

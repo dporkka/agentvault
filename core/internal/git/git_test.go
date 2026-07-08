@@ -1,6 +1,7 @@
 package git
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -477,5 +478,317 @@ func TestSnapshot_FailsWhenClean(t *testing.T) {
 
 	if err := Snapshot(dir, "empty snapshot"); err == nil {
 		t.Fatal("expected Snapshot to fail when working tree is clean")
+	}
+}
+
+// helperInitRepoNoConfig initializes a git repo without any user configuration.
+func helperInitRepoNoConfig(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	cmd := exec.Command("git", "init")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, out)
+	}
+	return dir
+}
+
+func TestGitError_InvalidCommand(t *testing.T) {
+	dir := helperInitRepo(t)
+	_, err := runGit(dir, "not-a-valid-git-command")
+	if err == nil {
+		t.Fatal("expected error for invalid git command")
+	}
+	// With stderr captured, gitError should surface the git error message.
+	if !strings.Contains(err.Error(), "not-a-valid-git-command") {
+		t.Fatalf("expected error to mention invalid command, got: %v", err)
+	}
+}
+
+func TestGitInstalled_NotInstalled(t *testing.T) {
+	t.Setenv("PATH", "")
+	if gitInstalled() {
+		t.Fatal("expected gitInstalled to be false when PATH is empty")
+	}
+	if err := checkGit(); err == nil {
+		t.Fatal("expected checkGit to error when git is not on PATH")
+	}
+	_, err := runGit(t.TempDir(), "status")
+	if err == nil {
+		t.Fatal("expected runGit to error when git is not on PATH")
+	}
+}
+
+func TestIsGitRepo_GitNotInstalled(t *testing.T) {
+	t.Setenv("PATH", "")
+	if IsGitRepo(t.TempDir()) {
+		t.Fatal("expected IsGitRepo to be false when git is not installed")
+	}
+}
+
+func TestInit_GitNotInstalled(t *testing.T) {
+	t.Setenv("PATH", "")
+	if err := Init(t.TempDir()); err == nil {
+		t.Fatal("expected Init to error when git is not installed")
+	}
+}
+
+func TestEnsureGitRepo_SetsDefaultConfig(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	dir := t.TempDir()
+
+	if err := EnsureGitRepo(dir); err != nil {
+		t.Fatalf("EnsureGitRepo failed: %v", err)
+	}
+
+	email, err := runGit(dir, "config", "user.email")
+	if err != nil || email != "agentvault@local" {
+		t.Fatalf("expected default user.email, got %q, err %v", email, err)
+	}
+	name, err := runGit(dir, "config", "user.name")
+	if err != nil || name != "AgentVault" {
+		t.Fatalf("expected default user.name, got %q, err %v", name, err)
+	}
+
+	helperWriteFile(t, dir, "test.txt", "hello")
+	if err := Commit(dir, "test commit"); err != nil {
+		t.Fatalf("Commit after EnsureGitRepo failed: %v", err)
+	}
+}
+
+func TestStatus_AheadBehind(t *testing.T) {
+	dir := helperInitRepo(t)
+	bareDir := t.TempDir()
+
+	if out, err := exec.Command("git", "init", "--bare", bareDir).CombinedOutput(); err != nil {
+		t.Fatalf("git init --bare failed: %v\n%s", err, out)
+	}
+
+	helperWriteFile(t, dir, "file.txt", "v1")
+	exec.Command("git", "-C", dir, "add", "-A").Run()
+	helperCommit(t, dir, "initial")
+
+	if out, err := exec.Command("git", "-C", dir, "remote", "add", "origin", bareDir).CombinedOutput(); err != nil {
+		t.Fatalf("remote add failed: %v\n%s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", dir, "push", "-u", "origin", "HEAD").CombinedOutput(); err != nil {
+		t.Fatalf("push failed: %v\n%s", err, out)
+	}
+
+	helperWriteFile(t, dir, "file.txt", "v2")
+	exec.Command("git", "-C", dir, "add", "-A").Run()
+	helperCommit(t, dir, "second")
+
+	status, err := Status(dir)
+	if err != nil {
+		t.Fatalf("Status failed: %v", err)
+	}
+	if status.AheadBehind != "+1-0" {
+		t.Fatalf("expected ahead/behind '+1-0', got %q", status.AheadBehind)
+	}
+}
+
+func TestStatus_DeletedFile(t *testing.T) {
+	dir := helperInitRepo(t)
+	helperWriteFile(t, dir, "file.txt", "content")
+	exec.Command("git", "-C", dir, "add", "-A").Run()
+	helperCommit(t, dir, "initial")
+
+	if out, err := exec.Command("git", "-C", dir, "rm", "file.txt").CombinedOutput(); err != nil {
+		t.Fatalf("git rm failed: %v\n%s", err, out)
+	}
+
+	status, err := Status(dir)
+	if err != nil {
+		t.Fatalf("Status failed: %v", err)
+	}
+	found := false
+	for _, f := range status.ModifiedFiles {
+		if f.Path == "file.txt" && f.Status == "deleted" && f.Staged {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected staged deleted file, got: %+v", status.ModifiedFiles)
+	}
+}
+
+func TestStatus_RenamedFile(t *testing.T) {
+	dir := helperInitRepo(t)
+	helperWriteFile(t, dir, "old.txt", "content")
+	exec.Command("git", "-C", dir, "add", "-A").Run()
+	helperCommit(t, dir, "initial")
+
+	if out, err := exec.Command("git", "-C", dir, "mv", "old.txt", "new.txt").CombinedOutput(); err != nil {
+		t.Fatalf("git mv failed: %v\n%s", err, out)
+	}
+
+	status, err := Status(dir)
+	if err != nil {
+		t.Fatalf("Status failed: %v", err)
+	}
+	found := false
+	for _, f := range status.ModifiedFiles {
+		if f.Path == "new.txt" && f.Status == "renamed" && f.Staged {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected staged renamed file, got: %+v", status.ModifiedFiles)
+	}
+}
+
+func TestAdd_EmptyFileList(t *testing.T) {
+	dir := helperInitRepo(t)
+	helperWriteFile(t, dir, "a.txt", "a")
+
+	if err := Add(dir, []string{}); err != nil {
+		t.Fatalf("Add with empty list failed: %v", err)
+	}
+
+	out, err := runGit(dir, "diff", "--cached", "--name-only")
+	if err != nil {
+		t.Fatalf("checking staged files failed: %v", err)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Fatalf("expected nothing staged, got: %s", out)
+	}
+}
+
+func TestCommit_NotAGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	if err := Commit(dir, "msg"); err == nil {
+		t.Fatal("expected Commit to error for non-git repo")
+	}
+}
+
+func TestCommit_NoUserConfig(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	dir := helperInitRepoNoConfig(t)
+	helperWriteFile(t, dir, "file.txt", "content")
+
+	err := Commit(dir, "msg")
+	if err == nil {
+		t.Fatal("expected Commit to fail without user config")
+	}
+	if !strings.Contains(err.Error(), "failed to commit") {
+		t.Fatalf("expected 'failed to commit' in error, got: %v", err)
+	}
+}
+
+func TestCommitFiles_NotAGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	if err := CommitFiles(dir, []string{"a.txt"}, "msg"); err == nil {
+		t.Fatal("expected CommitFiles to error for non-git repo")
+	}
+}
+
+func TestCommitFiles_NoUserConfig(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	dir := helperInitRepoNoConfig(t)
+	helperWriteFile(t, dir, "a.txt", "a")
+
+	err := CommitFiles(dir, []string{"a.txt"}, "msg")
+	if err == nil {
+		t.Fatal("expected CommitFiles to fail without user config")
+	}
+	if !strings.Contains(err.Error(), "failed to commit") {
+		t.Fatalf("expected 'failed to commit' in error, got: %v", err)
+	}
+}
+
+func TestLog_DefaultLimit(t *testing.T) {
+	dir := helperInitRepo(t)
+	for i := 1; i <= 12; i++ {
+		helperWriteFile(t, dir, "file.txt", fmt.Sprintf("v%d", i))
+		exec.Command("git", "-C", dir, "add", "-A").Run()
+		helperCommit(t, dir, fmt.Sprintf("commit %d", i))
+	}
+
+	commits, err := Log(dir, 0)
+	if err != nil {
+		t.Fatalf("Log failed: %v", err)
+	}
+	if len(commits) != 10 {
+		t.Fatalf("expected default limit of 10 commits, got %d", len(commits))
+	}
+}
+
+func TestLog_NotAGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Log(dir, 10); err == nil {
+		t.Fatal("expected Log to error for non-git repo")
+	}
+}
+
+func TestLastCommitHash_NoCommits(t *testing.T) {
+	dir := helperInitRepo(t)
+	_, err := LastCommitHash(dir)
+	if err == nil {
+		t.Fatal("expected LastCommitHash to error with no commits")
+	}
+	if !strings.Contains(err.Error(), "no commits yet") {
+		t.Fatalf("expected 'no commits yet' in error, got: %v", err)
+	}
+}
+
+func TestHasChanges_NotAGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := HasChanges(dir); err == nil {
+		t.Fatal("expected HasChanges to error for non-git repo")
+	}
+}
+
+func TestStageAll_NotAGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	if err := StageAll(dir); err == nil {
+		t.Fatal("expected StageAll to error for non-git repo")
+	}
+}
+
+func TestSnapshot_NotAGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	if err := Snapshot(dir, "msg"); err == nil {
+		t.Fatal("expected Snapshot to error for non-git repo")
+	}
+}
+
+func TestSnapshot_DefaultMessage(t *testing.T) {
+	dir := helperInitRepo(t)
+	helperWriteFile(t, dir, "file.txt", "original")
+	exec.Command("git", "-C", dir, "add", "-A").Run()
+	helperCommit(t, dir, "initial")
+
+	helperWriteFile(t, dir, "file.txt", "updated")
+	if err := Snapshot(dir, ""); err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+
+	commits, err := Log(dir, 1)
+	if err != nil {
+		t.Fatalf("Log failed: %v", err)
+	}
+	if len(commits) != 1 || !strings.HasPrefix(commits[0].Message, "vault snapshot") {
+		t.Fatalf("expected default snapshot message, got: %+v", commits)
+	}
+}
+
+func TestSnapshot_NoUserConfig(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	dir := helperInitRepoNoConfig(t)
+	helperWriteFile(t, dir, "file.txt", "content")
+
+	err := Snapshot(dir, "msg")
+	if err == nil {
+		t.Fatal("expected Snapshot to fail without user config")
+	}
+	if !strings.Contains(err.Error(), "failed to commit") {
+		t.Fatalf("expected 'failed to commit' in error, got: %v", err)
 	}
 }

@@ -11,11 +11,14 @@ const mockClient = vi.hoisted(() => ({
   getVaultStatus: vi.fn(),
   getProjects: vi.fn(),
   getRecent: vi.fn(),
+  getStale: vi.fn(),
   search: vi.fn(),
   getNote: vi.fn(),
   capture: vi.fn(),
   createNote: vi.fn(),
   ask: vi.fn(),
+  triggerIndex: vi.fn(),
+  getGitStatus: vi.fn(),
 }));
 
 vi.mock('@agentvault/contract', async (importOriginal) => {
@@ -39,6 +42,17 @@ import {
   getRecent,
   searchVault,
   sendCapture,
+  refreshToken,
+  refreshBaseUrl,
+  getNote,
+  getNoteDetail,
+  createNote,
+  ask,
+  askVault,
+  getRecentNotes,
+  getStale,
+  getGitStatus,
+  triggerIndex,
 } from '../api';
 
 describe('api', () => {
@@ -219,6 +233,149 @@ describe('api', () => {
           capturedAt: new Date().toISOString(),
         }),
       ).rejects.toThrow('Bad request');
+    });
+  });
+
+  describe('refreshToken', () => {
+    it('reads the stored token into the client', async () => {
+      const { storage } = installChromeStorageMock();
+      storage.local.set({ agentvault_token: 'refreshed' });
+      await refreshToken();
+      expect(mockClient.setToken).toHaveBeenCalledWith('refreshed');
+    });
+  });
+
+  describe('refreshBaseUrl', () => {
+    it('reads the stored base URL into the client', async () => {
+      const { storage } = installChromeStorageMock();
+      storage.local.set({ agentvault_base_url: 'http://custom:9000' });
+      await refreshBaseUrl();
+      expect(mockClient.setBaseUrl).toHaveBeenCalledWith('http://custom:9000');
+    });
+
+    it('falls back to the default base URL when none is stored', async () => {
+      await refreshBaseUrl();
+      expect(mockClient.setBaseUrl).toHaveBeenCalledWith('http://127.0.0.1:47321');
+    });
+  });
+
+  describe('getNote / getNoteDetail', () => {
+    it('returns the note on success', async () => {
+      const note = { id: 'n1', title: 'Note', content: 'body', path: 'notes/n1.md', tags: [] };
+      mockClient.getNote.mockResolvedValue(note);
+      expect(await getNote('n1')).toEqual(note);
+      expect(await getNoteDetail('n1')).toEqual(note);
+      expect(mockClient.getNote).toHaveBeenCalledWith('n1');
+    });
+
+    it('returns null on error', async () => {
+      mockClient.getNote.mockRejectedValue(new Error('nope'));
+      expect(await getNote('n1')).toBeNull();
+    });
+  });
+
+  describe('createNote', () => {
+    it('passes the request through to the client', async () => {
+      const response = { path: 'notes/new.md' };
+      mockClient.createNote.mockResolvedValue(response);
+      const req = { title: 'New', type: 'note', tags: ['a'] };
+      expect(await createNote(req)).toEqual(response);
+      expect(mockClient.createNote).toHaveBeenCalledWith(req);
+    });
+
+    it('surfaces errors', async () => {
+      mockClient.createNote.mockRejectedValue(new Error('nope'));
+      await expect(createNote({ title: 'New', type: 'note' })).rejects.toThrow('nope');
+    });
+  });
+
+  describe('ask / askVault', () => {
+    it('asks the vault with a question string alias', async () => {
+      const response = { answer: 'yes', sources: [] };
+      mockClient.ask.mockResolvedValue(response);
+      expect(await askVault('why?')).toEqual(response);
+      expect(mockClient.ask).toHaveBeenCalledWith({ question: 'why?' });
+    });
+
+    it('accepts a full ask request', async () => {
+      const response = { answer: 'maybe', sources: [] };
+      mockClient.ask.mockResolvedValue(response);
+      expect(await ask({ question: 'how?' })).toEqual(response);
+    });
+
+    it('surfaces errors', async () => {
+      mockClient.ask.mockRejectedValue(new Error('nope'));
+      await expect(ask({ question: '?' })).rejects.toThrow('nope');
+    });
+  });
+
+  describe('getRecentNotes', () => {
+    it('is an alias for getRecent', async () => {
+      const notes = [{ id: '1', title: 'A' }];
+      mockClient.getRecent.mockResolvedValue(notes);
+      expect(await getRecentNotes({ limit: 3 })).toEqual(notes);
+      expect(mockClient.getRecent).toHaveBeenCalledWith({ limit: 3 });
+    });
+  });
+
+  describe('getStale', () => {
+    it('returns stale notes on success', async () => {
+      const notes = [{ id: '1', title: 'Stale' }];
+      mockClient.getStale.mockResolvedValue(notes);
+      expect(await getStale({ days: 7 })).toEqual(notes);
+      expect(mockClient.getStale).toHaveBeenCalledWith({ days: 7 });
+    });
+
+    it('returns an empty list on error', async () => {
+      mockClient.getStale.mockRejectedValue(new Error('nope'));
+      expect(await getStale()).toEqual([]);
+    });
+  });
+
+  describe('getGitStatus', () => {
+    it('returns the git status on success', async () => {
+      const status = { branch: 'main', clean: true };
+      mockClient.getGitStatus.mockResolvedValue(status);
+      expect(await getGitStatus()).toEqual(status);
+    });
+
+    it('returns null on error', async () => {
+      mockClient.getGitStatus.mockRejectedValue(new Error('nope'));
+      expect(await getGitStatus()).toBeNull();
+    });
+  });
+
+  describe('triggerIndex', () => {
+    it('returns the index result on success', async () => {
+      const result = { indexed: 5 };
+      mockClient.triggerIndex.mockResolvedValue(result);
+      expect(await triggerIndex({ force: true })).toEqual(result);
+      expect(mockClient.triggerIndex).toHaveBeenCalledWith({ force: true });
+    });
+
+    it('returns null on error', async () => {
+      mockClient.triggerIndex.mockRejectedValue(new Error('nope'));
+      expect(await triggerIndex()).toBeNull();
+    });
+  });
+
+  describe('setBaseUrl', () => {
+    it('requests host permission for the new origin', async () => {
+      const request = vi.fn().mockResolvedValue(true);
+      (globalThis as unknown as Record<string, unknown>).chrome = {
+        storage: installChromeStorageMock().storage,
+        permissions: { request },
+      } as unknown as typeof chrome;
+      await setBaseUrl('http://remote.server:9000/');
+      expect(request).toHaveBeenCalledWith({ origins: ['http://remote.server:9000/*'] });
+      expect(mockClient.setBaseUrl).toHaveBeenCalledWith('http://remote.server:9000');
+    });
+
+    it('ignores missing permissions API', async () => {
+      (globalThis as unknown as Record<string, unknown>).chrome = {
+        storage: installChromeStorageMock().storage,
+      } as unknown as typeof chrome;
+      await expect(setBaseUrl('http://safe.example/')).resolves.toBeUndefined();
     });
   });
 });

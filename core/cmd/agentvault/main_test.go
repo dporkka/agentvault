@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/agentvault/core/internal/db"
+	"github.com/agentvault/core/internal/indexer"
 	"github.com/spf13/cobra"
 )
 
@@ -18,6 +20,40 @@ func setupTestVault(t *testing.T) string {
 		t.Fatalf("failed to create .agentvault dir: %v", err)
 	}
 	return tmpDir
+}
+
+// setupTestVaultWithDB creates a minimal vault, opens the SQLite database, runs
+// migrations, and returns the vault path and database handle. The caller is
+// responsible for closing the database.
+func setupTestVaultWithDB(t *testing.T) (string, *db.DB) {
+	t.Helper()
+	vp := setupTestVault(t)
+	database, err := db.Open(vp)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	if err := database.RunMigrations(); err != nil {
+		database.Close()
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+	return vp, database
+}
+
+// indexNote writes a markdown note at relPath inside the vault and indexes it
+// into the database.
+func indexNote(t *testing.T, database *db.DB, vp, relPath, content string) {
+	t.Helper()
+	fullPath := filepath.Join(vp, relPath)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		t.Fatalf("failed to create note dir: %v", err)
+	}
+	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write note: %v", err)
+	}
+	idx := indexer.New(database, vp)
+	if _, err := idx.Index(indexer.IndexOptions{}); err != nil {
+		t.Fatalf("failed to index note: %v", err)
+	}
 }
 
 func TestGetVaultPath(t *testing.T) {

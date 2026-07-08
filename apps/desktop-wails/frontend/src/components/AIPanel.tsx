@@ -93,6 +93,7 @@ export default function AIPanel({ onClose, onOpenNote }: Props) {
         </div>
         <button
           onClick={onClose}
+          aria-label="Close"
           className="p-1 rounded hover:bg-bg-hover text-text-muted"
         >
           <X className="w-4 h-4" />
@@ -204,6 +205,7 @@ export default function AIPanel({ onClose, onOpenNote }: Props) {
           />
           <button
             type="submit"
+            aria-label="Send"
             disabled={isLoading || !input.trim()}
             className="p-2 rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-50 transition-colors"
           >

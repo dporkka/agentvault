@@ -1,8 +1,10 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -587,5 +589,252 @@ func TestHandleCapture_OnlyTitle(t *testing.T) {
 
 	if !strings.Contains(result, "Captured to inbox:") {
 		t.Errorf("expected capture result, got:\n%s", result)
+	}
+}
+
+func TestHandleAsk_MissingQuestion(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	_, err := s.handleAsk(map[string]interface{}{})
+	if err == nil {
+		t.Fatal("expected error for missing question")
+	}
+	if !strings.Contains(err.Error(), "question is required") {
+		t.Errorf("expected 'question is required' in error, got: %v", err)
+	}
+}
+
+func TestHandleAsk_NoConfig(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	_, err := s.handleAsk(map[string]interface{}{"question": "what is this?"})
+	if err == nil {
+		t.Fatal("expected error when config is missing")
+	}
+	if !strings.Contains(err.Error(), "failed to load config") {
+		t.Errorf("expected 'failed to load config' in error, got: %v", err)
+	}
+}
+
+func TestHandleAsk_MockProviderNoResults(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	cfgPath := filepath.Join(s.vaultPath, ".agentvault", "config.json")
+	cfg := map[string]interface{}{
+		"ai": map[string]string{"provider": "mock"},
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal config: %v", err)
+	}
+	if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	result, err := s.handleAsk(map[string]interface{}{"question": "what is this?"})
+	if err != nil {
+		t.Fatalf("handleAsk error: %v", err)
+	}
+	if !strings.Contains(result, "couldn't find any relevant notes") {
+		t.Errorf("expected no-information answer, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Sources:") {
+		t.Errorf("expected sources section, got:\n%s", result)
+	}
+}
+
+func TestHandleReadNote_ByPath(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	noteDir := filepath.Join(s.vaultPath, "10-notes")
+	os.MkdirAll(noteDir, 0755)
+	noteContent := "---\nid: note_path_001\ntype: note\ntitle: Path Readable\nproject: testproj\n---\n\nBody by path.\n"
+	os.WriteFile(filepath.Join(noteDir, "path-readable.md"), []byte(noteContent), 0644)
+	addTestNote(t, db, "note_path_001", "Path Readable", "10-notes/path-readable.md", "note", "testproj", "Body by path.", []string{})
+
+	result, err := s.handleReadNote(map[string]interface{}{"id": "10-notes/path-readable.md"})
+	if err != nil {
+		t.Fatalf("handleReadNote error: %v", err)
+	}
+	if !strings.Contains(result, "Path Readable") {
+		t.Errorf("expected title, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Body by path") {
+		t.Errorf("expected body, got:\n%s", result)
+	}
+}
+
+func TestHandleReadNote_FallbackDB(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	// Seed the database without creating the underlying file.
+	addTestNote(t, db, "note_fallback_001", "Fallback Note", "notes/fallback.md", "note", "fbproj", "Fallback body content.", []string{"fb"})
+
+	result, err := s.handleReadNote(map[string]interface{}{"id": "note_fallback_001"})
+	if err != nil {
+		t.Fatalf("handleReadNote error: %v", err)
+	}
+	if !strings.Contains(result, "Fallback Note") {
+		t.Errorf("expected title, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Fallback body content") {
+		t.Errorf("expected body snippet, got:\n%s", result)
+	}
+}
+
+func TestHandleCreateNote_MissingFields(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	_, err := s.handleCreateNote(map[string]interface{}{"type": "note"})
+	if err == nil {
+		t.Fatal("expected error for missing title")
+	}
+
+	_, err = s.handleCreateNote(map[string]interface{}{"title": "Test"})
+	if err == nil {
+		t.Fatal("expected error for missing type")
+	}
+}
+
+func TestHandleCapture_SourceURLNoText(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	result, err := s.handleCapture(map[string]interface{}{
+		"title":      "URL Capture",
+		"source_url": "https://example.org",
+	})
+	if err != nil {
+		t.Fatalf("handleCapture error: %v", err)
+	}
+	if !strings.Contains(result, "Captured to inbox:") {
+		t.Errorf("expected capture result, got:\n%s", result)
+	}
+
+	inboxDir := filepath.Join(s.vaultPath, "00-inbox")
+	entries, err := os.ReadDir(inboxDir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("expected capture file: %v", err)
+	}
+	content, err := os.ReadFile(filepath.Join(inboxDir, entries[0].Name()))
+	if err != nil {
+		t.Fatalf("read capture: %v", err)
+	}
+	if !strings.Contains(string(content), "Source: <https://example.org>") {
+		t.Errorf("expected source URL in content, got:\n%s", string(content))
+	}
+}
+
+func TestHandleSummarize_FileNotDir(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	filePath := filepath.Join(s.vaultPath, "not-a-dir.md")
+	if err := os.WriteFile(filePath, []byte("# hello"), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	_, err := s.handleSummarize(map[string]interface{}{"path": "not-a-dir.md"})
+	if err == nil {
+		t.Fatal("expected error for file path")
+	}
+	if !strings.Contains(err.Error(), "path is not a directory") {
+		t.Errorf("expected 'path is not a directory', got: %v", err)
+	}
+}
+
+func TestHandleListProjects_Empty(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	result, err := s.handleListProjects(map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("handleListProjects error: %v", err)
+	}
+	if !strings.Contains(result, "**Total project notes:** 0") {
+		t.Errorf("expected total 0, got:\n%s", result)
+	}
+}
+
+func TestHandleListRecent_NoResults(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	result, err := s.handleListRecent(map[string]interface{}{"limit": float64(10)})
+	if err != nil {
+		t.Fatalf("handleListRecent error: %v", err)
+	}
+	if !strings.Contains(result, "No notes found") {
+		t.Errorf("expected 'No notes found', got:\n%s", result)
+	}
+}
+
+func TestHandleGitStatus_Repo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	// Ignore the .agentvault directory so the repo can be clean.
+	gitIgnore := filepath.Join(s.vaultPath, ".gitignore")
+	if err := os.WriteFile(gitIgnore, []byte(".agentvault/\n"), 0644); err != nil {
+		t.Fatalf("write gitignore: %v", err)
+	}
+
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", s.vaultPath}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	runGit("init")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "Test User")
+	runGit("add", ".")
+	runGit("commit", "-m", "initial")
+
+	result, err := s.handleGitStatus(map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("handleGitStatus error: %v", err)
+	}
+	if !strings.Contains(result, "Working tree clean") {
+		t.Errorf("expected clean status, got:\n%s", result)
+	}
+
+	dirtyFile := filepath.Join(s.vaultPath, "dirty.txt")
+	if err := os.WriteFile(dirtyFile, []byte("change"), 0644); err != nil {
+		t.Fatalf("write dirty file: %v", err)
+	}
+
+	result, err = s.handleGitStatus(map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("handleGitStatus error: %v", err)
+	}
+	if !strings.Contains(result, "dirty.txt") {
+		t.Errorf("expected dirty file in status, got:\n%s", result)
+	}
+}
+
+func TestLogWrite(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	s.logWrite("test_op", "notes/test.md")
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM agent_runs WHERE task = ?`, "test_op").Scan(&count); err != nil {
+		t.Fatalf("query agent_runs: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 run logged, got %d", count)
 	}
 }

@@ -17,6 +17,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// migrationsFS is the source of migration files. It defaults to the embedded
+// migrations package and is overridable in tests to exercise migration paths.
+var migrationsFS fs.FS = migrations.FS
+
 // DB wraps a SQLite connection with vault-specific helpers.
 type DB struct {
 	conn *sql.DB
@@ -60,7 +64,7 @@ func (d *DB) Path() string {
 // RunMigrations executes embedded migration SQL when available, falling back to
 // the inline schema if no migration files are embedded.
 func (d *DB) RunMigrations() error {
-	entries, err := fs.ReadDir(migrations.FS, ".")
+	entries, err := fs.ReadDir(migrationsFS, ".")
 	if err != nil || len(entries) == 0 {
 		return d.runInlineMigrations()
 	}
@@ -97,7 +101,7 @@ func (d *DB) runEmbeddedMigrations(entries []fs.DirEntry) error {
 			continue
 		}
 
-		f, err := migrations.FS.Open(name)
+		f, err := migrationsFS.Open(name)
 		if err != nil {
 			return fmt.Errorf("failed to open migration %s: %w", name, err)
 		}

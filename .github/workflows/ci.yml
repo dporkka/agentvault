@@ -74,6 +74,8 @@ jobs:
         run: npm ci
       - name: Type-check and build
         run: npm run build
+      - name: Run tests
+        run: npm test
       - name: Package browser extension
         if: matrix.app == 'browser-extension'
         working-directory: apps/browser-extension
@@ -104,6 +106,8 @@ jobs:
         run: npm ci
       - name: Type-check
         run: npm run typecheck
+      - name: Run tests
+        run: npm test
       - name: Bundle iOS with Metro
         run: npx expo export --platform ios
       - name: Bundle Android with Metro
@@ -147,6 +151,9 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: Run frontend tests
+        working-directory: apps/desktop-wails/frontend
+        run: npm test
       - name: Build desktop app (Go)
         working-directory: apps/desktop-wails
         # Ubuntu ships webkit2gtk 4.1, so the webkit2_41 build tag is required.

@@ -96,8 +96,6 @@ func (c *httpClient) DoJSON(ctx context.Context, method, path string, reqBody, r
 
 // DoHealthCheck performs a simple health check request.
 func (c *httpClient) DoHealthCheck(ctx context.Context, path string) error {
-	healthClient := &http.Client{Timeout: 5 * time.Second}
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create health check request: %w", err)
@@ -109,7 +107,7 @@ func (c *httpClient) DoHealthCheck(ctx context.Context, path string) error {
 		req.Header.Set(k, v)
 	}
 
-	resp, err := healthClient.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}

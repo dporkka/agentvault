@@ -2,6 +2,16 @@ import mockAsyncStorage from '@react-native-async-storage/async-storage/jest/asy
 
 jest.mock('@react-native-async-storage/async-storage', () => mockAsyncStorage);
 
+jest.mock('@expo/vector-icons/Ionicons', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require('react');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Text } = require('react-native');
+  return function Ionicons(props: Record<string, unknown>) {
+    return React.createElement(Text, props);
+  };
+});
+
 jest.mock('@agentvault/contract', () => ({
   // Keep the mock URL out of the contract-check grep by splitting the port.
   DEFAULT_BASE_URL: 'http://127.0.0.1:' + '47321',

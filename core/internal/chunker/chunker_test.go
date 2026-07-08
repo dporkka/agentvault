@@ -1,6 +1,7 @@
 package chunker
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -295,5 +296,190 @@ Short section two.`
 	}
 	if !strings.Contains(chunks[0].Text, "Header 1") || !strings.Contains(chunks[0].Text, "Header 2") {
 		t.Errorf("Expected merged chunk to contain both headers, got %q", chunks[0].Text)
+	}
+}
+
+func TestSplitMarkdownMultipleLargeSections(t *testing.T) {
+	c := NewWithSize(20, 5)
+
+	sectionA := "# Section A\n" + strings.Repeat("alpha ", 80)
+	sectionB := "# Section B\n" + strings.Repeat("beta ", 80)
+	text := sectionA + "\n" + sectionB
+
+	chunks := c.SplitMarkdown(text)
+	if len(chunks) < 2 {
+		t.Fatalf("Expected multiple chunks for large sections, got %d", len(chunks))
+	}
+
+	foundA, foundB := false, false
+	for _, chunk := range chunks {
+		if strings.Contains(chunk.Text, "Section A") {
+			foundA = true
+		}
+		if strings.Contains(chunk.Text, "Section B") {
+			foundB = true
+		}
+	}
+	if !foundA {
+		t.Error("Expected at least one chunk to contain Section A header")
+	}
+	if !foundB {
+		t.Error("Expected at least one chunk to contain Section B header")
+	}
+}
+
+func TestSplitMarkdownSmallThenLargeSection(t *testing.T) {
+	c := NewWithSize(20, 5)
+
+	// A small section that gets accumulated, followed by a large section that
+	// forces a flush before the large section is split on its own.
+	sectionA := "# Section A\nword word word word word"
+	sectionB := "# Section B\n" + strings.Repeat("beta ", 80)
+	text := sectionA + "\n" + sectionB
+
+	chunks := c.SplitMarkdown(text)
+	if len(chunks) == 0 {
+		t.Fatal("Expected chunks")
+	}
+}
+
+func TestSplitMarkdownSectionsExceedChunkSize(t *testing.T) {
+	c := NewWithSize(20, 5)
+
+	var parts []string
+	for i := 0; i < 10; i++ {
+		parts = append(parts, fmt.Sprintf("# Header %d\nword word word word", i))
+	}
+	text := strings.Join(parts, "\n")
+
+	chunks := c.SplitMarkdown(text)
+	if len(chunks) == 0 {
+		t.Fatal("Expected chunks for sections exceeding chunk size")
+	}
+
+	for i, chunk := range chunks {
+		if chunk.Text == "" {
+			t.Errorf("Chunk %d has empty text", i)
+		}
+		if chunk.Index != i {
+			t.Errorf("Expected chunk index %d, got %d", i, chunk.Index)
+		}
+	}
+}
+
+func TestSplitMarkdownFallbackToSplit(t *testing.T) {
+	c := NewWithSize(20, 5)
+
+	words := make([]string, 200)
+	for i := range words {
+		words[i] = "plain"
+	}
+	text := strings.Join(words, " ")
+
+	chunks := c.SplitMarkdown(text)
+	if len(chunks) < 2 {
+		t.Fatalf("Expected multiple chunks when falling back to Split, got %d", len(chunks))
+	}
+}
+
+func TestSplitZeroStride(t *testing.T) {
+	// Construct a Chunker directly so overlap equals chunk size, producing a zero stride.
+	c := &Chunker{ChunkSize: 10, ChunkOverlap: 10}
+
+	words := make([]string, 50)
+	for i := range words {
+		words[i] = "word"
+	}
+	text := strings.Join(words, " ")
+
+	chunks := c.Split(text)
+	if len(chunks) < 2 {
+		t.Fatalf("Expected multiple chunks with zero stride, got %d", len(chunks))
+	}
+
+	for i := 1; i < len(chunks); i++ {
+		if chunks[i].StartByte <= chunks[i-1].StartByte {
+			t.Errorf("Chunk %d start byte (%d) should be > chunk %d start byte (%d)",
+				i, chunks[i].StartByte, i-1, chunks[i-1].StartByte)
+		}
+	}
+}
+
+func TestSplitTinyChunkWordSize(t *testing.T) {
+	// A directly-constructed Chunker with chunk size 1 gives chunkWordSize 1,
+	// exercising the inner stride fallback to 1.
+	c := &Chunker{ChunkSize: 1, ChunkOverlap: 1}
+
+	chunks := c.Split("one two three")
+	if len(chunks) == 0 {
+		t.Fatal("Expected chunks")
+	}
+	for i, chunk := range chunks {
+		if chunk.Text == "" {
+			t.Errorf("Chunk %d has empty text", i)
+		}
+	}
+}
+
+func TestSplitDirectChunkerDefensiveDefaults(t *testing.T) {
+	// Directly construct a Chunker with invalid values to exercise defensive
+	// normalisation inside Split.
+	c := &Chunker{ChunkSize: 0, ChunkOverlap: -1}
+
+	chunks := c.Split("one two three four five")
+	if len(chunks) == 0 {
+		t.Fatal("Expected chunks")
+	}
+	for i, chunk := range chunks {
+		if chunk.Text == "" {
+			t.Errorf("Chunk %d has empty text", i)
+		}
+	}
+}
+
+func TestSplitByHeadersEdgeCases(t *testing.T) {
+	text := "#NoSpace\n" +
+		"####### TooManyHashes\n" +
+		"# \n" +
+		"Only content after empty header.\n" +
+		"# Normal\n" +
+		"Normal content."
+
+	sections := splitByHeaders(text)
+	if len(sections) == 0 {
+		t.Fatal("Expected sections")
+	}
+
+	// #NoSpace and ####### TooManyHashes are treated as content because they are
+	// not valid ATX headers (no space after hashes, or too many hashes).
+	foundNonHeaderContent := false
+	for _, section := range sections {
+		if strings.Contains(section.content, "NoSpace") || strings.Contains(section.content, "TooManyHashes") {
+			foundNonHeaderContent = true
+		}
+	}
+	if !foundNonHeaderContent {
+		t.Errorf("Expected invalid header lines to be treated as content")
+	}
+
+	// The valid normal header should be parsed.
+	foundNormal := false
+	for _, section := range sections {
+		if section.title == "Normal" {
+			foundNormal = true
+		}
+	}
+	if !foundNormal {
+		t.Errorf("Expected a section titled 'Normal'")
+	}
+}
+
+func TestNewWithSizeInvalidOverlapOnly(t *testing.T) {
+	c := NewWithSize(100, -5)
+	if c.ChunkSize != 100 {
+		t.Errorf("Expected ChunkSize 100, got %d", c.ChunkSize)
+	}
+	if c.ChunkOverlap != 0 {
+		t.Errorf("Expected fallback ChunkOverlap 0, got %d", c.ChunkOverlap)
 	}
 }

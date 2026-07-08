@@ -2,10 +2,12 @@ package doctor
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -726,4 +728,402 @@ func writeConfigWithBaseURL(t *testing.T, tmpDir, baseURL string) {
 	if err := os.WriteFile(filepath.Join(tmpDir, ".agentvault", "config.json"), data, 0644); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
+}
+
+func TestCheckConfig_ExtraCases(t *testing.T) {
+	t.Run("invalid json", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		os.MkdirAll(filepath.Join(tmpDir, ".agentvault"), 0755)
+		os.WriteFile(filepath.Join(tmpDir, ".agentvault", "config.json"), []byte("{ not json"), 0644)
+		d := New(nil, tmpDir)
+		result := d.CheckConfig()
+		if result.Status != "error" {
+			t.Errorf("Expected status 'error' for invalid JSON, got '%s'", result.Status)
+		}
+	})
+
+	t.Run("config is directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		os.MkdirAll(filepath.Join(tmpDir, ".agentvault", "config.json"), 0755)
+		d := New(nil, tmpDir)
+		result := d.CheckConfig()
+		if result.Status != "error" {
+			t.Errorf("Expected status 'error' when config.json is a directory, got '%s'", result.Status)
+		}
+	})
+
+	t.Run("config read error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		os.MkdirAll(filepath.Join(tmpDir, ".agentvault"), 0755)
+		configPath := filepath.Join(tmpDir, ".agentvault", "config.json")
+		os.WriteFile(configPath, []byte(`{}`), 0644)
+		if err := os.Chmod(configPath, 0000); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(configPath, 0644)
+		d := New(nil, tmpDir)
+		result := d.CheckConfig()
+		if result.Status != "error" {
+			t.Errorf("Expected status 'error' for unreadable config, got '%s'", result.Status)
+		}
+	})
+}
+
+func TestCheckDatabase_ExtraCases(t *testing.T) {
+	t.Run("database query error", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		cleanup() // close DB before the check
+		d := New(database, tmpDir)
+		result := d.CheckDatabase()
+		if result.Status != "error" {
+			t.Errorf("Expected status 'error' for closed DB, got '%s': %s", result.Status, result.Message)
+		}
+		if !strings.Contains(result.Message, "cannot execute queries") {
+			t.Errorf("Expected query error message, got: %s", result.Message)
+		}
+	})
+
+	t.Run("database is directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		os.MkdirAll(filepath.Join(tmpDir, ".agentvault", "agentvault.db"), 0755)
+		d := New(nil, tmpDir)
+		result := d.CheckDatabase()
+		if result.Status != "error" {
+			t.Errorf("Expected status 'error' when DB path is a directory, got '%s'", result.Status)
+		}
+	})
+}
+
+func TestCheckMigrations_ExtraCases(t *testing.T) {
+	t.Run("no migrations applied", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+		if _, err := database.Exec("DELETE FROM schema_migrations"); err != nil {
+			t.Fatalf("failed to delete migration row: %v", err)
+		}
+		d := New(database, tmpDir)
+		result := d.CheckMigrations()
+		if result.Status != "error" {
+			t.Errorf("Expected status 'error' for no migrations, got '%s': %s", result.Status, result.Message)
+		}
+		if !strings.Contains(result.Message, "No migrations have been applied") {
+			t.Errorf("Expected 'No migrations have been applied' message, got: %s", result.Message)
+		}
+	})
+
+	t.Run("incomplete migration version", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+		if _, err := database.Exec("UPDATE schema_migrations SET version = 0"); err != nil {
+			t.Fatalf("failed to update migration version: %v", err)
+		}
+		d := New(database, tmpDir)
+		result := d.CheckMigrations()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for version 0, got '%s': %s", result.Status, result.Message)
+		}
+	})
+
+	t.Run("query error", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		cleanup()
+		d := New(database, tmpDir)
+		result := d.CheckMigrations()
+		if result.Status != "error" {
+			t.Errorf("Expected status 'error' for closed DB, got '%s': %s", result.Status, result.Message)
+		}
+	})
+}
+
+func TestCheckMarkdownParse_ExtraCases(t *testing.T) {
+	t.Run("many parse failures become error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		for i := 0; i < 6; i++ {
+			name := fmt.Sprintf("bad%d.md", i)
+			os.WriteFile(filepath.Join(tmpDir, name), []byte("---\ninvalid: yaml: : : \n---\n\nbody"), 0644)
+		}
+		d := New(nil, tmpDir)
+		result := d.CheckMarkdownParse()
+		if result.Status != "error" {
+			t.Errorf("Expected status 'error' for >5 parse failures, got '%s': %s", result.Status, result.Message)
+		}
+	})
+}
+
+func TestCheckDuplicateIDs_ExtraCases(t *testing.T) {
+	t.Run("with duplicates", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+		if _, err := database.Exec("PRAGMA foreign_keys = OFF"); err != nil {
+			t.Fatalf("failed to disable foreign keys: %v", err)
+		}
+		if _, err := database.Exec("ALTER TABLE notes RENAME TO notes_old"); err != nil {
+			t.Fatalf("failed to rename notes table: %v", err)
+		}
+		if _, err := database.Exec("CREATE TABLE notes (id TEXT, title TEXT)"); err != nil {
+			t.Fatalf("failed to create notes table: %v", err)
+		}
+		if _, err := database.Exec(
+			"INSERT INTO notes (id, title) VALUES (?, ?), (?, ?)",
+			"dup", "First", "dup", "Second",
+		); err != nil {
+			t.Fatalf("failed to insert duplicate notes: %v", err)
+		}
+		d := New(database, tmpDir)
+		result := d.CheckDuplicateIDs()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for duplicates, got '%s': %s", result.Status, result.Message)
+		}
+		if !strings.Contains(result.Message, "1 duplicate ID") {
+			t.Errorf("Expected duplicate ID message, got: %s", result.Message)
+		}
+		found := false
+		for _, detail := range result.Details {
+			if strings.Contains(detail, "dup: First, Second") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("Expected duplicate detail, got: %v", result.Details)
+		}
+	})
+
+	t.Run("query error", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		cleanup()
+		d := New(database, tmpDir)
+		result := d.CheckDuplicateIDs()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for closed DB, got '%s': %s", result.Status, result.Message)
+		}
+	})
+}
+
+func TestCheckBrokenLinks_ExtraCases(t *testing.T) {
+	t.Run("many broken links become error", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+		for i := 0; i < 11; i++ {
+			if _, err := database.Exec(
+				"INSERT INTO links (from_note_id, raw_target, link_type) VALUES (?, ?, ?)",
+				"note_001", fmt.Sprintf("Missing%d", i), "wiki",
+			); err != nil {
+				t.Fatalf("failed to insert link: %v", err)
+			}
+		}
+		d := New(database, tmpDir)
+		result := d.CheckBrokenLinks()
+		if result.Status != "error" {
+			t.Errorf("Expected status 'error' for >10 broken links, got '%s': %s", result.Status, result.Message)
+		}
+	})
+
+	t.Run("query error", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		cleanup()
+		d := New(database, tmpDir)
+		result := d.CheckBrokenLinks()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for closed DB, got '%s': %s", result.Status, result.Message)
+		}
+	})
+}
+
+func TestCheckUnindexed_ExtraCases(t *testing.T) {
+	t.Run("no markdown files", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+		os.RemoveAll(filepath.Join(tmpDir, "10-notes"))
+		d := New(database, tmpDir)
+		result := d.CheckUnindexed()
+		if result.Status != "ok" {
+			t.Errorf("Expected status 'ok' with no markdown files, got '%s': %s", result.Status, result.Message)
+		}
+	})
+
+	t.Run("query error", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		cleanup()
+		d := New(database, tmpDir)
+		result := d.CheckUnindexed()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for closed DB, got '%s': %s", result.Status, result.Message)
+		}
+	})
+}
+
+func TestCheckIndexFreshness_ExtraCases(t *testing.T) {
+	t.Run("no indexed files", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultEmpty(t)
+		defer cleanup()
+		d := New(database, tmpDir)
+		result := d.CheckIndexFreshness()
+		if result.Status != "ok" {
+			t.Errorf("Expected status 'ok' with no indexed files, got '%s': %s", result.Status, result.Message)
+		}
+		if !strings.Contains(result.Message, "No indexed files") {
+			t.Errorf("Expected 'No indexed files' message, got: %s", result.Message)
+		}
+	})
+
+	t.Run("many stale files become error", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultEmpty(t)
+		defer cleanup()
+		for i := 0; i < 11; i++ {
+			name := fmt.Sprintf("stale%d.md", i)
+			path := filepath.Join(tmpDir, name)
+			os.WriteFile(path, []byte("body"), 0644)
+			if _, err := database.Exec(
+				"INSERT INTO files (id, path, content_hash, indexed_at) VALUES (?, ?, ?, datetime('now', '-1 day'))",
+				fmt.Sprintf("stale_%d", i), name, "hash",
+			); err != nil {
+				t.Fatalf("failed to insert file: %v", err)
+			}
+			if err := os.Chtimes(path, time.Now(), time.Now()); err != nil {
+				t.Fatalf("failed to touch file: %v", err)
+			}
+		}
+		d := New(database, tmpDir)
+		result := d.CheckIndexFreshness()
+		if result.Status != "error" {
+			t.Errorf("Expected status 'error' for >10 stale files, got '%s': %s", result.Status, result.Message)
+		}
+	})
+
+	t.Run("query error", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		cleanup()
+		d := New(database, tmpDir)
+		result := d.CheckIndexFreshness()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for closed DB, got '%s': %s", result.Status, result.Message)
+		}
+	})
+}
+
+func TestCheckOrphanDBFiles_ExtraCases(t *testing.T) {
+	t.Run("query error", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		cleanup()
+		d := New(database, tmpDir)
+		result := d.CheckOrphanDBFiles()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for closed DB, got '%s': %s", result.Status, result.Message)
+		}
+	})
+}
+
+func TestCheckOrphanChunks_ExtraCases(t *testing.T) {
+	t.Run("query error", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		cleanup()
+		d := New(database, tmpDir)
+		result := d.CheckOrphanChunks()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for closed DB, got '%s': %s", result.Status, result.Message)
+		}
+	})
+}
+
+func TestCheckAPIAuth_ExtraCases(t *testing.T) {
+	t.Run("health returns error status", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+		d := New(database, tmpDir)
+		d.SetAPI(server.URL, "")
+		result := d.CheckAPIAuth()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for health error, got '%s': %s", result.Status, result.Message)
+		}
+		if !strings.Contains(result.Message, "500") {
+			t.Errorf("Expected status 500 in message, got: %s", result.Message)
+		}
+	})
+
+	t.Run("auth verify returns error status", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/health" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+		d := New(database, tmpDir)
+		d.SetAPI(server.URL, "token")
+		result := d.CheckAPIAuth()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for auth verify error, got '%s': %s", result.Status, result.Message)
+		}
+		if !strings.Contains(result.Message, "403") {
+			t.Errorf("Expected status 403 in message, got: %s", result.Message)
+		}
+	})
+
+	t.Run("auth verify decode error", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/health" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte("not json"))
+		}))
+		defer server.Close()
+		d := New(database, tmpDir)
+		d.SetAPI(server.URL, "token")
+		result := d.CheckAPIAuth()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for decode error, got '%s': %s", result.Status, result.Message)
+		}
+		if !strings.Contains(result.Message, "Could not parse") {
+			t.Errorf("Expected parse error message, got: %s", result.Message)
+		}
+	})
+}
+
+func TestCheckEmbeddingAvailability_ExtraCases(t *testing.T) {
+	t.Run("openai endpoint reachable", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/openai/v1/models" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+		// The embeddings client auto-detects "openai" API type when the URL
+		// contains the substring "openai". The probe then hits /v1/models.
+		writeConfigWithBaseURL(t, tmpDir, server.URL+"/openai")
+		d := New(database, tmpDir)
+		result := d.CheckEmbeddingAvailability()
+		if result.Status != "ok" {
+			t.Errorf("Expected status 'ok' for reachable OpenAI endpoint, got '%s': %s", result.Status, result.Message)
+		}
+	})
+
+	t.Run("endpoint returns bad status", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+		writeConfigWithBaseURL(t, tmpDir, server.URL)
+		d := New(database, tmpDir)
+		result := d.CheckEmbeddingAvailability()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn' for bad endpoint status, got '%s': %s", result.Status, result.Message)
+		}
+	})
 }

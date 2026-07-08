@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/agentvault/core/internal/mcp"
 	"github.com/spf13/cobra"
@@ -13,6 +17,20 @@ var (
 	mcpHTTP bool
 	mcpPort int
 )
+
+// mcpStopSignal returns a channel that is closed when the MCP server should
+// shut down. It is overridable in tests so the HTTP serve loop can be stopped
+// without sending signals to the test process.
+var mcpStopSignal = func() <-chan struct{} {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() {
+		<-quit
+		close(done)
+	}()
+	return done
+}
 
 // mcpCmd is the parent command for MCP server operations.
 var mcpCmd = &cobra.Command{
@@ -68,10 +86,16 @@ func runMcpServe(cmd *cobra.Command, args []string) {
 	server.RegisterTools()
 
 	if mcpHTTP {
-		addr := fmt.Sprintf(":%d", mcpPort)
+		addr := fmt.Sprintf("127.0.0.1:%d", mcpPort)
 		fmt.Fprintf(os.Stderr, "AgentVault MCP server started (HTTP on %s)\n", addr)
-		http.Handle("/", server)
-		if err := http.ListenAndServe(addr, server); err != nil {
+		srv := &http.Server{Addr: addr, Handler: server}
+		go func() {
+			<-mcpStopSignal()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = srv.Shutdown(ctx)
+		}()
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			fmt.Fprintf(os.Stderr, "HTTP server error: %v\n", err)
 			os.Exit(1)
 		}

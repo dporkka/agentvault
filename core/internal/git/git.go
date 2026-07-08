@@ -4,6 +4,7 @@
 package git
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -67,11 +68,18 @@ func runGit(vaultPath string, args ...string) (string, error) {
 	}
 	allArgs := append([]string{"-C", vaultPath}, args...)
 	cmd := exec.Command("git", allArgs...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if stderr.Len() > 0 {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitErr.Stderr = stderr.Bytes()
+			}
+		}
 		return "", gitError(err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	return strings.TrimSpace(stdout.String()), nil
 }
 
 // IsGitRepo checks if the vault path is a git repository.
