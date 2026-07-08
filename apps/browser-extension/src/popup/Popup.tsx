@@ -17,9 +17,10 @@ import { ClipForm } from './components/ClipForm';
 import { SearchPanel } from './components/SearchPanel';
 import { AskPanel } from './components/AskPanel';
 import { RecentPanel } from './components/RecentPanel';
+import { QueuePanel } from './components/QueuePanel';
 import './popup.css';
 
-type Tab = 'clip' | 'search' | 'ask' | 'recent';
+type Tab = 'clip' | 'search' | 'ask' | 'recent' | 'queue';
 type AuthState = 'unknown' | 'missing' | 'invalid' | 'valid';
 
 export function Popup() {
@@ -204,12 +205,14 @@ export function Popup() {
         {tabButton('search', 'Search', '\uD83D\uDD0D')}
         {tabButton('ask', 'Ask', '\u2728')}
         {tabButton('recent', 'Recent', '\u23F0')}
+        {tabButton('queue', 'Queue', '\uD83D\uDCE5')}
       </div>
       <div style={{ flex: 1, overflow: 'auto' }}>
         {activeTab === 'clip' && <ClipForm initialTitle={pageData.title} initialUrl={pageData.url} initialSelectedText={pageData.selectedText} />}
         {activeTab === 'search' && <SearchPanel />}
         {activeTab === 'ask' && <AskPanel />}
         {activeTab === 'recent' && <RecentPanel />}
+        {activeTab === 'queue' && <QueuePanel />}
       </div>
       <div style={{ padding: '8px 14px', borderTop: '1px solid #2a2d3a', textAlign: 'center', fontSize: '11px', color: '#6b7280' }}>Clips go to your local AgentVault</div>
     </div>

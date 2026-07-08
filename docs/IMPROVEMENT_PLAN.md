@@ -115,7 +115,7 @@ Deliverables:
 
 - Done — add a first-run connection/token flow for web, extension, and mobile.
 - Done — show server health, vault status, auth status, and indexing status in clients. Web, extension, and mobile surface health/auth; desktop now surfaces vault, AI/index, local API server, auth token, and inbox/capture status.
-- Not started — make capture sync states explicit in mobile/extension: unsynced, syncing, synced, failed.
+- Done — make capture sync states explicit in mobile/extension: unsynced, syncing, synced, failed. Mobile `CaptureCard` now shows status labels, errors, retry counts, and per-item retry; `InboxScreen` has a pending filter and bulk retry. The extension popup has a Queue tab listing queued captures with retry/clear actions.
 - Done — align project pickers and note filters across web, extension, mobile, and desktop (all use the shared `@agentvault/contract` types and consistent filter sets).
 - Done — share request/response types from one contract source (`@agentvault/contract`).
 - Partially done — improve desktop bundle splitting for CodeMirror/markdown-heavy paths. The main chunk is no longer the offender; the `codemirror-core` chunk still triggers a warning.
@@ -144,6 +144,9 @@ What remains for Phase 2:
 
 - Budget or eliminate the remaining desktop `codemirror-core` chunk warning
   (~562 kB after minification).
+- Capture sync states are now surfaced; future work could add automatic background
+  retries with exponential backoff in the extension and richer error categorization
+  (e.g., auth vs. network vs. vault errors).
 
 ## Phase 3 - Vault Lifecycle And Data Quality
 
@@ -197,5 +200,5 @@ Next suggested PRs, in priority order:
 3. **Expand doctor and diagnostics (Phase 3).** Add API-auth, index-freshness,
    duplicate-ID, broken-link, orphan-chunk, and embedding-availability checks so
    vault health is visible from one command.
-4. **Capture sync states (Phase 2).** Make capture sync states explicit in mobile
-   and extension: unsynced, syncing, synced, and failed.
+4. ~~**Capture sync states (Phase 2).**~~ Done: mobile and extension now surface
+   unsynced, syncing, synced, and failed states with retry controls.

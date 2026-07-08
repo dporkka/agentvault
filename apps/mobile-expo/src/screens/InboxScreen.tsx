@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
-import { View, Text, FlatList, RefreshControl, Alert, StyleSheet } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, FlatList, RefreshControl, Alert, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Capture } from '../types';
 import { deleteCapture } from '../storage/localInbox';
-import { syncCaptures, formatSyncResult, isSyncable } from '../storage/sync';
+import { syncCaptures, formatSyncResult, isSyncable, canRetry } from '../storage/sync';
 import { useCaptures } from '../hooks/useCaptures';
 import CaptureCard from '../components/CaptureCard';
 import ConnectionBadge from '../components/ConnectionBadge';
@@ -31,9 +31,20 @@ function groupByDate(captures: Capture[]): GroupedCaptures[] {
   }));
 }
 
+type Filter = 'all' | 'pending';
+
 export default function InboxScreen() {
   const { captures, loading, refresh } = useCaptures();
-  const grouped = useMemo(() => groupByDate(captures), [captures]);
+  const [filter, setFilter] = useState<Filter>('all');
+
+  const filteredCaptures = useMemo(() => {
+    if (filter === 'pending') {
+      return captures.filter((c) => !c.synced && c.syncStatus !== 'syncing');
+    }
+    return captures;
+  }, [captures, filter]);
+
+  const grouped = useMemo(() => groupByDate(filteredCaptures), [filteredCaptures]);
 
   const handleSync = async () => {
     await syncCaptures({ continueOnError: true });
@@ -63,6 +74,29 @@ export default function InboxScreen() {
     refresh();
   };
 
+  const handleRetryOne = async (cap: Capture) => {
+    if (!canRetry(cap)) {
+      Alert.alert('Retry', 'Please wait before retrying this capture.');
+      return;
+    }
+    const result = await syncCaptures({ captureId: cap.id, continueOnError: false, force: true });
+    if (result.failed > 0) {
+      Alert.alert('Retry failed', formatSyncResult(result));
+    }
+    refresh();
+  };
+
+  const handleRetryAll = async () => {
+    const pending = captures.filter((c) => canRetry(c));
+    if (pending.length === 0) {
+      Alert.alert('Retry', 'No captures ready to retry right now.');
+      return;
+    }
+    const result = await syncCaptures({ continueOnError: true, force: true });
+    Alert.alert('Retry result', formatSyncResult(result));
+    refresh();
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
@@ -72,7 +106,20 @@ export default function InboxScreen() {
             {grouped.reduce((sum, g) => sum + g.captures.length, 0)} captures
           </Text>
         </View>
-        <ConnectionBadge />
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.filterBtn, filter === 'pending' && styles.filterBtnActive]}
+            onPress={() => setFilter((f) => (f === 'all' ? 'pending' : 'all'))}
+          >
+            <Text style={[styles.filterText, filter === 'pending' && styles.filterTextActive]}>
+              {filter === 'pending' ? 'Pending' : 'All'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.retryAllBtn} onPress={handleRetryAll}>
+            <Text style={styles.retryAllText}>Retry all</Text>
+          </TouchableOpacity>
+          <ConnectionBadge />
+        </View>
       </View>
 
       <FlatList
@@ -90,6 +137,7 @@ export default function InboxScreen() {
                 capture={cap}
                 onDelete={handleDelete}
                 onPress={() => handleSyncOne(cap)}
+                onRetry={handleRetryOne}
               />
             ))}
           </View>
@@ -118,6 +166,42 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: spacing.md,
     marginTop: spacing.sm,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterBtn: {
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  filterBtnActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  filterText: {
+    color: colors.textSecondary,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+  },
+  filterTextActive: {
+    color: '#fff',
+  },
+  retryAllBtn: {
+    borderWidth: 1,
+    borderColor: colors.warning,
+    borderRadius: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  retryAllText: {
+    color: colors.warning,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
   },
   title: {
     color: colors.textPrimary,

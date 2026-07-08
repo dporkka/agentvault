@@ -8,6 +8,7 @@ interface CaptureCardProps {
   capture: Capture;
   onPress?: (c: Capture) => void;
   onDelete?: (id: string) => void;
+  onRetry?: (c: Capture) => void;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -23,7 +24,14 @@ const STATUS_COLORS: Record<string, string> = {
   unsynced: colors.warning,
 };
 
-export default function CaptureCard({ capture, onPress, onDelete }: CaptureCardProps) {
+const STATUS_LABELS: Record<string, string> = {
+  synced: 'Synced',
+  syncing: 'Syncing…',
+  failed: 'Failed',
+  unsynced: 'Offline',
+};
+
+export default function CaptureCard({ capture, onPress, onDelete, onRetry }: CaptureCardProps) {
   const date = new Date(capture.createdAt).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -66,6 +74,28 @@ export default function CaptureCard({ capture, onPress, onDelete }: CaptureCardP
           {capture.text}
         </Text>
       ) : null}
+
+      {(capture.syncError || (capture.retryCount && capture.retryCount > 0) || status === 'failed' || status === 'unsynced') && (
+        <View style={styles.statusRow}>
+          <Text style={[styles.statusLabel, { color: statusColor }]}>
+            {STATUS_LABELS[status] ?? status}
+          </Text>
+          {capture.syncError ? <Text style={styles.errorText}>{capture.syncError}</Text> : null}
+          {capture.retryCount && capture.retryCount > 0 && (
+            <Text style={styles.attemptsText}>Attempt {capture.retryCount}</Text>
+          )}
+          {(status === 'failed' || status === 'unsynced') && onRetry && (
+            <TouchableOpacity
+              style={[styles.retryBtn, { borderColor: statusColor }]}
+              onPress={() => onRetry(capture)}
+              accessibilityLabel="Retry sync"
+              accessibilityRole="button"
+            >
+              <Text style={[styles.retryText, { color: statusColor }]}>Retry</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       <View style={styles.footer}>
         {capture.project ? (
@@ -171,5 +201,38 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: typography.sizes.xs,
     marginLeft: 'auto',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: spacing.sm,
+  },
+  statusLabel: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  errorText: {
+    color: colors.textMuted,
+    fontSize: typography.sizes.xs,
+    flexShrink: 1,
+  },
+  attemptsText: {
+    color: colors.textMuted,
+    fontSize: typography.sizes.xs,
+  },
+  retryBtn: {
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginLeft: 'auto',
+  },
+  retryText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.bold,
   },
 });
