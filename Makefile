@@ -1,4 +1,4 @@
-.PHONY: build test test-ci lint fmt tidy dev-core clean install help desktop desktop-dev ci contract-check contract-list-snake release release-cli release-cli-linux release-cli-darwin release-cli-windows release-extension release-desktop-linux release-desktop-linux-tar release-mobile
+.PHONY: build test test-ci bench lint fmt tidy dev-core clean install help desktop desktop-dev ci contract-check contract-list-snake release release-cli release-cli-linux release-cli-darwin release-cli-windows release-extension release-desktop-linux release-desktop-linux-tar release-mobile
 
 VAULT := ./test-vault
 CORE := ./core
@@ -19,6 +19,9 @@ test: ## Run all Go tests (verbose)
 
 test-ci: ## Run Go tests with race detection and cache disabled (CI mode)
 	cd $(CORE) && go test -race -count=1 ./...
+
+bench: ## Run Go benchmarks for core operations
+	cd $(CORE) && go test -bench=. -benchmem -run=^$$ ./internal/indexer ./internal/search ./internal/importers ./internal/vectors
 
 lint: ## Run read-only Go checks (vet + gofmt)
 	cd $(CORE) && go vet ./...

@@ -155,7 +155,7 @@ Deliverables:
 - Done — embed migrations with `go:embed` and run them from `db.RunMigrations`; inline schema is preserved as a fallback.
 - Done — improve import previews: add `--dry-run` mode to `agentvault import` with duplicate summary, attachment summary, planned-write list, and frontmatter normalization report.
 - Add safe Git workflow helpers for common vault operations without auto-committing unexpectedly.
-- Add benchmarks for indexing, search, vector search, and import on representative vault sizes.
+- Done — add benchmarks for indexing, search, vector search, and import on representative vault sizes; run with `make bench`.
 
 Exit criteria:
 
