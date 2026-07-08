@@ -20,12 +20,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    // The editor is lazy-loaded, but CodeMirror's core view code is still
-    // ~560 kB after minification. We split out the language support, React
-    // wrapper, and markdown renderer, then budget the remaining core chunk
-    // because desktop assets are embedded and a single monolithic editor
-    // chunk is preferable to many tiny chunks at runtime.
-    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -54,13 +48,31 @@ export default defineConfig({
             return 'codemirror-uiw';
           }
 
-          // Core CodeMirror packages. Split the two largest so no single chunk
+          // Core CodeMirror packages. Split the largest so no single chunk
           // exceeds the default warning threshold.
           if (name === '@codemirror/view') {
             return 'codemirror-view';
           }
           if (name === '@codemirror/state') {
             return 'codemirror-state';
+          }
+          if (name === '@codemirror/commands') {
+            return 'codemirror-commands';
+          }
+          if (name === '@codemirror/language') {
+            return 'codemirror-language';
+          }
+          if (name === '@codemirror/search') {
+            return 'codemirror-search';
+          }
+          if (name === '@codemirror/autocomplete') {
+            return 'codemirror-autocomplete';
+          }
+          if (name === '@codemirror/lint') {
+            return 'codemirror-lint';
+          }
+          if (name === '@codemirror/theme-one-dark') {
+            return 'codemirror-theme';
           }
           if (name.startsWith('@codemirror/') || name === 'codemirror') {
             return 'codemirror-core';

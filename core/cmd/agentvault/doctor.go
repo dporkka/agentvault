@@ -2,12 +2,16 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/agentvault/core/internal/doctor"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
+
+var doctorToken string
+var doctorAPIURL string
 
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
@@ -21,7 +25,13 @@ var doctorCmd = &cobra.Command{
 		}
 		defer database.Close()
 
+		token := doctorToken
+		if token == "" {
+			token = os.Getenv("AGENTVAULT_TOKEN")
+		}
+
 		d := doctor.New(database, vp)
+		d.SetAPI(doctorAPIURL, token)
 		results := d.RunAll()
 
 		// Print results with color-coded status
@@ -93,4 +103,6 @@ var doctorCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(doctorCmd)
+	doctorCmd.Flags().StringVar(&doctorToken, "token", "", "API token for auth verification (defaults to AGENTVAULT_TOKEN env var)")
+	doctorCmd.Flags().StringVar(&doctorAPIURL, "api-url", "http://127.0.0.1:47321", "Base URL of the local AgentVault API")
 }

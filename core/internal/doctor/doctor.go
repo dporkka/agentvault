@@ -20,8 +20,10 @@ import (
 
 // Doctor runs diagnostic checks on an AgentVault.
 type Doctor struct {
-	db        *db.DB
-	vaultPath string
+	db         *db.DB
+	vaultPath  string
+	apiBaseURL string
+	apiToken   string
 }
 
 // CheckResult is the outcome of a single diagnostic check.
@@ -34,7 +36,13 @@ type CheckResult struct {
 
 // New creates a new Doctor.
 func New(database *db.DB, vaultPath string) *Doctor {
-	return &Doctor{db: database, vaultPath: vaultPath}
+	return &Doctor{db: database, vaultPath: vaultPath, apiBaseURL: "http://127.0.0.1:47321"}
+}
+
+// SetAPI configures the local API endpoint and token for API-auth checks.
+func (d *Doctor) SetAPI(baseURL, token string) {
+	d.apiBaseURL = baseURL
+	d.apiToken = token
 }
 
 // RunAll runs all diagnostic checks and returns the results.
@@ -51,6 +59,7 @@ func (d *Doctor) RunAll() []CheckResult {
 		d.CheckOrphanDBFiles(),
 		d.CheckOrphanChunks(),
 		d.CheckEmbeddingAvailability(),
+		d.CheckAPIAuth(),
 	}
 	return results
 }
@@ -651,6 +660,98 @@ func (d *Doctor) CheckOrphanChunks() CheckResult {
 		Name:    "Orphan Chunks",
 		Status:  "ok",
 		Message: "No orphan chunks found",
+	}
+}
+
+// CheckAPIAuth verifies that the local AgentVault API is reachable and that
+// the supplied token is accepted by /auth/verify.
+func (d *Doctor) CheckAPIAuth() CheckResult {
+	// Probe health endpoint first.
+	healthResp, err := http.Get(d.apiBaseURL + "/health")
+	if err != nil {
+		return CheckResult{
+			Name:    "API Auth",
+			Status:  "warn",
+			Message: "Local API is not reachable",
+			Details: []string{fmt.Sprintf("Endpoint: %s", d.apiBaseURL), err.Error()},
+		}
+	}
+	defer healthResp.Body.Close()
+
+	if healthResp.StatusCode >= http.StatusBadRequest {
+		return CheckResult{
+			Name:    "API Auth",
+			Status:  "warn",
+			Message: fmt.Sprintf("Local API returned status %d", healthResp.StatusCode),
+			Details: []string{fmt.Sprintf("Endpoint: %s", d.apiBaseURL)},
+		}
+	}
+
+	if d.apiToken == "" {
+		return CheckResult{
+			Name:    "API Auth",
+			Status:  "warn",
+			Message: "No API token supplied; auth not verified",
+			Details: []string{"Set --token or AGENTVAULT_TOKEN to verify token validity."},
+		}
+	}
+
+	req, err := http.NewRequest(http.MethodGet, d.apiBaseURL+"/auth/verify", nil)
+	if err != nil {
+		return CheckResult{
+			Name:    "API Auth",
+			Status:  "warn",
+			Message: "Failed to build verify request",
+			Details: []string{err.Error()},
+		}
+	}
+	req.Header.Set("X-AgentVault-Token", d.apiToken)
+
+	verifyResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return CheckResult{
+			Name:    "API Auth",
+			Status:  "warn",
+			Message: "Could not contact auth verify endpoint",
+			Details: []string{err.Error()},
+		}
+	}
+	defer verifyResp.Body.Close()
+
+	if verifyResp.StatusCode >= http.StatusBadRequest {
+		return CheckResult{
+			Name:    "API Auth",
+			Status:  "warn",
+			Message: fmt.Sprintf("Auth verify returned status %d", verifyResp.StatusCode),
+		}
+	}
+
+	var body struct {
+		Version    string `json:"version"`
+		TokenValid bool   `json:"tokenValid"`
+	}
+	if err := json.NewDecoder(verifyResp.Body).Decode(&body); err != nil {
+		return CheckResult{
+			Name:    "API Auth",
+			Status:  "warn",
+			Message: "Could not parse auth verify response",
+			Details: []string{err.Error()},
+		}
+	}
+
+	if !body.TokenValid {
+		return CheckResult{
+			Name:    "API Auth",
+			Status:  "warn",
+			Message: "Token is invalid or does not match the running server",
+			Details: []string{"Run 'agentvault serve' and use the token printed at startup."},
+		}
+	}
+
+	return CheckResult{
+		Name:    "API Auth",
+		Status:  "ok",
+		Message: fmt.Sprintf("API reachable and token valid (version %s)", body.Version),
 	}
 }
 

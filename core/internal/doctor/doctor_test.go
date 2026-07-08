@@ -391,8 +391,8 @@ func TestRunAll(t *testing.T) {
 	d := New(database, tmpDir)
 	results := d.RunAll()
 
-	if len(results) != 11 {
-		t.Errorf("Expected 11 check results, got %d", len(results))
+	if len(results) != 12 {
+		t.Errorf("Expected 12 check results, got %d", len(results))
 	}
 
 	for _, r := range results {
@@ -592,6 +592,83 @@ func TestCheckOrphanChunks(t *testing.T) {
 		result := d.CheckOrphanChunks()
 		if result.Status != "warn" {
 			t.Errorf("Expected status 'warn', got '%s'", result.Status)
+		}
+	})
+}
+
+func TestCheckAPIAuth(t *testing.T) {
+	t.Run("unreachable server", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+
+		d := New(database, tmpDir)
+		d.SetAPI("http://127.0.0.1:1", "")
+		result := d.CheckAPIAuth()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn', got '%s': %s", result.Status, result.Message)
+		}
+	})
+
+	t.Run("reachable but no token", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		d := New(database, tmpDir)
+		d.SetAPI(server.URL, "")
+		result := d.CheckAPIAuth()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn', got '%s': %s", result.Status, result.Message)
+		}
+	})
+
+	t.Run("invalid token", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":     "ok",
+				"version":    "0.1.0",
+				"hasToken":   true,
+				"tokenValid": false,
+			})
+		}))
+		defer server.Close()
+
+		d := New(database, tmpDir)
+		d.SetAPI(server.URL, "bad-token")
+		result := d.CheckAPIAuth()
+		if result.Status != "warn" {
+			t.Errorf("Expected status 'warn', got '%s': %s", result.Status, result.Message)
+		}
+	})
+
+	t.Run("valid token", func(t *testing.T) {
+		tmpDir, database, cleanup := setupTestVaultFixed(t)
+		defer cleanup()
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":     "ok",
+				"version":    "0.1.0",
+				"hasToken":   true,
+				"tokenValid": true,
+			})
+		}))
+		defer server.Close()
+
+		d := New(database, tmpDir)
+		d.SetAPI(server.URL, "valid-token")
+		result := d.CheckAPIAuth()
+		if result.Status != "ok" {
+			t.Errorf("Expected status 'ok', got '%s': %s", result.Status, result.Message)
 		}
 	})
 }

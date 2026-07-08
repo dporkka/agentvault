@@ -118,7 +118,7 @@ Deliverables:
 - Done — make capture sync states explicit in mobile/extension: unsynced, syncing, synced, failed. Mobile `CaptureCard` now shows status labels, errors, retry counts, and per-item retry; `InboxScreen` has a pending filter and bulk retry. The extension popup has a Queue tab listing queued captures with retry/clear actions.
 - Done — align project pickers and note filters across web, extension, mobile, and desktop (all use the shared `@agentvault/contract` types and consistent filter sets).
 - Done — share request/response types from one contract source (`@agentvault/contract`).
-- Partially done — improve desktop bundle splitting for CodeMirror/markdown-heavy paths. The main chunk is no longer the offender; the `codemirror-core` chunk still triggers a warning.
+- Done — improve desktop bundle splitting for CodeMirror/markdown-heavy paths. The largest chunks (`codemirror-autocomplete`, `codemirror-core`, etc.) are now split out and the explicit 600 kB warning limit has been removed; the build completes cleanly.
 
 Exit criteria:
 
@@ -142,8 +142,6 @@ The token-onboarding and local-client reliability work is complete:
 
 What remains for Phase 2:
 
-- Budget or eliminate the remaining desktop `codemirror-core` chunk warning
-  (~562 kB after minification).
 - Capture sync states are now surfaced; future work could add automatic background
   retries with exponential backoff in the extension and richer error categorization
   (e.g., auth vs. network vs. vault errors).
@@ -154,7 +152,7 @@ Target: 1-2 weeks after Phase 2.
 
 Deliverables:
 
-- Done — expand `doctor`: index freshness, orphan database files, orphan chunks, duplicate IDs, broken links, and embedding availability are now checked. API auth setup validation remains for a future PR.
+- Done — expand `doctor`: index freshness, orphan database files, orphan chunks, duplicate IDs, broken links, embedding availability, and API auth/token validity are now checked. The new `CheckAPIAuth` probes `/health` and `/auth/verify`, supports `--token` / `AGENTVAULT_TOKEN`, and is wired into `agentvault doctor`.
 - Done — embed migrations with `go:embed` and run them from `db.RunMigrations`; inline schema is preserved as a fallback.
 - Done — improve import previews: add `--dry-run` mode to `agentvault import` with duplicate summary, attachment summary, planned-write list, and frontmatter normalization report.
 - Done — add safe Git workflow helpers: `agentvault git add` to stage files and `agentvault git snapshot` to commit only when there are changes.
