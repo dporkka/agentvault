@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { AppSettings } from '../types';
-import { updateClientConfig } from '../api/agentvault';
 import { DEFAULT_APP_SETTINGS, loadSettings, persistSettings } from '../storage/settingsStore';
 
 export { DEFAULT_APP_SETTINGS as DEFAULT_SETTINGS };
@@ -23,12 +22,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       .then((next) => {
         if (!mounted) return;
         setSettings(next);
-        updateClientConfig(next.serverUrl, next.token);
       })
       .catch(() => {
-        if (mounted) {
-          updateClientConfig(DEFAULT_APP_SETTINGS.serverUrl, DEFAULT_APP_SETTINGS.token);
-        }
+        // Leave defaults in place if settings cannot be loaded.
       })
       .finally(() => {
         if (mounted) setLoaded(true);
@@ -43,7 +39,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       const next: AppSettings = { ...settings, ...patch };
       await persistSettings(next);
       setSettings(next);
-      updateClientConfig(next.serverUrl, next.token);
     },
     [settings],
   );

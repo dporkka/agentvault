@@ -1,15 +1,72 @@
-import { updateClientConfig, DEFAULT_BASE_URL } from '../agentvault';
+import { createMobileClient, DEFAULT_BASE_URL, checkHealth } from '../agentvault';
+import { getSettings } from '../../storage/localInbox';
+import { createClient } from '@agentvault/contract';
 
-describe('updateClientConfig', () => {
-  it('updates the base URL by removing a trailing slash', () => {
-    expect(() => updateClientConfig('http://example.com:47321/', undefined)).not.toThrow();
+jest.mock('../../storage/localInbox', () => ({
+  getSettings: jest.fn(),
+}));
+
+describe('createMobileClient', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getSettings as jest.Mock).mockResolvedValue({
+      serverUrl: 'http://example.com:47321/',
+      token: 'test-token',
+      defaultProject: '',
+    });
   });
 
-  it('accepts the default base URL', () => {
-    expect(() => updateClientConfig(DEFAULT_BASE_URL, undefined)).not.toThrow();
+  it('normalizes the persisted base URL and passes the token', async () => {
+    await createMobileClient();
+    expect(createClient).toHaveBeenCalledWith({
+      baseUrl: 'http://example.com:47321',
+      token: 'test-token',
+    });
   });
 
-  it('updates the auth token', () => {
-    expect(() => updateClientConfig(undefined, 'test-token')).not.toThrow();
+  it('allows overriding the base URL and token', async () => {
+    await createMobileClient({ baseUrl: 'http://other.com:8080/', token: 'other-token' });
+    expect(createClient).toHaveBeenCalledWith({
+      baseUrl: 'http://other.com:8080',
+      token: 'other-token',
+    });
+  });
+
+  it('falls back to the default base URL and empty token', async () => {
+    (getSettings as jest.Mock).mockResolvedValue({
+      serverUrl: '',
+      token: '',
+      defaultProject: '',
+    });
+    await createMobileClient();
+    expect(createClient).toHaveBeenCalledWith({
+      baseUrl: DEFAULT_BASE_URL,
+      token: '',
+    });
+  });
+});
+
+describe('checkHealth', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getSettings as jest.Mock).mockResolvedValue({
+      serverUrl: DEFAULT_BASE_URL,
+      token: '',
+      defaultProject: '',
+    });
+  });
+
+  it('returns true when the client reports healthy', async () => {
+    (createClient as jest.Mock).mockReturnValue({
+      checkHealth: jest.fn().mockResolvedValue({ ok: true }),
+    });
+    await expect(checkHealth()).resolves.toBe(true);
+  });
+
+  it('returns false when the client throws', async () => {
+    (createClient as jest.Mock).mockReturnValue({
+      checkHealth: jest.fn().mockRejectedValue(new Error('boom')),
+    });
+    await expect(checkHealth()).resolves.toBe(false);
   });
 });
