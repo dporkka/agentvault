@@ -1,59 +1,57 @@
 # AgentVault
 
-AgentVault is a local-first knowledge operating system for notes, decisions,
-research, tasks, and agent-readable context.
+[![CI](https://github.com/dporkka/agentvault/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dporkka/agentvault/actions/workflows/ci.yml)
+[![Release](https://github.com/dporkka/agentvault/actions/workflows/release.yml/badge.svg)](https://github.com/dporkka/agentvault/releases)
+[![Go Version](https://img.shields.io/badge/Go-1.23%2B-blue.svg)](https://go.dev)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-Your Markdown files are the source of truth. SQLite is a rebuildable index and
-cache that powers search, retrieval, the local HTTP API, MCP tools, and the
-desktop, web, browser-extension, and mobile clients.
+**A local-first knowledge operating system for notes, decisions, research, tasks, and agent-readable context.**
+
+AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The same files are readable by you, editable in any editor, and indexable by the Go core for fast full-text, semantic, and hybrid search. A single shared API contract keeps the CLI, local HTTP API, MCP server, desktop app, web app, browser extension, and mobile app in sync.
+
+- **Files first.** Markdown is the durable source of truth; the SQLite index can be rebuilt at any time.
+- **Local by default.** The CLI, HTTP API, and desktop app run on your machine.
+- **Agent-ready.** Source-grounded answers, MCP tools, and structured note types make the vault usable by AI assistants.
+- **One shared contract.** Go and TypeScript clients share a single API contract so server and clients stay in sync. See [`packages/contract/`](packages/contract/) and [`core/internal/contract/`](core/internal/contract/).
 
 ## Table of Contents
 
-- [Overview](#overview)
+- [Features](#features)
 - [Quick Start](#quick-start)
+- [Install](#install)
 - [CLI Reference](#cli-reference)
-- [AI Configuration](#ai-configuration)
 - [Local HTTP API](#local-http-api)
 - [MCP Server](#mcp-server)
 - [Clients](#clients)
-- [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
 - [Project Structure](#project-structure)
 - [Development](#development)
-- [Roadmap and Known Gaps](#roadmap-and-known-gaps)
+- [Documentation](#documentation)
 - [License](#license)
 
-## Overview
+## Features
 
-AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The
-same files are readable by you, editable in any editor, and indexable by the Go
-core for fast full-text, semantic, and hybrid search.
-
-Key design choices:
-
-- **Files first.** Markdown is the durable source of truth; the SQLite index can
-  be rebuilt at any time.
-- **Local by default.** The CLI, HTTP API, and desktop app run on your machine.
-- **Agent-ready.** Source-grounded answers, MCP tools, and structured note types
-  make the vault usable by AI assistants.
-- **One shared contract.** Go and TypeScript clients share a single API contract
-  so server and clients stay in sync. See [`packages/contract/`](packages/contract/)
-  and [`core/internal/contract/`](core/internal/contract/).
+| Feature | What it does |
+| --- | --- |
+| **Markdown-native vault** | Notes are plain Markdown files with YAML frontmatter. No lock-in, full version-control friendliness. |
+| **Full-text, vector, and hybrid search** | SQLite FTS5 plus optional embedding-based semantic search, exposed through one search interface. |
+| **Structured note types** | `note`, `decision`, `task`, `meeting`, `source`, and `project` templates with consistent folder rules. |
+| **Source-grounded AI** | `agentvault ask` and `POST /ask` retrieve relevant notes first, then answer with citations. |
+| **Local HTTP API** | A loopback REST API for desktop, web, extension, and mobile clients. |
+| **MCP server** | Expose vault search, read, create, capture, and ask as Model Context Protocol tools. |
+| **Multi-client support** | First-party desktop (Wails), web (Vite), browser extension (MV3), and mobile (Expo) apps. |
+| **Vault diagnostics** | `agentvault doctor` checks config, database, migrations, links, orphan chunks, embeddings, and API auth. |
 
 ## Quick Start
 
-Install the CLI from a [release binary](docs/INSTALL.md#cli) or [build from source](docs/INSTALL.md#building-from-source).
+Install the CLI from a [release binary](docs/INSTALL.md#cli) or [build from source](docs/INSTALL.md#building-from-source), then:
 
 ```bash
 # Initialize a vault
 agentvault init ./my-vault
 cd ./my-vault
 
-# Optional starter templates
-agentvault init ../founder-vault --template founder
-agentvault init ../developer-vault --template developer
-
-# Create notes
+# Create structured notes
 agentvault new note --title "My first note"
 agentvault new decision --project platform --title "Use Postgres"
 agentvault new task --project platform --title "Build API"
@@ -62,11 +60,14 @@ agentvault new task --project platform --title "Build API"
 agentvault index
 agentvault search "Postgres"
 
+# Ask a source-grounded question
+agentvault ask "What have I decided about vector search?"
+
 # Validate vault health
 agentvault doctor
 ```
 
-## Releases
+## Install
 
 AgentVault publishes release artifacts on every `v*.*.*` tag:
 
@@ -75,7 +76,8 @@ AgentVault publishes release artifacts on every `v*.*.*` tag:
 - Browser extension zip
 - Mobile iOS/Android export bundles
 
-See [`docs/INSTALL.md`](docs/INSTALL.md) for installation instructions and [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for the secrets and accounts required for signed installers and store submissions.
+See [`docs/INSTALL.md`](docs/INSTALL.md) for per-platform installation instructions.  
+For signed installers and store publishing setup, see [`docs/PUBLISHING.md`](docs/PUBLISHING.md).
 
 ## CLI Reference
 
@@ -120,9 +122,8 @@ By default, AgentVault uses Ollama at `http://localhost:11434`.
 }
 ```
 
-Supported providers: `ollama`, `openai`, `anthropic`, `openrouter`, and `mock`.
-Cloud providers read `AGENTVAULT_API_KEY` when no key is stored in the vault
-config.
+Supported providers: `ollama`, `openai`, `anthropic`, `openrouter`, and `mock`.  
+Cloud providers read `AGENTVAULT_API_KEY` when no key is stored in the vault config.
 
 ```bash
 agentvault ask "What have I decided about vector search?"
@@ -138,9 +139,7 @@ agentvault serve
 agentvault serve --port 8080
 ```
 
-The server prints an auth token at startup. `GET` endpoints are open locally;
-write endpoints require the token in either the `X-AgentVault-Token` header or
-`Authorization: Bearer <token>`.
+The server prints an auth token at startup. `GET` endpoints are open locally; write endpoints require the token in either the `X-AgentVault-Token` header or `Authorization: Bearer <token>`.
 
 | Endpoint | Description |
 | --- | --- |
@@ -158,8 +157,7 @@ write endpoints require the token in either the `X-AgentVault-Token` header or
 | `GET /stale` | Stale notes |
 | `GET /git/status` | Vault Git status |
 
-For the full contract, including exact request/response shapes, auth rules,
-CORS policy, and rate limits, see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
+For the full contract, including exact request/response shapes, auth rules, CORS policy, and rate limits, see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
 
 ## MCP Server
 
@@ -188,32 +186,14 @@ Registered tools:
 
 ## Clients
 
-AgentVault ships with several first-party clients, all built against the shared
-`@agentvault/contract` package.
+AgentVault ships with several first-party clients, all built against the shared `@agentvault/contract` package.
 
 | Client | Location | Notes |
 | --- | --- | --- |
-| **Desktop** | `apps/desktop-wails/` | Wails v2 app with a React/TypeScript frontend. Vault picker, search, editor, dashboards, settings, and AI panel. |
-| **Web** | `apps/web-local/` | React/Vite client for the local HTTP API. |
-| **Browser extension** | `apps/browser-extension/` | Manifest V3 extension for page capture and vault search through the local API. |
-| **Mobile** | `apps/mobile-expo/` | Expo app with capture-first flows, local inbox, settings, search, and sync hooks. |
-
-## Tech Stack
-
-| Component | Technology |
-| --- | --- |
-| Core engine | Go 1.23+ (`core`), Go 1.25+ (`apps/desktop-wails`) |
-| Database | SQLite + FTS5 via `modernc.org/sqlite` |
-| Markdown | YAML frontmatter |
-| CLI | Cobra |
-| Desktop | Wails v2.9.2 + React 18.3 + TypeScript |
-| Web app | React 18.3 + Vite 8 + TypeScript |
-| Browser extension | Manifest V3 + React 18.3 + Vite 8 |
-| Mobile | Expo ~56.0 + React Native 0.85 + React 19.2 |
-| Editor | CodeMirror 6 |
-| Styling | Tailwind CSS 3.4 |
-| AI providers | Ollama, OpenAI-compatible, Anthropic, OpenRouter, mock |
-| Agent protocol | MCP |
+| **Desktop** | [`apps/desktop-wails/`](apps/desktop-wails/) | Wails v2 app with a React/TypeScript frontend. Vault picker, search, editor, dashboards, settings, and AI panel. |
+| **Web** | [`apps/web-local/`](apps/web-local/) | React/Vite client for the local HTTP API. |
+| **Browser extension** | [`apps/browser-extension/`](apps/browser-extension/) | Manifest V3 extension for page capture and vault search through the local API. |
+| **Mobile** | [`apps/mobile-expo/`](apps/mobile-expo/) | Expo app with capture-first flows, local inbox, settings, search, and sync hooks. |
 
 ## Architecture
 
@@ -297,38 +277,30 @@ make contract-check
 
 # Build all release artifacts
 make release
-```
 
-See [`docs/INSTALL.md`](docs/INSTALL.md) for installation instructions for each component.
+# Check whether publishing secrets are configured
+make check-secrets
+```
 
 ### Frontend clients
 
 ```bash
 # Web app
-cd apps/web-local
-npm ci
-npm run build
+cd apps/web-local && npm ci && npm run build
 
 # Browser extension
-cd apps/browser-extension
-npm ci
-npm run build
+cd apps/browser-extension && npm ci && npm run build
 
 # Desktop frontend
-cd apps/desktop-wails/frontend
-npm ci
-npm run build
+cd apps/desktop-wails/frontend && npm ci && npm run build
 
 # Mobile type-check
-cd apps/mobile-expo
-npm ci
-npm run typecheck
+cd apps/mobile-expo && npm ci && npm run typecheck
 ```
 
 ### Desktop app
 
-The Wails desktop app requires GTK and WebKit2GTK 4.1 development libraries.
-On Ubuntu 24.04+ and 26.04, build with the `webkit2_41` tag:
+The Wails desktop app requires GTK and WebKit2GTK 4.1 development libraries. On Ubuntu 24.04+ and 26.04, build with the `webkit2_41` tag:
 
 ```bash
 make desktop
@@ -340,26 +312,17 @@ For live development:
 make desktop-dev
 ```
 
-## Roadmap and Known Gaps
+## Documentation
 
-AgentVault is an early application with a working CLI, API, MCP server, desktop
-app, web app, browser extension, and mobile scaffold. Current planning and
-detailed status live in:
+- [`docs/INSTALL.md`](docs/INSTALL.md) — Install the CLI, desktop, web, extension, and mobile apps.
+- [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) — Full local HTTP API contract.
+- [`docs/SECURITY.md`](docs/SECURITY.md) — Security boundaries and threat model.
+- [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) — Platform and dependency matrix.
+- [`docs/PUBLISHING.md`](docs/PUBLISHING.md) — Signed installers and store publishing setup.
+- [`docs/IMPROVEMENT_PLAN.md`](docs/IMPROVEMENT_PLAN.md) — Roadmap and completed milestones.
+- [`docs/CODEBASE_ANALYSIS.md`](docs/CODEBASE_ANALYSIS.md) — High-level codebase notes.
 
-- [`docs/CODEBASE_ANALYSIS.md`](docs/CODEBASE_ANALYSIS.md)
-- [`docs/IMPROVEMENT_PLAN.md`](docs/IMPROVEMENT_PLAN.md)
-
-Notable remaining work:
-
-- Add client-side capture sync state indicators (unsynced, syncing, synced, failed) in the mobile app and browser extension.
-
-For platform requirements, see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
-For security expectations, see [`docs/SECURITY.md`](docs/SECURITY.md).
-
-CI runs `make ci`, frontend builds, mobile type-checks, and the desktop Go build
-with the `webkit2_41` tag. Packaged CLI artifacts can be smoke-tested with
-`make smoke-test`. Signed macOS/Windows installers and store publishing
-workflows are secret-gated; see [`docs/PUBLISHING.md`](docs/PUBLISHING.md).
+CI runs `make ci`, frontend builds, mobile type-checks, and the desktop Go build with the `webkit2_41` tag. Packaged CLI artifacts can be smoke-tested with `make smoke-test`.
 
 ## License
 

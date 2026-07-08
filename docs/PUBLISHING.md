@@ -4,6 +4,8 @@ This document lists the GitHub secrets, accounts, and one-time setup required to
 
 All publishing workflows are **secret-gated**: they build and upload unsigned/test artifacts when credentials are absent, and only sign or publish when the required secrets are configured.
 
+Run `make check-secrets` from the repository root to see which secrets are already configured and which are still needed for macOS signing, Windows signing, the Chrome Web Store, and the mobile app stores.
+
 ## Check your secrets
 
 Run the provided helper to see which publishing secrets are already configured:

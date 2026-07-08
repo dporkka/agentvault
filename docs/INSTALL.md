@@ -2,6 +2,9 @@
 
 AgentVault is a local-first knowledge operating system. The core engine, CLI, and local HTTP API are packaged as a single Go binary. First-party clients include a Wails desktop app, a React web app, a Manifest V3 browser extension, and an Expo mobile app.
 
+For a quick tour of what AgentVault can do, see the [README](../README.md#quick-start).  
+If you are setting up signed installers or store publishing, run `make check-secrets` to see which GitHub Actions secrets are still missing, and read [`PUBLISHING.md`](PUBLISHING.md) for the full setup guide.
+
 ## Table of contents
 
 - [CLI](#cli)
