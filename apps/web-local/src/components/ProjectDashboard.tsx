@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/api/client';
 import { useApi } from '@/hooks/useApi';
+import EmptyState from '@/components/EmptyState';
 import type { SearchResult } from '@agentvault/contract';
 
 const ProjectDashboard: React.FC = () => {
@@ -87,12 +88,15 @@ const ProjectDashboard: React.FC = () => {
         )}
 
         {!projectsLoading && !projectsError && projects && projects.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 text-vault-text-muted">
-            <svg className="w-12 h-12 mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
-            </svg>
-            <p className="text-sm">No projects found</p>
-          </div>
+          <EmptyState
+            className="py-12"
+            icon={
+              <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+              </svg>
+            }
+            title="No projects found"
+          />
         )}
 
         {!projectsLoading && !projectsError && projects && projects.length > 0 && (
@@ -153,7 +157,7 @@ const ProjectDashboard: React.FC = () => {
             )}
 
             {!notesLoading && !notesError && notes.length === 0 && (
-              <p className="text-sm text-vault-text-muted py-4">No notes in this project</p>
+              <EmptyState className="py-4" title="No notes in this project" />
             )}
 
             {!notesLoading && !notesError && notes.length > 0 && (

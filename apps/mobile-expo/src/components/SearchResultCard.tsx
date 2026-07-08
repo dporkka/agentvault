@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors, spacing, radii, typography } from '../theme';
+import { colors, spacing, radii, typography, getSemanticTypeColor } from '../theme';
 import type { SearchResult } from '../types';
 
 interface SearchResultCardProps {
@@ -9,14 +9,15 @@ interface SearchResultCardProps {
 }
 
 export default function SearchResultCard({ result, onPress }: SearchResultCardProps) {
+  const typeColors = getSemanticTypeColor(result.type);
   return (
     <TouchableOpacity style={styles.card} onPress={() => onPress?.(result)} activeOpacity={0.7}>
       <View style={styles.header}>
         <Text style={styles.title} numberOfLines={1}>
           {result.title}
         </Text>
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeText}>{result.type}</Text>
+        <View style={[styles.typeBadge, { backgroundColor: typeColors.bg }]}>
+          <Text style={[styles.typeText, { color: typeColors.text }]}>{result.type}</Text>
         </View>
       </View>
       <Text style={styles.snippet} numberOfLines={3}>

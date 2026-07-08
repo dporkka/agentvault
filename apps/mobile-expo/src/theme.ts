@@ -72,3 +72,28 @@ export const layout = {
   tabBarHeight: 60,
   maxSheetHeight: '60%',
 } as const;
+
+export const semanticTypeColors = {
+  note: { bg: '#22c55e22', text: '#4ade80' },
+  decision: { bg: '#f59e0b22', text: '#fbbf24' },
+  task: { bg: '#3b82f622', text: '#60a5fa' },
+  meeting: { bg: '#a855f722', text: '#c084fc' },
+  source: { bg: '#f43f5e22', text: '#fb7185' },
+} as const;
+
+export function getSemanticTypeColor(type?: string) {
+  switch (type?.toLowerCase()) {
+    case 'note':
+      return semanticTypeColors.note;
+    case 'decision':
+      return semanticTypeColors.decision;
+    case 'task':
+      return semanticTypeColors.task;
+    case 'meeting':
+      return semanticTypeColors.meeting;
+    case 'source':
+      return semanticTypeColors.source;
+    default:
+      return { bg: colors.bgTertiary, text: colors.textSecondary };
+  }
+}

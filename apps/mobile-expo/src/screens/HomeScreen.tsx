@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.semibold,
   },
   emptySub: {
-    color: '#4b5563',
+    color: colors.textSecondary,
     fontSize: typography.sizes.md,
     marginTop: 6,
   },

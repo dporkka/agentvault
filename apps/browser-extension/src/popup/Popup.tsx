@@ -23,6 +23,22 @@ import './popup.css';
 type Tab = 'clip' | 'search' | 'ask' | 'recent' | 'queue';
 type AuthState = 'unknown' | 'missing' | 'invalid' | 'valid';
 
+const TAB_ICONS: Record<Tab, string> = {
+  clip: '\u2702',
+  search: '\uD83D\uDD0D',
+  ask: '\u2728',
+  recent: '\u23F0',
+  queue: '\uD83D\uDCE5',
+};
+
+const TAB_LABELS: Record<Tab, string> = {
+  clip: 'Clip',
+  search: 'Search',
+  ask: 'Ask',
+  recent: 'Recent',
+  queue: 'Queue',
+};
+
 export function Popup() {
   const [activeTab, setActiveTab] = useState<Tab>('clip');
   const [connected, setConnected] = useState(false);
@@ -125,66 +141,63 @@ export function Popup() {
     });
   }, []);
 
-  const tabButton = (tab: Tab, label: string, icon: string) => (
-    <button onClick={() => setActiveTab(tab)} style={{
-      flex: 1, padding: '10px 8px', background: activeTab === tab ? '#1a1d27' : 'transparent',
-      color: activeTab === tab ? '#4f7cff' : '#6b7280', border: 'none',
-      borderBottom: activeTab === tab ? '2px solid #4f7cff' : '2px solid transparent',
-      fontSize: '12px', fontWeight: activeTab === tab ? 600 : 400, cursor: 'pointer',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-    }}>
-      <span style={{ fontSize: '14px' }}>{icon}</span>{label}
-    </button>
-  );
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%', boxSizing: 'border-box', padding: '8px 10px', background: '#0f1117',
-    color: '#e4e6eb', border: '1px solid #2a2d3a', borderRadius: '6px', fontSize: '12px',
+  const renderTabButton = (tab: Tab) => {
+    const isActive = activeTab === tab;
+    return (
+      <button
+        key={tab}
+        onClick={() => setActiveTab(tab)}
+        className={`popup-tabs__btn ${isActive ? 'popup-tabs__btn--active' : ''}`}
+      >
+        <span className="popup-tabs__icon">{TAB_ICONS[tab]}</span>
+        {TAB_LABELS[tab]}
+      </button>
+    );
   };
 
   return (
-    <div style={{ width: '380px', minHeight: '420px', background: '#0f1117', color: '#e4e6eb', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #2a2d3a' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '28px', height: '28px', background: '#4f7cff', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px', color: '#fff' }}>AV</div>
-          <span style={{ fontSize: '15px', fontWeight: 700, color: '#e4e6eb' }}>AgentVault</span>
+    <div className="popup">
+      <div className="popup-header">
+        <div className="popup-header__brand">
+          <div className="popup-header__logo">AV</div>
+          <span className="popup-header__title">AgentVault</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="popup-header__actions">
           <button
             onClick={() => setShowSettings((s) => !s)}
             title="Settings"
-            style={{ background: 'transparent', border: 'none', color: showSettings ? '#4f7cff' : '#6b7280', cursor: 'pointer', fontSize: '14px', padding: 0 }}
+            className={`icon-btn ${showSettings ? 'icon-btn--active' : ''}`}
           >
             {'⚙'}
           </button>
-          <span style={{ fontSize: '11px', color: '#6b7280' }}>v0.1.0</span>
+          <span className="popup-version">v0.1.0</span>
         </div>
       </div>
+
       <StatusBar connected={connected} serverUrl={serverUrl} vault={vault} lastError={lastError} />
+
       {showSettings && (
-        <div style={{ padding: '10px 14px', background: '#14161d', borderBottom: '1px solid #2a2d3a', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '11px', color: '#9ca3af', fontWeight: 600, marginBottom: '4px' }}>
-              Server URL
-            </label>
+        <div className="settings-panel">
+          <div className="form-group">
+            <label className="form-label">Server URL</label>
             <input
               type="text"
               value={baseUrlInput}
               onChange={(e) => setBaseUrlInput(e.target.value)}
               onBlur={(e) => saveBaseUrl(e.target.value)}
               placeholder={API_BASE}
-              style={inputStyle}
+              className="input"
             />
-            <span style={{ display: 'block', fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>
-              Default is <code style={{ color: '#9ca3af' }}>{API_BASE}</code>. Change only if you started the server on a different URL.
+            <span className="hint">
+              Default is <code>{API_BASE}</code>. Change only if you started the server on a different URL.
             </span>
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '11px', color: '#9ca3af', fontWeight: 600, marginBottom: '4px' }}>
+          <div className="form-group">
+            <label className="form-label">
               Auth Token
-              {authState === 'valid' && <span style={{ color: '#22c55e', marginLeft: 6 }}>• valid</span>}
-              {authState === 'invalid' && <span style={{ color: '#ef4444', marginLeft: 6 }}>• invalid</span>}
-              {authState === 'missing' && <span style={{ color: '#f59e0b', marginLeft: 6 }}>• missing</span>}
+              {authState === 'valid' && <span className="status-dot status-dot--valid">• valid</span>}
+              {authState === 'invalid' && <span className="status-dot status-dot--invalid">• invalid</span>}
+              {authState === 'missing' && <span className="status-dot status-dot--missing">• missing</span>}
             </label>
             <input
               type="password"
@@ -192,29 +205,28 @@ export function Popup() {
               onChange={(e) => setTokenInput(e.target.value)}
               onBlur={(e) => saveToken(e.target.value)}
               placeholder="X-AgentVault-Token (printed by 'serve')"
-              style={inputStyle}
+              className="input"
             />
-            <span style={{ display: 'block', fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>
-              Run <code style={{ color: '#9ca3af' }}>agentvault serve</code> and paste the printed token here to clip pages.
+            <span className="hint">
+              Run <code>agentvault serve</code> and paste the printed token here to clip pages.
             </span>
           </div>
         </div>
       )}
-      <div style={{ display: 'flex', borderBottom: '1px solid #2a2d3a' }}>
-        {tabButton('clip', 'Clip', '\u2702')}
-        {tabButton('search', 'Search', '\uD83D\uDD0D')}
-        {tabButton('ask', 'Ask', '\u2728')}
-        {tabButton('recent', 'Recent', '\u23F0')}
-        {tabButton('queue', 'Queue', '\uD83D\uDCE5')}
+
+      <div className="popup-tabs">
+        {(Object.keys(TAB_LABELS) as Tab[]).map(renderTabButton)}
       </div>
-      <div style={{ flex: 1, overflow: 'auto' }}>
+
+      <div className="flex-1 overflow-auto">
         {activeTab === 'clip' && <ClipForm initialTitle={pageData.title} initialUrl={pageData.url} initialSelectedText={pageData.selectedText} />}
         {activeTab === 'search' && <SearchPanel />}
         {activeTab === 'ask' && <AskPanel />}
         {activeTab === 'recent' && <RecentPanel />}
         {activeTab === 'queue' && <QueuePanel />}
       </div>
-      <div style={{ padding: '8px 14px', borderTop: '1px solid #2a2d3a', textAlign: 'center', fontSize: '11px', color: '#6b7280' }}>Clips go to your local AgentVault</div>
+
+      <div className="popup-footer">Clips go to your local AgentVault</div>
     </div>
   );
 }

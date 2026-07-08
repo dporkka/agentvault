@@ -63,53 +63,86 @@ export function ClipForm({ initialTitle, initialUrl, initialSelectedText, onSend
   }, []);
 
   const hasSelection = !!selectedText;
-  const labelStyle: React.CSSProperties = { display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' };
-  const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', background: '#1a1d27', color: '#e4e6eb', border: '1px solid #2a2d3a', borderRadius: '6px', outline: 'none' };
 
   return (
-    <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <div>
-        <label style={labelStyle}>Title</label>
-        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Page title" style={inputStyle} />
+    <div className="form">
+      <div className="form-group">
+        <label className="form-label">Title</label>
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Page title"
+          className="input"
+        />
       </div>
-      <div>
-        <label style={labelStyle}>URL</label>
-        <div style={{ ...inputStyle, background: '#14161f', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</div>
+
+      <div className="form-group">
+        <label className="form-label">URL</label>
+        <div className="readonly-field">{url}</div>
       </div>
+
       {hasSelection && (
-        <div>
-          <label style={labelStyle}>Selection</label>
-          <div style={{ ...inputStyle, background: '#14161f', maxHeight: '100px', overflowY: 'auto', fontSize: '12px', lineHeight: '1.5', color: '#e4e6eb', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{selectedText}</div>
+        <div className="form-group">
+          <label className="form-label">Selection</label>
+          <div className="readonly-field readonly-field--multiline">{selectedText}</div>
         </div>
       )}
-      <div>
-        <label style={labelStyle}>Project</label>
-        <select value={project} onChange={(e) => setProject(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+
+      <div className="form-group">
+        <label className="form-label">Project</label>
+        <select value={project} onChange={(e) => setProject(e.target.value)} className="select">
           <option value="">(none)</option>
           {projects.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
       </div>
-      <div>
-        <label style={labelStyle}>Tags</label>
-        <input type="text" value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="tag1, tag2, tag3" style={inputStyle} />
+
+      <div className="form-group">
+        <label className="form-label">Tags</label>
+        <input
+          type="text"
+          value={tagsInput}
+          onChange={(e) => setTagsInput(e.target.value)}
+          placeholder="tag1, tag2, tag3"
+          className="input"
+        />
       </div>
-      <button onClick={handleSend} disabled={status === 'syncing'}
-        style={{ marginTop: '4px', padding: '10px 16px', background: '#4f7cff', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '14px', fontWeight: 600, cursor: status === 'syncing' ? 'wait' : 'pointer', opacity: status === 'syncing' ? 0.7 : 1 }}>
-        {status === 'syncing' ? 'Sending...' : 'Send to Vault'}
+
+      <button
+        onClick={handleSend}
+        disabled={status === 'syncing'}
+        className="btn btn-primary btn--mt-1"
+      >
+        {status === 'syncing' ? (
+          <>
+            <span className="spinner" />
+            Sending...
+          </>
+        ) : (
+          'Send to Vault'
+        )}
       </button>
+
       {status === 'synced' && (
-        <div style={{ padding: '8px 12px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '6px', color: '#22c55e', fontSize: '13px', textAlign: 'center' }}>Sent to AgentVault!{result?.path && <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.9 }}>{result.path}</div>}</div>
+        <div className="banner banner-success">
+          Sent to AgentVault!
+          {result?.path && <div className="banner__detail">{result.path}</div>}
+        </div>
       )}
+
       {(status === 'unsynced' || status === 'failed') && result?.error && (
-        <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ef4444', fontSize: '12px' }}>
+        <div className="banner banner-error">
           {result.error}
           {result.queued && <span> Saved offline.</span>}
         </div>
       )}
+
       {pendingCount > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', color: '#f59e0b', fontSize: '12px' }}>
+        <div className="banner banner-warning banner--row">
           <span>{pendingCount} pending capture{pendingCount === 1 ? '' : 's'}</span>
-          <button onClick={handleRetry} disabled={status === 'syncing'} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #f59e0b', borderRadius: '4px', color: '#f59e0b', fontSize: '11px', cursor: 'pointer' }}>Retry</button>
+          <button onClick={handleRetry} disabled={status === 'syncing'} className="btn btn-sm btn-secondary">
+            Retry
+          </button>
         </div>
       )}
     </div>

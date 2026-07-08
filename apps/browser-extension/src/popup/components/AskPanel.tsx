@@ -16,22 +16,22 @@ function makeId(): string {
 function Sources({ sources }: { sources: AskSource[] }) {
   if (!sources?.length) return null;
   return (
-    <div style={{ marginTop: '8px', padding: '8px 10px', background: '#14161d', border: '1px solid #2a2d3a', borderRadius: '6px' }}>
-      <div style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', marginBottom: '6px' }}>
+    <div className="sources-box">
+      <div className="sources-box__title">
         Sources ({sources.length})
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div className="sources-box__list">
         {sources.map((s) => (
           <div key={s.id}>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: '#4f7cff', lineHeight: '1.4' }}>
+            <div className="source-item__title">
               {s.title || s.path}
             </div>
             {s.excerpt && (
-              <div style={{ fontSize: '11px', color: '#6b7280', lineHeight: '1.4', marginTop: '2px' }}>
+              <div className="source-item__excerpt">
                 {s.excerpt}
               </div>
             )}
-            <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div className="source-item__path">
               {s.path}
             </div>
           </div>
@@ -43,42 +43,26 @@ function Sources({ sources }: { sources: AskSource[] }) {
 
 function AnswerMeta({ response }: { response: AskResponse }) {
   return (
-    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <div className="answer-meta">
       {response.confidence && (
-        <span style={{
-          alignSelf: 'flex-start',
-          fontSize: '10px',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          padding: '2px 6px',
-          background: 'rgba(79,124,255,0.15)',
-          color: '#4f7cff',
-          borderRadius: '4px',
-        }}>
+        <span className="badge">
           {response.confidence} confidence
         </span>
       )}
       {response.caveats && response.caveats.length > 0 && (
-        <ul style={{ margin: 0, paddingLeft: '16px', color: '#9ca3af', fontSize: '11px', lineHeight: '1.4' }}>
+        <ul className="caveats-list">
           {response.caveats.map((c, i) => <li key={i}>{c}</li>)}
         </ul>
       )}
       {response.missingInfo && (
-        <div style={{ fontSize: '11px', color: '#9ca3af', lineHeight: '1.4' }}>
+        <div className="hint--inline">
           Missing info: {response.missingInfo}
         </div>
       )}
       {response.suggestedActions && response.suggestedActions.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+        <div className="meta-tags">
           {response.suggestedActions.map((a, i) => (
-            <span key={i} style={{
-              fontSize: '10px',
-              padding: '3px 7px',
-              background: '#1f2330',
-              border: '1px solid #2a2d3a',
-              borderRadius: '4px',
-              color: '#6b7280',
-            }}>
+            <span key={i} className="meta-tags__item">
               {a}
             </span>
           ))}
@@ -90,17 +74,8 @@ function AnswerMeta({ response }: { response: AskResponse }) {
 
 function LoadingBubble() {
   return (
-    <div style={{ alignSelf: 'flex-start', maxWidth: '70%' }}>
-      <div style={{
-        padding: '10px 14px',
-        background: '#1a1d27',
-        border: '1px solid #2a2d3a',
-        borderRadius: '12px 12px 12px 4px',
-        color: '#6b7280',
-        fontSize: '13px',
-      }}>
-        Thinking…
-      </div>
+    <div className="message-bubble message-bubble--assistant message-bubble--loading">
+      Thinking…
     </div>
   );
 }
@@ -141,49 +116,22 @@ export function AskPanel() {
     }
   }, [input, loading]);
 
-  const inputStyle: React.CSSProperties = {
-    flex: 1,
-    padding: '8px 10px',
-    background: '#1a1d27',
-    color: '#e4e6eb',
-    border: '1px solid #2a2d3a',
-    borderRadius: '6px',
-    outline: 'none',
-    fontSize: '13px',
-  };
-
   return (
-    <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px', height: '100%' }}>
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-        minHeight: '180px',
-      }}>
+    <div className="ask-panel">
+      <div className="ask-panel__messages">
         {messages.length === 0 && !loading && (
-          <div style={{ textAlign: 'center', color: '#6b7280', fontSize: '13px', padding: '20px' }}>
+          <div className="empty-state">
             Ask your vault a question. Answers are grounded in your notes.
           </div>
         )}
         {messages.map((m) => {
           const isUser = m.role === 'user';
           return (
-            <div key={m.id} style={{ alignSelf: isUser ? 'flex-end' : 'flex-start', maxWidth: '85%', width: '100%' }}>
-              <div style={{
-                padding: '10px 12px',
-                background: isUser ? '#4f7cff' : '#1a1d27',
-                color: isUser ? '#fff' : '#e4e6eb',
-                border: isUser ? '1px solid #4f7cff' : '1px solid #2a2d3a',
-                borderRadius: isUser ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-                fontSize: '13px',
-                lineHeight: '1.45',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}>
-                {m.text}
-              </div>
+            <div
+              key={m.id}
+              className={`message-bubble ${isUser ? 'message-bubble--user' : 'message-bubble--assistant'}`}
+            >
+              {m.text}
               {m.role === 'assistant' && m.response && (
                 <>
                   <Sources sources={m.response.sources} />
@@ -197,18 +145,11 @@ export function AskPanel() {
         <div ref={endRef} />
       </div>
       {error && (
-        <div style={{
-          padding: '8px 12px',
-          background: 'rgba(239,68,68,0.1)',
-          border: '1px solid rgba(239,68,68,0.3)',
-          borderRadius: '6px',
-          color: '#ef4444',
-          fontSize: '12px',
-        }}>
+        <div className="banner banner-error">
           {error}
         </div>
       )}
-      <div style={{ display: 'flex', gap: '8px' }}>
+      <div className="ask-panel__input-row">
         <input
           type="text"
           value={input}
@@ -216,22 +157,12 @@ export function AskPanel() {
           onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
           placeholder="Ask a question about your vault..."
           disabled={loading}
-          style={inputStyle}
+          className="input flex-1"
         />
         <button
           onClick={handleAsk}
           disabled={loading || !input.trim()}
-          style={{
-            padding: '8px 14px',
-            background: '#4f7cff',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '13px',
-            fontWeight: 600,
-            cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
-            opacity: loading || !input.trim() ? 0.6 : 1,
-          }}
+          className="btn btn-primary"
         >
           {loading ? '...' : 'Ask'}
         </button>

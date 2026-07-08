@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/api/client';
 import { useDebounce } from '@/hooks/useDebounce';
+import EmptyState from '@/components/EmptyState';
 import type { SearchResult } from '@agentvault/contract';
 
 const TYPE_FILTERS = ['all', 'note', 'decision', 'task', 'meeting', 'source'] as const;
@@ -194,19 +195,23 @@ const SearchView: React.FC = () => {
       {/* Results */}
       <div className="flex-1 overflow-y-auto px-6 py-3" ref={resultsRef}>
         {query.trim().length === 0 && !loading && (
-          <div className="flex flex-col items-center justify-center h-full text-vault-text-muted">
-            <svg className="w-12 h-12 mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-            </svg>
-            <p className="text-sm">Type to search your vault</p>
-            <p className="text-xs mt-1 opacity-60">Press / to focus search</p>
-          </div>
+          <EmptyState
+            className="h-full"
+            icon={
+              <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+            }
+            title="Type to search your vault"
+            subtitle="Press / to focus search"
+          />
         )}
 
         {query.trim().length > 0 && results.length === 0 && !loading && !error && (
-          <div className="flex flex-col items-center justify-center h-full text-vault-text-muted">
-            <p className="text-sm">No results for &quot;{debouncedQuery}&quot;</p>
-          </div>
+          <EmptyState
+            className="h-full"
+            title={`No results for "${debouncedQuery}"`}
+          />
         )}
 
         {error && (

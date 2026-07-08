@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing, radii, typography } from '../theme';
+import { colors, spacing, radii, typography, getSemanticTypeColor } from '../theme';
 import type { Capture } from '../types';
 
 interface CaptureCardProps {
@@ -41,6 +41,7 @@ export default function CaptureCard({ capture, onPress, onDelete, onRetry }: Cap
 
   const status = capture.synced ? 'synced' : (capture.syncStatus ?? 'unsynced');
   const statusColor = STATUS_COLORS[status] ?? STATUS_COLORS.unsynced;
+  const typeColors = getSemanticTypeColor(capture.type);
 
   return (
     <TouchableOpacity
@@ -50,8 +51,8 @@ export default function CaptureCard({ capture, onPress, onDelete, onRetry }: Cap
       activeOpacity={0.7}
     >
       <View style={styles.header}>
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeText}>{TYPE_LABELS[capture.type] || '?'}</Text>
+        <View style={[styles.typeBadge, { backgroundColor: typeColors.bg }]}>
+          <Text style={[styles.typeText, { color: typeColors.text }]}>{TYPE_LABELS[capture.type] || '?'}</Text>
         </View>
         <Text style={styles.title} numberOfLines={1}>
           {capture.title}
@@ -131,14 +132,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   typeBadge: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.bgTertiary,
     borderRadius: radii.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     marginRight: 10,
   },
   typeText: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: typography.sizes.xs,
     fontWeight: typography.weights.bold,
   },
