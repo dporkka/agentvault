@@ -60,6 +60,7 @@ jobs:
       MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
       MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
       MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+      MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY || 'Developer ID Application' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -103,7 +104,7 @@ jobs:
       - name: Sign macOS .app
         if: env.MACOS_SIGN_ENABLED == 'true'
         working-directory: apps/desktop-wails/build/bin
-        run: codesign --deep --force --verify --verbose --sign "Developer ID Application" AgentVault.app
+        run: codesign --deep --force --verify --verbose --sign "$MACOS_SIGN_IDENTITY" AgentVault.app
       - name: Create .dmg
         if: env.MACOS_SIGN_ENABLED == 'false'
         working-directory: apps/desktop-wails/build/bin

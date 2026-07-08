@@ -25,6 +25,8 @@ jobs:
       ASC_API_KEY_PATH: ${{ secrets.ASC_API_KEY_PATH }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+      EXPO_APPLE_TEAM_ID: ${{ secrets.EXPO_APPLE_TEAM_ID }}
       GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +56,27 @@ jobs:
             echo "ANDROID_SUBMIT_ENABLED=true" >> "$GITHUB_ENV"
           else
             echo "ANDROID_SUBMIT_ENABLED=false" >> "$GITHUB_ENV"
+          fi
+      - name: Prepare mobile signing keys
+        if: env.EAS_BUILD_ENABLED == 'true'
+        working-directory: apps/mobile-expo
+        run: |
+          mkdir -p .secrets
+          if [ -n "$ASC_API_KEY_PATH" ]; then
+            printf '%s' "$ASC_API_KEY_PATH" > .secrets/AuthKey.p8
+            echo "EXPO_ASC_API_KEY_PATH=$PWD/.secrets/AuthKey.p8" >> "$GITHUB_ENV"
+            echo "EXPO_ASC_KEY_ID=$ASC_KEY_ID" >> "$GITHUB_ENV"
+            echo "EXPO_ASC_ISSUER_ID=$ASC_ISSUER_ID" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$EXPO_APPLE_TEAM_ID" ]; then
+            echo "EXPO_APPLE_TEAM_ID=$EXPO_APPLE_TEAM_ID" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
+            printf '%s' "$GOOGLE_SERVICE_ACCOUNT_KEY" > .secrets/google-service-account.json
+          fi
+          if [ -n "$ASC_APP_ID" ] && command -v jq >/dev/null 2>&1; then
+            jq --arg appId "$ASC_APP_ID" '.submit.production.ios.ascAppId = $appId' eas.json > eas.json.tmp
+            mv eas.json.tmp eas.json
           fi
       - name: Build iOS (and submit if configured)
         if: env.EAS_BUILD_ENABLED == 'true'

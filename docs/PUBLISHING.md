@@ -4,6 +4,25 @@ This document lists the GitHub secrets, accounts, and one-time setup required to
 
 All publishing workflows are **secret-gated**: they build and upload unsigned/test artifacts when credentials are absent, and only sign or publish when the required secrets are configured.
 
+## Check your secrets
+
+Run the provided helper to see which publishing secrets are already configured:
+
+```bash
+make check-secrets
+```
+
+You can also check a single platform:
+
+```bash
+make check-secrets macos
+make check-secrets windows
+make check-secrets chrome
+make check-secrets mobile
+```
+
+If the [GitHub CLI](https://cli.github.com/) (`gh`) is installed and authenticated, the script reads the live secret list from the repository. Otherwise it prints the required secret names so you can verify them manually.
+
 ## Table of contents
 
 - [GitHub release workflow](#github-release-workflow)
@@ -44,9 +63,15 @@ Required secrets:
 | --- | --- |
 | `MACOS_CERTIFICATE` | Base64-encoded Apple Developer ID Application certificate (`.p12`). |
 | `MACOS_CERTIFICATE_PASSWORD` | Password for the `.p12` file. |
+
+Optional secrets:
+
+| Secret | Description |
+| --- | --- |
 | `MACOS_NOTARIZATION_APPLE_ID` | Apple ID email for notarization. |
 | `MACOS_NOTARIZATION_TEAM_ID` | Apple Developer Team ID. |
 | `MACOS_NOTARIZATION_PASSWORD` | App-specific password for the Apple ID. |
+| `MACOS_SIGN_IDENTITY` | Codesign identity string (default: `Developer ID Application`). Use this if your certificate has a different common name. |
 
 Setup:
 
@@ -134,18 +159,26 @@ Required secrets (in addition to `EXPO_TOKEN`):
 
 | Secret | Description |
 | --- | --- |
-| `ASC_API_KEY_PATH` | Path or content of the App Store Connect API private key (`.p8`). |
+| `ASC_API_KEY_PATH` | **Content** of the App Store Connect API private key (`.p8`). The workflow writes this to a temporary file in `apps/mobile-expo/.secrets/`. |
 | `ASC_ISSUER_ID` | App Store Connect API key issuer ID. |
 | `ASC_KEY_ID` | App Store Connect API key ID. |
+
+Optional secrets:
+
+| Secret | Description |
+| --- | --- |
+| `ASC_APP_ID` | App Store Connect unique application Apple ID number. When set, the workflow injects it into `eas.json` so EAS can skip app creation. |
+| `EXPO_APPLE_TEAM_ID` | Apple Developer Team ID passed to EAS during submission. |
 
 Setup:
 
 1. Enroll in the [Apple Developer Program](https://developer.apple.com/programs/).
 2. Generate an App Store Connect API key in App Store Connect > Users and Access > Keys.
 3. Configure the app bundle identifier and provisioning profile in Apple Developer.
-4. Add the secrets to the GitHub repository and reference them in `eas.json` if needed.
+4. Copy the contents of the downloaded `.p8` key file and add them as the `ASC_API_KEY_PATH` secret.
+5. Add `ASC_ISSUER_ID`, `ASC_KEY_ID`, and optionally `ASC_APP_ID` and `EXPO_APPLE_TEAM_ID` to the GitHub repository secrets.
 
-When these secrets are present, the workflow runs `eas build --platform ios --profile production --auto-submit`.
+When these secrets are present, the workflow exports `EXPO_ASC_API_KEY_PATH`, `EXPO_ASC_KEY_ID`, and `EXPO_ASC_ISSUER_ID` and runs `eas build --platform ios --profile production --auto-submit`.
 
 ### Google Play Store
 
@@ -153,16 +186,25 @@ Required secrets (in addition to `EXPO_TOKEN`):
 
 | Secret | Description |
 | --- | --- |
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | JSON key for a Google Play service account. |
+| `GOOGLE_SERVICE_ACCOUNT_KEY` | **JSON content** of the Google Play service account private key. The workflow writes this to `apps/mobile-expo/.secrets/google-service-account.json`, which is referenced by `eas.json`. |
 
 Setup:
 
 1. Create a Google Play Developer account.
 2. Set up a service account in the Google Cloud Console and grant it Release Manager access in Google Play Console.
-3. Download the service account JSON key and add it as the `GOOGLE_SERVICE_ACCOUNT_KEY` secret.
+3. Download the service account JSON key, copy its entire contents, and add them as the `GOOGLE_SERVICE_ACCOUNT_KEY` secret.
 
-When this secret is present, the workflow runs `eas build --platform android --profile production --auto-submit`.
+When this secret is present, the workflow writes `.secrets/google-service-account.json` and runs `eas build --platform android --profile production --auto-submit`.
+
+The `apps/mobile-expo/.secrets/` directory is gitignored and should never contain real credentials in the repository.
 
 ## Running publish workflows manually
 
 You can trigger the extension and mobile workflows manually from the GitHub Actions tab. Each workflow has a `publish_to_store` / `submit_to_stores` input that is `false` by default; set it to `true` only when the required secrets are configured and you want to publish.
+
+## Troubleshooting
+
+- **Missing secrets do not fail the build.** The workflows detect missing credentials and fall back to unsigned artifacts or local bundle exports. Use `make check-secrets` to see what is still needed.
+- **macOS: "Developer ID Application" identity not found.** If your certificate's common name differs from `Developer ID Application`, set the `MACOS_SIGN_IDENTITY` secret to the exact identity string shown by `security find-identity -v`.
+- **Mobile: EAS cannot find the service-account key.** Ensure `GOOGLE_SERVICE_ACCOUNT_KEY` contains the full JSON file contents, not a filesystem path. The workflow writes it to `.secrets/google-service-account.json` at runtime.
+- **Mobile: ASC app creation prompts.** Provide `ASC_APP_ID` so EAS can skip the app-creation step. You can find the App ID in App Store Connect under App Information.

@@ -52,7 +52,7 @@ EOF
 $BIN index --vault "$VAULT"
 $BIN search "smoke" --vault "$VAULT"
 
-PORT=57432
+PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
 HEALTH_URL="http://127.0.0.1:$PORT/health"
 
 echo "==> Starting local API on port $PORT..."

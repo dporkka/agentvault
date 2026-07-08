@@ -33,6 +33,9 @@ yarn-error.*
 .env.local
 .env.*.local
 
+# CI-written signing keys (never commit real credentials)
+.secrets/
+
 # macOS
 .DS_Store
 

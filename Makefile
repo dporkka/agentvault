@@ -94,6 +94,9 @@ contract-check: ## Verify @agentvault/contract is the only source of API types i
 contract-list-snake: ## Print the snake_case JSON field list derived from Go struct tags
 	@scripts/contract-snake-list.sh core/internal/contract/contract.go
 
+check-secrets: ## Check whether GitHub Actions publishing secrets are configured
+	@scripts/check-publish-secrets.sh
+
 # Release scaffolding
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.1.0")
 DIST_DIR := $(CURDIR)/dist
