@@ -64,7 +64,7 @@ Phase 1's two highest-leverage P1 items landed alongside the contract work:
 | P2 | ~~Reduce desktop bundle size~~ **Done** | CodeMirror is split into dedicated chunks; markdown language support is lazy-loaded; the remaining `codemirror-core` chunk is intentionally budgeted at 600 kB. | `vite.config.ts`, `EditorView.tsx`, `docs/CODEBASE_ANALYSIS.md`. |
 | P2 | ~~Define release/install paths~~ **Done** | CI now produces CLI, desktop, extension, and mobile artifacts; installation docs live in `docs/INSTALL.md`. | `make release`, `.github/workflows/release.yml`, `docs/INSTALL.md`. |
 | P2 | ~~Signed desktop installers and store publishing~~ **Scaffolded** | macOS `.app` signing/notarization, Windows NSIS signing, and Chrome Web Store / App Store / Play Store workflows are secret-gated in CI. Credentials are not yet configured. | `.github/workflows/release.yml`, `.github/workflows/publish-extension.yml`, `.github/workflows/publish-mobile.yml`, `docs/PUBLISHING.md`. |
-| P2 | Expand doctor and diagnostics | Makes local-first support easier. | Doctor exists; app-surface and API-contract checks are not yet included. |
+| P2 | Expand doctor and diagnostics **In progress** | Adds index freshness, orphan files/chunks, and embedding availability checks to `agentvault doctor`. API-auth and app-surface checks remain. | `core/internal/doctor/doctor.go`, `core/internal/doctor/doctor_test.go`. |
 | P2 | ~~Desktop settings/status parity~~ **Done** | The desktop app now surfaces local API server status, auth token, and inbox/capture state alongside AI/index status. | `ServerService`, `ServerStatus`, `SettingsView.tsx`, `Layout.tsx`. |
 
 ## Phase 0 - Contract Stabilization
@@ -151,7 +151,7 @@ Target: 1-2 weeks after Phase 2.
 
 Deliverables:
 
-- Expand `doctor` to validate API auth setup, index freshness, duplicate IDs, broken links, orphan chunks, and embedding availability.
+- In progress — expand `doctor`: index freshness, orphan database files, orphan chunks, duplicate IDs, broken links, and embedding availability are now checked. API auth setup validation remains.
 - Embed migrations with `go:embed` instead of relying on runtime relative paths, while preserving the current fallback.
 - Improve import previews: dry-run mode, duplicate summary, attachment summary, and frontmatter normalization report.
 - Add safe Git workflow helpers for common vault operations without auto-committing unexpectedly.

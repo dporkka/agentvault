@@ -2,14 +2,19 @@
 package doctor
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/db"
+	"github.com/agentvault/core/internal/embeddings"
 	"github.com/agentvault/core/internal/markdown"
 )
 
@@ -42,6 +47,10 @@ func (d *Doctor) RunAll() []CheckResult {
 		d.CheckDuplicateIDs(),
 		d.CheckBrokenLinks(),
 		d.CheckUnindexed(),
+		d.CheckIndexFreshness(),
+		d.CheckOrphanDBFiles(),
+		d.CheckOrphanChunks(),
+		d.CheckEmbeddingAvailability(),
 	}
 	return results
 }
@@ -467,4 +476,269 @@ func (d *Doctor) CheckUnindexed() CheckResult {
 		Status:  "ok",
 		Message: fmt.Sprintf("All %d markdown file(s) are indexed", totalMd),
 	}
+}
+
+// CheckIndexFreshness finds markdown files whose mtime is newer than their
+// indexed_at timestamp, indicating the index is stale.
+func (d *Doctor) CheckIndexFreshness() CheckResult {
+	if d.db == nil {
+		return CheckResult{
+			Name:    "Index Freshness",
+			Status:  "warn",
+			Message: "Database not available, cannot check index freshness",
+		}
+	}
+
+	rows, err := d.db.Query("SELECT path, indexed_at FROM files")
+	if err != nil {
+		return CheckResult{
+			Name:    "Index Freshness",
+			Status:  "warn",
+			Message: fmt.Sprintf("Could not query files: %v", err),
+		}
+	}
+	defer rows.Close()
+
+	var stale []string
+	var checked int
+	for rows.Next() {
+		var path, indexedAt string
+		if err := rows.Scan(&path, &indexedAt); err != nil {
+			continue
+		}
+		checked++
+
+		fullPath := filepath.Join(d.vaultPath, path)
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			continue
+		}
+
+		// SQLite datetime('now') returns "YYYY-MM-DD HH:MM:SS" UTC.
+		indexedTime, err := time.Parse("2006-01-02 15:04:05", indexedAt)
+		if err != nil {
+			continue
+		}
+
+		if info.ModTime().UTC().After(indexedTime) {
+			stale = append(stale, path)
+		}
+	}
+
+	if len(stale) > 0 {
+		status := "warn"
+		if len(stale) > 10 {
+			status = "error"
+		}
+		return CheckResult{
+			Name:    "Index Freshness",
+			Status:  status,
+			Message: fmt.Sprintf("%d file(s) are newer than their index time", len(stale)),
+			Details: stale,
+		}
+	}
+
+	if checked == 0 {
+		return CheckResult{
+			Name:    "Index Freshness",
+			Status:  "ok",
+			Message: "No indexed files to check",
+		}
+	}
+
+	return CheckResult{
+		Name:    "Index Freshness",
+		Status:  "ok",
+		Message: fmt.Sprintf("All %d indexed file(s) are up to date", checked),
+	}
+}
+
+// CheckOrphanDBFiles finds files tracked in the database that no longer exist
+// on disk.
+func (d *Doctor) CheckOrphanDBFiles() CheckResult {
+	if d.db == nil {
+		return CheckResult{
+			Name:    "Orphan Database Files",
+			Status:  "warn",
+			Message: "Database not available, cannot check orphan database files",
+		}
+	}
+
+	rows, err := d.db.Query("SELECT id, path FROM files")
+	if err != nil {
+		return CheckResult{
+			Name:    "Orphan Database Files",
+			Status:  "warn",
+			Message: fmt.Sprintf("Could not query files: %v", err),
+		}
+	}
+	defer rows.Close()
+
+	var orphaned []string
+	for rows.Next() {
+		var id, path string
+		if err := rows.Scan(&id, &path); err != nil {
+			continue
+		}
+		fullPath := filepath.Join(d.vaultPath, path)
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			orphaned = append(orphaned, fmt.Sprintf("%s (%s)", path, id))
+		}
+	}
+
+	if len(orphaned) > 0 {
+		return CheckResult{
+			Name:    "Orphan Database Files",
+			Status:  "warn",
+			Message: fmt.Sprintf("Found %d tracked file(s) missing on disk", len(orphaned)),
+			Details: orphaned,
+		}
+	}
+
+	return CheckResult{
+		Name:    "Orphan Database Files",
+		Status:  "ok",
+		Message: "All tracked files exist on disk",
+	}
+}
+
+// CheckOrphanChunks finds chunks whose note_id no longer exists in the notes
+// table.
+func (d *Doctor) CheckOrphanChunks() CheckResult {
+	if d.db == nil {
+		return CheckResult{
+			Name:    "Orphan Chunks",
+			Status:  "warn",
+			Message: "Database not available, cannot check orphan chunks",
+		}
+	}
+
+	rows, err := d.db.Query(`
+		SELECT c.id, c.note_id
+		FROM chunks c
+		LEFT JOIN notes n ON n.id = c.note_id
+		WHERE n.id IS NULL
+		ORDER BY c.note_id
+	`)
+	if err != nil {
+		return CheckResult{
+			Name:    "Orphan Chunks",
+			Status:  "warn",
+			Message: fmt.Sprintf("Could not query chunks: %v", err),
+		}
+	}
+	defer rows.Close()
+
+	var orphaned []string
+	for rows.Next() {
+		var chunkID, noteID string
+		if err := rows.Scan(&chunkID, &noteID); err != nil {
+			continue
+		}
+		orphaned = append(orphaned, fmt.Sprintf("%s -> note %s", chunkID, noteID))
+	}
+
+	if len(orphaned) > 0 {
+		return CheckResult{
+			Name:    "Orphan Chunks",
+			Status:  "warn",
+			Message: fmt.Sprintf("Found %d chunk(s) with no matching note", len(orphaned)),
+			Details: orphaned,
+		}
+	}
+
+	return CheckResult{
+		Name:    "Orphan Chunks",
+		Status:  "ok",
+		Message: "No orphan chunks found",
+	}
+}
+
+// CheckEmbeddingAvailability verifies that the configured embedding endpoint
+// is reachable. It does not require the endpoint to actually generate an
+// embedding; a lightweight health check is enough.
+func (d *Doctor) CheckEmbeddingAvailability() CheckResult {
+	client := d.embeddingClient()
+	if client == nil {
+		return CheckResult{
+			Name:    "Embedding Availability",
+			Status:  "warn",
+			Message: "Could not configure embedding client",
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := probeEmbeddingEndpoint(ctx, client); err != nil {
+		return CheckResult{
+			Name:    "Embedding Availability",
+			Status:  "warn",
+			Message: fmt.Sprintf("Embedding endpoint not reachable: %v", err),
+			Details: []string{fmt.Sprintf("Endpoint: %s", client.BaseURL())},
+		}
+	}
+
+	return CheckResult{
+		Name:    "Embedding Availability",
+		Status:  "ok",
+		Message: fmt.Sprintf("Embedding endpoint reachable (%s)", client.BaseURL()),
+	}
+}
+
+// embeddingClient builds an embedding client from the vault config, falling
+// back to the Ollama default.
+func (d *Doctor) embeddingClient() *embeddings.Client {
+	cfg, err := config.Load(d.vaultPath)
+	if err != nil {
+		return embeddings.NewClient("http://localhost:11434", "nomic-embed-text")
+	}
+
+	baseURL := "http://localhost:11434"
+	model := "nomic-embed-text"
+	if cfg.AI != nil {
+		if cfg.AI.BaseURL != "" {
+			baseURL = cfg.AI.BaseURL
+		}
+		if cfg.AI.EmbeddingModel != "" {
+			model = cfg.AI.EmbeddingModel
+		}
+	}
+	return embeddings.NewClient(baseURL, model)
+}
+
+// probeEmbeddingEndpoint performs a lightweight health check against the
+// embedding provider. It uses the default HTTP client with the supplied
+// context so tests can point it at an httptest server.
+func probeEmbeddingEndpoint(ctx context.Context, client *embeddings.Client) error {
+	baseURL := strings.TrimRight(client.BaseURL(), "/")
+	var url string
+	var req *http.Request
+	var err error
+
+	switch client.APIType() {
+	case "openai":
+		url = baseURL + "/v1/models"
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+	default:
+		url = baseURL + "/api/tags"
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("health check returned status %d", resp.StatusCode)
+	}
+	return nil
 }
