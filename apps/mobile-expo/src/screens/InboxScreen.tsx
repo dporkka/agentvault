@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback, memo } from 'react';
 import { View, Text, FlatList, RefreshControl, Alert, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Capture } from '../types';
@@ -33,9 +33,40 @@ function groupByDate(captures: Capture[]): GroupedCaptures[] {
 
 type Filter = 'all' | 'pending';
 
+type ListItem =
+  | { type: 'header'; id: string; date: string }
+  | { type: 'capture'; id: string; capture: Capture };
+
+interface HeaderRowProps {
+  date: string;
+}
+
+const HeaderRow = memo(function HeaderRow({ date }: HeaderRowProps) {
+  return <Text style={styles.groupDate}>{date}</Text>;
+});
+
+interface CaptureRowProps {
+  capture: Capture;
+  onDelete: (id: string) => void;
+  onSync: (cap: Capture) => void;
+  onRetry: (cap: Capture) => void;
+}
+
+const CaptureRow = memo(function CaptureRow({ capture, onDelete, onSync, onRetry }: CaptureRowProps) {
+  return (
+    <CaptureCard
+      capture={capture}
+      onDelete={onDelete}
+      onPress={() => onSync(capture)}
+      onRetry={onRetry}
+    />
+  );
+});
+
 export default function InboxScreen() {
   const { captures, loading, refresh } = useCaptures();
   const [filter, setFilter] = useState<Filter>('all');
+  const [syncing, setSyncing] = useState(false);
 
   const filteredCaptures = useMemo(() => {
     if (filter === 'pending') {
@@ -46,12 +77,28 @@ export default function InboxScreen() {
 
   const grouped = useMemo(() => groupByDate(filteredCaptures), [filteredCaptures]);
 
-  const handleSync = async () => {
-    await syncCaptures({ continueOnError: true });
-    await refresh();
-  };
+  const items = useMemo<ListItem[]>(() => {
+    const out: ListItem[] = [];
+    for (const g of grouped) {
+      out.push({ type: 'header', id: `header-${g.date}`, date: g.date });
+      for (const c of g.captures) {
+        out.push({ type: 'capture', id: c.id, capture: c });
+      }
+    }
+    return out;
+  }, [grouped]);
 
-  const handleDelete = (id: string) => {
+  const handleSync = useCallback(async () => {
+    setSyncing(true);
+    try {
+      await syncCaptures({ continueOnError: true });
+    } finally {
+      setSyncing(false);
+      await refresh();
+    }
+  }, [refresh]);
+
+  const handleDelete = useCallback((id: string) => {
     Alert.alert('Delete Capture', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -63,18 +110,18 @@ export default function InboxScreen() {
         },
       },
     ]);
-  };
+  }, [refresh]);
 
-  const handleSyncOne = async (cap: Capture) => {
+  const handleSyncOne = useCallback(async (cap: Capture) => {
     if (!isSyncable(cap)) return;
     const result = await syncCaptures({ captureId: cap.id, continueOnError: false });
     if (result.failed > 0) {
       Alert.alert('Error', formatSyncResult(result));
     }
     refresh();
-  };
+  }, [refresh]);
 
-  const handleRetryOne = async (cap: Capture) => {
+  const handleRetryOne = useCallback(async (cap: Capture) => {
     if (!canRetry(cap)) {
       Alert.alert('Retry', 'Please wait before retrying this capture.');
       return;
@@ -84,9 +131,9 @@ export default function InboxScreen() {
       Alert.alert('Retry failed', formatSyncResult(result));
     }
     refresh();
-  };
+  }, [refresh]);
 
-  const handleRetryAll = async () => {
+  const handleRetryAll = useCallback(async () => {
     const pending = captures.filter((c) => canRetry(c));
     if (pending.length === 0) {
       Alert.alert('Retry', 'No captures ready to retry right now.');
@@ -95,16 +142,35 @@ export default function InboxScreen() {
     const result = await syncCaptures({ continueOnError: true, force: true });
     Alert.alert('Retry result', formatSyncResult(result));
     refresh();
-  };
+  }, [captures, refresh]);
+
+  const renderItem = useCallback(({ item }: { item: ListItem }) => {
+    if (item.type === 'header') {
+      return <HeaderRow date={item.date} />;
+    }
+    return (
+      <CaptureRow
+        capture={item.capture}
+        onDelete={handleDelete}
+        onSync={handleSyncOne}
+        onRetry={handleRetryOne}
+      />
+    );
+  }, [handleDelete, handleSyncOne, handleRetryOne]);
+
+  const keyExtractor = useCallback((item: ListItem) => item.id, []);
+
+  const totalCaptures = useMemo(
+    () => grouped.reduce((sum, g) => sum + g.captures.length, 0),
+    [grouped],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Inbox</Text>
-          <Text style={styles.subtitle}>
-            {grouped.reduce((sum, g) => sum + g.captures.length, 0)} captures
-          </Text>
+          <Text style={styles.subtitle}>{totalCaptures} captures</Text>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -123,32 +189,19 @@ export default function InboxScreen() {
       </View>
 
       <FlatList
-        data={grouped}
-        keyExtractor={(item) => item.date}
+        data={items}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={handleSync} tintColor={colors.accent} />
+          <RefreshControl refreshing={loading || syncing} onRefresh={handleSync} tintColor={colors.accent} />
         }
-        renderItem={({ item: group }) => (
-          <View style={styles.group}>
-            <Text style={styles.groupDate}>{group.date}</Text>
-            {group.captures.map((cap) => (
-              <CaptureCard
-                key={cap.id}
-                capture={cap}
-                onDelete={handleDelete}
-                onPress={() => handleSyncOne(cap)}
-                onRetry={handleRetryOne}
-              />
-            ))}
-          </View>
-        )}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyText}>Inbox is empty</Text>
             <Text style={styles.emptySub}>Captures are saved here for offline access</Text>
           </View>
         }
-        contentContainerStyle={grouped.length === 0 ? styles.emptyContainer : undefined}
+        contentContainerStyle={items.length === 0 ? styles.emptyContainer : undefined}
       />
     </SafeAreaView>
   );
@@ -189,7 +242,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.semibold,
   },
   filterTextActive: {
-    color: '#fff',
+    color: colors.textPrimary,
   },
   retryAllBtn: {
     borderWidth: 1,
@@ -212,9 +265,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: typography.sizes.md,
     marginTop: 2,
-  },
-  group: {
-    marginBottom: spacing.sm,
   },
   groupDate: {
     color: colors.textMuted,
@@ -240,7 +290,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.semibold,
   },
   emptySub: {
-    color: '#4b5563',
+    color: colors.textSecondary,
     fontSize: typography.sizes.md,
     marginTop: 6,
     textAlign: 'center',

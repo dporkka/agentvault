@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,16 @@ const SEARCH_DEBOUNCE_MS = 350;
 const TOPK_MIN = 3;
 const TOPK_MAX = 20;
 const TOPK_STEP = 1;
+
+interface SearchResultItemProps {
+  result: SearchResult;
+  onPress: (result: SearchResult) => void;
+}
+
+const SearchResultItem = memo(function SearchResultItem({ result, onPress }: SearchResultItemProps) {
+  const handlePress = useCallback(() => onPress(result), [onPress, result]);
+  return <SearchResultCard result={result} onPress={handlePress} />;
+});
 
 export default function SearchScreen() {
   const navigation = useNavigation<SearchNavigationProp>();
@@ -105,17 +115,50 @@ export default function SearchScreen() {
     };
   }, [query, performSearch]);
 
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     performSearch(query, { showLoading: true });
-  };
+  }, [query, performSearch]);
 
-  const adjustTopK = (delta: number) => {
+  const adjustTopK = useCallback((delta: number) => {
     setTopK((prev) => Math.max(TOPK_MIN, Math.min(TOPK_MAX, prev + delta)));
-  };
+  }, []);
 
-  const showEmptyState = !loading && results.length === 0 && !error;
+  const handleResultPress = useCallback((result: SearchResult) => {
+    navigation.navigate('NoteDetail', { id: result.id, title: result.title });
+  }, [navigation]);
+
+  const renderItem = useCallback(({ item }: { item: SearchResult }) => {
+    return <SearchResultItem result={item} onPress={handleResultPress} />;
+  }, [handleResultPress]);
+
+  const keyExtractor = useCallback((item: SearchResult) => item.id, []);
+
   const showRecentHeader = !query.trim() && results.length > 0;
+
+  const emptyMessage = useMemo(() => {
+    if (error) return error;
+    if (hasSearched) return 'No results found';
+    return 'No recent notes';
+  }, [error, hasSearched]);
+
+  const ListHeaderComponent = useCallback(() => {
+    if (showRecentHeader) {
+      return <Text style={styles.sectionTitle}>Recent notes</Text>;
+    }
+    return null;
+  }, [showRecentHeader]);
+
+  const ListEmptyComponent = useCallback(() => {
+    if (loading) {
+      return <ActivityIndicator style={styles.loader} color={colors.accent} size="large" />;
+    }
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyText}>{emptyMessage}</Text>
+      </View>
+    );
+  }, [loading, emptyMessage]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -152,7 +195,7 @@ export default function SearchScreen() {
             value={vectorEnabled}
             onValueChange={setVectorEnabled}
             trackColor={{ false: colors.borderSubtle, true: colors.accent }}
-            thumbColor="#fff"
+            thumbColor={colors.textPrimary}
           />
         </View>
 
@@ -197,34 +240,14 @@ export default function SearchScreen() {
           </View>
         </View>
 
-        {showRecentHeader && <Text style={styles.sectionTitle}>Recent notes</Text>}
-
-        {loading && <ActivityIndicator style={styles.loader} color={colors.accent} size="large" />}
-
-        {error ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
-
-        {showEmptyState ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>
-              {hasSearched ? 'No results found' : 'No recent notes'}
-            </Text>
-          </View>
-        ) : null}
-
         <FlatList
+          style={styles.list}
           data={results}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <SearchResultCard
-              result={item}
-              onPress={() => navigation.navigate('NoteDetail', { id: item.id, title: item.title })}
-            />
-          )}
-          contentContainerStyle={styles.list}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          ListHeaderComponent={ListHeaderComponent}
+          ListEmptyComponent={ListEmptyComponent}
+          contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
         />
       </KeyboardAvoidingView>
@@ -277,7 +300,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   searchBtnText: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontWeight: typography.weights.bold,
     fontSize: typography.sizes.base,
   },
@@ -347,22 +370,9 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: spacing.sm,
-    paddingHorizontal: spacing.lg,
   },
   loader: {
     marginTop: 40,
-  },
-  errorBox: {
-    backgroundColor: colors.errorMuted,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-    marginHorizontal: spacing.lg,
-  },
-  errorText: {
-    color: colors.error,
-    fontSize: typography.sizes.md,
-    textAlign: 'center',
   },
   empty: {
     alignItems: 'center',
@@ -371,8 +381,12 @@ const styles = StyleSheet.create({
   emptyText: {
     color: colors.textMuted,
     fontSize: typography.sizes.lg,
+    textAlign: 'center',
   },
   list: {
+    flex: 1,
+  },
+  listContent: {
     paddingBottom: spacing.xl,
     paddingHorizontal: spacing.lg,
   },

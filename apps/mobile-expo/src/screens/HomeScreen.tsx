@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { Capture } from '../types';
 import { syncCaptures, formatSyncResult } from '../storage/sync';
 import { addCapture, deleteCapture } from '../storage/localInbox';
 import { useCaptures } from '../hooks/useCaptures';
@@ -16,6 +17,15 @@ import CaptureCard from '../components/CaptureCard';
 import ConnectionBadge from '../components/ConnectionBadge';
 import { colors, spacing, radii, typography } from '../theme';
 import type { RootTabScreenProps } from '../navigation/types';
+
+interface HomeCaptureCardProps {
+  capture: Capture;
+  onDelete: (id: string) => void;
+}
+
+const HomeCaptureCard = memo(function HomeCaptureCard({ capture, onDelete }: HomeCaptureCardProps) {
+  return <CaptureCard capture={capture} onDelete={onDelete} />;
+});
 
 export default function HomeScreen(_props: RootTabScreenProps<'Home'>) {
   const [quickText, setQuickText] = useState('');
@@ -107,7 +117,7 @@ export default function HomeScreen(_props: RootTabScreenProps<'Home'>) {
       <FlatList
         data={captures}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <CaptureCard capture={item} onDelete={handleDelete} />}
+        renderItem={({ item }) => <HomeCaptureCard capture={item} onDelete={handleDelete} />}
         refreshControl={
           <RefreshControl
             refreshing={loading}
@@ -185,7 +195,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   captureBtnText: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontWeight: typography.weights.semibold,
     fontSize: typography.sizes.base,
   },
