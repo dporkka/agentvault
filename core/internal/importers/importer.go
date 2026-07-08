@@ -24,14 +24,21 @@ type ImportOptions struct {
 	KeepStructure  bool     // Preserve relative folder structure
 	DefaultProject string   // Project to assign
 	Tags           []string // Tags to add
+	DryRun         bool     // If true, do not write anything to disk
 }
 
-// ImportResult reports what was imported.
+// ImportResult reports what was imported or would be imported.
 type ImportResult struct {
-	FilesImported int
-	FilesSkipped  int
-	Errors        []ImportError
-	Warnings      []string
+	FilesImported   int
+	FilesSkipped    int
+	DuplicateCount  int
+	Duplicates      []string // paths skipped because identical content already exists
+	AttachmentCount int
+	Attachments     []string // attachment paths that would be copied (Obsidian)
+	NormalizedCount int      // files whose frontmatter would be changed in normalize mode
+	PlannedWrites   []string // target paths that would be created/updated
+	Errors          []ImportError
+	Warnings        []string
 }
 
 // ImportError records a file that failed to import.

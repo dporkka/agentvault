@@ -458,3 +458,48 @@ func TestObsidianImporter_AliasAsString(t *testing.T) {
 		t.Errorf("Expected alias 'My Alias', got %q", aliases[0])
 	}
 }
+
+func TestObsidianImporter_DryRun(t *testing.T) {
+	srcDir := t.TempDir()
+	vaultDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(srcDir, "note.md"), []byte("---\ntitle: Obsidian Note\n---\n\nBody with #tag.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "image.png"), []byte("fake-png"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	o := &ObsidianImporter{}
+	opts := ImportOptions{
+		SourcePath:  srcDir,
+		TargetVault: vaultDir,
+		Mode:        "copy",
+		DryRun:      true,
+	}
+	result, err := o.Import(opts)
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+
+	if result.FilesImported != 1 {
+		t.Errorf("Expected 1 markdown file planned, got %d", result.FilesImported)
+	}
+	if result.AttachmentCount != 1 {
+		t.Errorf("Expected 1 attachment planned, got %d", result.AttachmentCount)
+	}
+	if len(result.Attachments) != 1 {
+		t.Errorf("Expected 1 attachment path, got %d", len(result.Attachments))
+	}
+	if len(result.PlannedWrites) != 1 {
+		t.Errorf("Expected 1 planned write, got %d", len(result.PlannedWrites))
+	}
+
+	// Verify nothing was written
+	if _, err := os.Stat(filepath.Join(vaultDir, "10-notes", "note.md")); !os.IsNotExist(err) {
+		t.Error("Dry run should not write markdown file")
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, "10-notes", "attachments", "image.png")); !os.IsNotExist(err) {
+		t.Error("Dry run should not copy attachments")
+	}
+}

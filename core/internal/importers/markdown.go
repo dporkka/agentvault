@@ -92,7 +92,11 @@ func (m *MarkdownImporter) importFile(sourcePath string, opts ImportOptions, res
 
 	// Normalize frontmatter if requested
 	if opts.Mode == "normalize" {
+		original := doc.Frontmatter
 		normalizeFrontmatter(doc, opts)
+		if frontmatterChanged(original, doc.Frontmatter) {
+			result.NormalizedCount++
+		}
 	}
 
 	// Determine base target path (before collision safety)
@@ -106,11 +110,19 @@ func (m *MarkdownImporter) importFile(sourcePath string, opts ImportOptions, res
 		return err
 	} else if skip {
 		result.FilesSkipped++
+		result.DuplicateCount++
+		result.Duplicates = append(result.Duplicates, sourcePath)
 		return nil
 	}
 
 	// Apply collision safety for files with different content
 	targetPath := CollisionSafePath(baseTargetPath)
+
+	if opts.DryRun {
+		result.PlannedWrites = append(result.PlannedWrites, targetPath)
+		result.FilesImported++
+		return nil
+	}
 
 	// Ensure target directory exists
 	targetDir := filepath.Dir(targetPath)
@@ -172,6 +184,54 @@ func normalizeFrontmatter(doc *markdown.ParsedDocument, opts ImportOptions) {
 		// Merge provided tags with existing ones (avoid duplicates)
 		doc.Frontmatter.Tags = mergeTags(doc.Frontmatter.Tags, opts.Tags)
 	}
+}
+
+// frontmatterChanged reports whether normalizeFrontmatter changed any core field.
+func frontmatterChanged(original, updated markdown.Frontmatter) bool {
+	if original.ID != updated.ID {
+		return true
+	}
+	if original.Type != updated.Type {
+		return true
+	}
+	if original.Title != updated.Title {
+		return true
+	}
+	if original.Status != updated.Status {
+		return true
+	}
+	if original.Project != updated.Project {
+		return true
+	}
+	if original.Created != updated.Created {
+		return true
+	}
+	if original.Updated != updated.Updated {
+		return true
+	}
+	if original.SourceQuality != updated.SourceQuality {
+		return true
+	}
+	if !slicesEqual(original.Tags, updated.Tags) {
+		return true
+	}
+	if !slicesEqual(original.Entities, updated.Entities) {
+		return true
+	}
+	return false
+}
+
+// slicesEqual reports whether two string slices contain the same elements in the same order.
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // extractTitle extracts a title from the document body (first # heading).

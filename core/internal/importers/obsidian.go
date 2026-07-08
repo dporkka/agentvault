@@ -41,10 +41,12 @@ func (o *ObsidianImporter) Import(opts ImportOptions) (*ImportResult, error) {
 		return nil, fmt.Errorf("failed to create target vault: %w", err)
 	}
 
-	// Create attachments folder
+	// Create attachments folder when not in dry-run mode
 	attachmentsDir := filepath.Join(opts.TargetVault, "10-notes", "attachments")
-	if err := os.MkdirAll(attachmentsDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create attachments directory: %w", err)
+	if !opts.DryRun {
+		if err := os.MkdirAll(attachmentsDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create attachments directory: %w", err)
+		}
 	}
 
 	// Walk source directory
@@ -65,11 +67,16 @@ func (o *ObsidianImporter) Import(opts ImportOptions) (*ImportResult, error) {
 			return nil
 		}
 
-		// Handle attachments (copy to vault)
+		// Handle attachments (copy to vault, or just record in dry-run)
 		ext := strings.ToLower(filepath.Ext(path))
 		if isAttachment(ext) {
 			targetPath := filepath.Join(attachmentsDir, filepath.Base(path))
 			targetPath = CollisionSafePath(targetPath)
+			if opts.DryRun {
+				result.Attachments = append(result.Attachments, targetPath)
+				result.AttachmentCount++
+				return nil
+			}
 			if err := copyFile(path, targetPath); err != nil {
 				result.Warnings = append(result.Warnings,
 					fmt.Sprintf("failed to copy attachment %s: %v", path, err))
@@ -119,7 +126,11 @@ func (o *ObsidianImporter) importObsidianFile(sourcePath string, opts ImportOpti
 
 	// Normalize frontmatter
 	if opts.Mode == "normalize" {
+		original := doc.Frontmatter
 		normalizeFrontmatter(doc, opts)
+		if frontmatterChanged(original, doc.Frontmatter) {
+			result.NormalizedCount++
+		}
 	}
 
 	// Convert Obsidian wiki links to AgentVault format (already [[Target]] format, so they work)
@@ -136,11 +147,19 @@ func (o *ObsidianImporter) importObsidianFile(sourcePath string, opts ImportOpti
 		return err
 	} else if skip {
 		result.FilesSkipped++
+		result.DuplicateCount++
+		result.Duplicates = append(result.Duplicates, sourcePath)
 		return nil
 	}
 
 	// Apply collision safety for files with different content
 	targetPath := CollisionSafePath(baseTargetPath)
+
+	if opts.DryRun {
+		result.PlannedWrites = append(result.PlannedWrites, targetPath)
+		result.FilesImported++
+		return nil
+	}
 
 	// Ensure target directory exists
 	targetDir := filepath.Dir(targetPath)

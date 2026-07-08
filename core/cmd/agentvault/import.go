@@ -14,6 +14,7 @@ var (
 	importProject       string
 	importTags          string
 	importKeepStructure bool
+	importDryRun        bool
 )
 
 var importLong = strings.Join([]string{
@@ -85,8 +86,14 @@ func runImport(cmd *cobra.Command, args []string) error {
 		KeepStructure:  importKeepStructure,
 		DefaultProject: importProject,
 		Tags:           tags,
+		DryRun:         importDryRun,
 	}
 
+	if importDryRun {
+		fmt.Println("==============================")
+		fmt.Println("DRY RUN — no files will be written")
+		fmt.Println("==============================")
+	}
 	fmt.Printf("Importing from %s using %s importer...\n", sourcePath, importerName)
 	if mode != "copy" {
 		fmt.Printf("Mode: %s\n", mode)
@@ -100,6 +107,15 @@ func runImport(cmd *cobra.Command, args []string) error {
 	fmt.Println("")
 	fmt.Printf("Imported: %d\n", result.FilesImported)
 	fmt.Printf("Skipped:  %d\n", result.FilesSkipped)
+	if result.DuplicateCount > 0 {
+		fmt.Printf("Duplicates: %d\n", result.DuplicateCount)
+	}
+	if result.AttachmentCount > 0 {
+		fmt.Printf("Attachments: %d\n", result.AttachmentCount)
+	}
+	if result.NormalizedCount > 0 {
+		fmt.Printf("Normalized: %d\n", result.NormalizedCount)
+	}
 	if len(result.Errors) > 0 {
 		fmt.Printf("Errors:   %d\n", len(result.Errors))
 		for _, e := range result.Errors[:min(len(result.Errors), 10)] {
@@ -119,6 +135,21 @@ func runImport(cmd *cobra.Command, args []string) error {
 		if len(result.Warnings) > 5 {
 			fmt.Printf("  ... and %d more warnings\n", len(result.Warnings)-5)
 		}
+	}
+
+	if len(result.PlannedWrites) > 0 {
+		fmt.Println("")
+		fmt.Printf("Planned writes (%d):\n", len(result.PlannedWrites))
+		for _, p := range result.PlannedWrites[:min(len(result.PlannedWrites), 10)] {
+			fmt.Printf("  - %s\n", p)
+		}
+		if len(result.PlannedWrites) > 10 {
+			fmt.Printf("  ... and %d more\n", len(result.PlannedWrites)-10)
+		}
+	}
+
+	if importDryRun {
+		return nil
 	}
 
 	if result.FilesImported > 0 {
@@ -148,6 +179,7 @@ func init() {
 	importCmd.Flags().StringVar(&importProject, "project", "", "Default project to assign")
 	importCmd.Flags().StringVar(&importTags, "tags", "", "Comma-separated tags to add")
 	importCmd.Flags().BoolVar(&importKeepStructure, "keep-structure", false, "Preserve source folder structure")
+	importCmd.Flags().BoolVar(&importDryRun, "dry-run", false, "Preview the import without writing files")
 
 	rootCmd.AddCommand(importCmd)
 }

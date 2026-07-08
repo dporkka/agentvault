@@ -440,3 +440,121 @@ func TestIsHiddenDir(t *testing.T) {
 		}
 	}
 }
+
+func TestMarkdownImporter_DryRun(t *testing.T) {
+	srcDir := t.TempDir()
+	vaultDir := t.TempDir()
+
+	content := `---
+title: Dry Run Note
+---
+
+Body content.
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "note.md"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := &MarkdownImporter{}
+	opts := ImportOptions{
+		SourcePath:  srcDir,
+		TargetVault: vaultDir,
+		Mode:        "copy",
+		DryRun:      true,
+	}
+	result, err := m.Import(opts)
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+
+	if result.FilesImported != 1 {
+		t.Errorf("Expected 1 file to be planned, got %d", result.FilesImported)
+	}
+	if len(result.PlannedWrites) != 1 {
+		t.Errorf("Expected 1 planned write, got %d", len(result.PlannedWrites))
+	}
+
+	// Verify nothing was written
+	targetFile := filepath.Join(vaultDir, "10-notes", "note.md")
+	if _, err := os.Stat(targetFile); !os.IsNotExist(err) {
+		t.Errorf("Dry run should not write target file: %s", targetFile)
+	}
+}
+
+func TestMarkdownImporter_DryRunNormalize(t *testing.T) {
+	srcDir := t.TempDir()
+	vaultDir := t.TempDir()
+
+	content := `---
+title: Minimal
+---
+
+# Heading
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "minimal.md"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := &MarkdownImporter{}
+	opts := ImportOptions{
+		SourcePath:  srcDir,
+		TargetVault: vaultDir,
+		Mode:        "normalize",
+		DryRun:      true,
+		Tags:        []string{"imported"},
+	}
+	result, err := m.Import(opts)
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+
+	if result.FilesImported != 1 {
+		t.Errorf("Expected 1 file to be planned, got %d", result.FilesImported)
+	}
+	if result.NormalizedCount != 1 {
+		t.Errorf("Expected 1 normalized file, got %d", result.NormalizedCount)
+	}
+
+	targetFile := filepath.Join(vaultDir, "10-notes", "minimal.md")
+	if _, err := os.Stat(targetFile); !os.IsNotExist(err) {
+		t.Errorf("Dry run should not write target file: %s", targetFile)
+	}
+}
+
+func TestMarkdownImporter_DryRunDuplicate(t *testing.T) {
+	srcDir := t.TempDir()
+	vaultDir := t.TempDir()
+
+	content := "---\ntitle: Dup\n---\n\nBody.\n"
+	if err := os.WriteFile(filepath.Join(srcDir, "dup.md"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(vaultDir, "10-notes"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vaultDir, "10-notes", "dup.md"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := &MarkdownImporter{}
+	opts := ImportOptions{
+		SourcePath:  srcDir,
+		TargetVault: vaultDir,
+		Mode:        "copy",
+		DryRun:      true,
+	}
+	result, err := m.Import(opts)
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+
+	if result.FilesImported != 0 {
+		t.Errorf("Expected 0 files to be planned, got %d", result.FilesImported)
+	}
+	if result.DuplicateCount != 1 {
+		t.Errorf("Expected 1 duplicate, got %d", result.DuplicateCount)
+	}
+	if len(result.PlannedWrites) != 0 {
+		t.Errorf("Expected 0 planned writes for duplicate, got %d", len(result.PlannedWrites))
+	}
+}

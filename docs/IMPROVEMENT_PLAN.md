@@ -153,7 +153,7 @@ Deliverables:
 
 - Done — expand `doctor`: index freshness, orphan database files, orphan chunks, duplicate IDs, broken links, and embedding availability are now checked. API auth setup validation remains for a future PR.
 - Done — embed migrations with `go:embed` and run them from `db.RunMigrations`; inline schema is preserved as a fallback.
-- Improve import previews: dry-run mode, duplicate summary, attachment summary, and frontmatter normalization report.
+- Done — improve import previews: add `--dry-run` mode to `agentvault import` with duplicate summary, attachment summary, planned-write list, and frontmatter normalization report.
 - Add safe Git workflow helpers for common vault operations without auto-committing unexpectedly.
 - Add benchmarks for indexing, search, vector search, and import on representative vault sizes.
 
