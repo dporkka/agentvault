@@ -73,7 +73,9 @@ contract-check: ## Verify @agentvault/contract is the only source of API types i
 	@cd packages/contract && npx --yes -p typescript@5.4.5 tsc --noEmit
 	@cd apps/web-local && npx tsc --noEmit
 	@cd apps/browser-extension && npx tsc --noEmit
+	@cd apps/browser-extension && npm test
 	@cd apps/mobile-expo && npx tsc --noEmit
+	@cd apps/mobile-expo && npm test
 	@cd apps/desktop-wails/frontend && npx tsc --noEmit
 	@echo "Checking for snake_case fields in client code (server emits camelCase)..."
 	@SNAKE_RE=$$(scripts/contract-snake-list.sh core/internal/contract/contract.go | paste -sd'|' -); \

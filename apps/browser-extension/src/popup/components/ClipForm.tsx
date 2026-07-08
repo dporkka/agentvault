@@ -111,11 +111,13 @@ export function ClipForm({ initialTitle, initialUrl, initialSelectedText, onSend
       <button
         onClick={handleSend}
         disabled={status === 'syncing'}
+        aria-label="Send capture to vault"
+        aria-busy={status === 'syncing'}
         className="btn btn-primary btn--mt-1"
       >
         {status === 'syncing' ? (
           <>
-            <span className="spinner" />
+            <span className="spinner" aria-hidden="true" />
             Sending...
           </>
         ) : (
@@ -140,7 +142,7 @@ export function ClipForm({ initialTitle, initialUrl, initialSelectedText, onSend
       {pendingCount > 0 && (
         <div className="banner banner-warning banner--row">
           <span>{pendingCount} pending capture{pendingCount === 1 ? '' : 's'}</span>
-          <button onClick={handleRetry} disabled={status === 'syncing'} className="btn btn-sm btn-secondary">
+          <button onClick={handleRetry} disabled={status === 'syncing'} aria-label="Retry pending captures" className="btn btn-sm btn-secondary">
             Retry
           </button>
         </div>

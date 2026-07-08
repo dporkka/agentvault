@@ -95,6 +95,8 @@ export function SearchPanel() {
         <button
           onClick={handleSearch}
           disabled={loading || !query.trim()}
+          aria-label="Search vault"
+          aria-busy={loading}
           className="btn btn-primary"
         >
           {loading ? '...' : 'Search'}

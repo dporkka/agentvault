@@ -2,6 +2,11 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 
 export default defineConfig({
+  test: {
+    environment: 'node',
+    globals: false,
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

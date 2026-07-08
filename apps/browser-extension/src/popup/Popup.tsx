@@ -148,8 +148,11 @@ export function Popup() {
         key={tab}
         onClick={() => setActiveTab(tab)}
         className={`popup-tabs__btn ${isActive ? 'popup-tabs__btn--active' : ''}`}
+        aria-label={TAB_LABELS[tab]}
+        aria-pressed={isActive}
+        role="tab"
       >
-        <span className="popup-tabs__icon">{TAB_ICONS[tab]}</span>
+        <span className="popup-tabs__icon" aria-hidden="true">{TAB_ICONS[tab]}</span>
         {TAB_LABELS[tab]}
       </button>
     );
@@ -166,6 +169,8 @@ export function Popup() {
           <button
             onClick={() => setShowSettings((s) => !s)}
             title="Settings"
+            aria-label="Toggle settings"
+            aria-pressed={showSettings}
             className={`icon-btn ${showSettings ? 'icon-btn--active' : ''}`}
           >
             {'⚙'}

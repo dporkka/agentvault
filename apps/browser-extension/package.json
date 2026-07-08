@@ -7,6 +7,8 @@
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "dev": "vite",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "package": "npm run build && cd dist && zip -r ../agentvault-extension-v$npm_package_version.zip ."
   },
   "dependencies": {
@@ -19,6 +21,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "typescript": "^5.4.5",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "vitest": "^3.0.0"
   }
 }

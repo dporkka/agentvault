@@ -54,6 +54,8 @@ export function RecentPanel({ limit = 20 }: RecentPanelProps) {
         <button
           onClick={loadRecent}
           disabled={loading}
+          aria-label="Refresh recent notes"
+          aria-busy={loading}
           className="btn btn-sm btn-secondary"
         >
           {loading ? '...' : 'Refresh'}

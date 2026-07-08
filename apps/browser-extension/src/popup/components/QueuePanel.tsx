@@ -76,6 +76,7 @@ export function QueuePanel() {
           <button
             onClick={handleRetryAll}
             disabled={loading || pending.length === 0}
+            aria-label="Retry all pending captures"
             className="btn btn-sm btn-secondary"
           >
             Retry all
@@ -83,6 +84,7 @@ export function QueuePanel() {
           <button
             onClick={handleClearSynced}
             disabled={loading || items.every((i) => i.state !== 'synced')}
+            aria-label="Clear synced captures"
             className="btn btn-sm btn-ghost"
           >
             Clear synced
@@ -119,14 +121,16 @@ export function QueuePanel() {
               <button
                 onClick={() => handleRetryOne(item.id)}
                 disabled={loading}
+                aria-label={`Retry capture ${item.payload.title || 'Untitled'}`}
                 className="btn btn-sm btn-secondary"
               >
-                {loading ? <span className="spinner" /> : 'Retry'}
+                {loading ? <span className="spinner" aria-hidden="true" /> : 'Retry'}
               </button>
             )}
             <button
               onClick={() => handleRemove(item.id)}
               disabled={loading}
+              aria-label={`Delete capture ${item.payload.title || 'Untitled'}`}
               className="btn btn-sm btn-danger"
             >
               Delete

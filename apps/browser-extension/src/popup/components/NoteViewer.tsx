@@ -32,7 +32,7 @@ export function NoteViewer({ id, onBack }: NoteViewerProps) {
   return (
     <div className="note-viewer">
       <div className="note-viewer__header">
-        <button onClick={onBack} className="btn btn-sm btn-secondary">
+        <button onClick={onBack} aria-label="Back to list" className="btn btn-sm btn-secondary">
           ← Back
         </button>
       </div>

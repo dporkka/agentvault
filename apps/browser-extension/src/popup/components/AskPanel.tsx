@@ -162,6 +162,8 @@ export function AskPanel() {
         <button
           onClick={handleAsk}
           disabled={loading || !input.trim()}
+          aria-label="Ask question"
+          aria-busy={loading}
           className="btn btn-primary"
         >
           {loading ? '...' : 'Ask'}
