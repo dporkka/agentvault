@@ -399,3 +399,83 @@ func TestDiff_NotAGitRepo(t *testing.T) {
 		t.Fatal("expected error for non-git repo")
 	}
 }
+
+func TestHasChanges_CleanRepo(t *testing.T) {
+	dir := helperInitRepo(t)
+	helperWriteFile(t, dir, "file.txt", "original")
+	exec.Command("git", "-C", dir, "add", "-A").Run()
+	helperCommit(t, dir, "initial")
+
+	changed, err := HasChanges(dir)
+	if err != nil {
+		t.Fatalf("HasChanges failed: %v", err)
+	}
+	if changed {
+		t.Fatal("expected no changes for clean repo")
+	}
+}
+
+func TestHasChanges_WithUntrackedFile(t *testing.T) {
+	dir := helperInitRepo(t)
+	helperWriteFile(t, dir, "file.txt", "original")
+	exec.Command("git", "-C", dir, "add", "-A").Run()
+	helperCommit(t, dir, "initial")
+
+	helperWriteFile(t, dir, "new.txt", "new content")
+	changed, err := HasChanges(dir)
+	if err != nil {
+		t.Fatalf("HasChanges failed: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected changes when untracked file exists")
+	}
+}
+
+func TestStageAll(t *testing.T) {
+	dir := helperInitRepo(t)
+	helperWriteFile(t, dir, "a.txt", "a")
+	helperWriteFile(t, dir, "b.txt", "b")
+
+	if err := StageAll(dir); err != nil {
+		t.Fatalf("StageAll failed: %v", err)
+	}
+
+	out, err := runGit(dir, "diff", "--cached", "--name-only")
+	if err != nil {
+		t.Fatalf("checking staged files failed: %v", err)
+	}
+	if !strings.Contains(out, "a.txt") || !strings.Contains(out, "b.txt") {
+		t.Fatalf("expected a.txt and b.txt to be staged, got: %s", out)
+	}
+}
+
+func TestSnapshot_SucceedsWithChanges(t *testing.T) {
+	dir := helperInitRepo(t)
+	helperWriteFile(t, dir, "file.txt", "original")
+	exec.Command("git", "-C", dir, "add", "-A").Run()
+	helperCommit(t, dir, "initial")
+
+	helperWriteFile(t, dir, "file.txt", "updated")
+	if err := Snapshot(dir, "my snapshot"); err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+
+	commits, err := Log(dir, 1)
+	if err != nil {
+		t.Fatalf("Log failed: %v", err)
+	}
+	if len(commits) != 1 || commits[0].Message != "my snapshot" {
+		t.Fatalf("expected snapshot commit, got: %+v", commits)
+	}
+}
+
+func TestSnapshot_FailsWhenClean(t *testing.T) {
+	dir := helperInitRepo(t)
+	helperWriteFile(t, dir, "file.txt", "original")
+	exec.Command("git", "-C", dir, "add", "-A").Run()
+	helperCommit(t, dir, "initial")
+
+	if err := Snapshot(dir, "empty snapshot"); err == nil {
+		t.Fatal("expected Snapshot to fail when working tree is clean")
+	}
+}

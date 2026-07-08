@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // FileStatus represents the status of a single file in the git working tree.
@@ -324,4 +325,54 @@ func LastCommitHash(vaultPath string) (string, error) {
 		return "", fmt.Errorf("no commits yet: %w", err)
 	}
 	return hash, nil
+}
+
+// HasChanges reports whether the working tree has any modifications or
+// untracked files.
+func HasChanges(vaultPath string) (bool, error) {
+	if !IsGitRepo(vaultPath) {
+		return false, fmt.Errorf("this vault is not a git repository. Run 'agentvault git init' to initialize")
+	}
+	out, err := runGit(vaultPath, "status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
+// StageAll stages all changes in the working tree.
+func StageAll(vaultPath string) error {
+	if !IsGitRepo(vaultPath) {
+		return fmt.Errorf("this vault is not a git repository. Run 'agentvault git init' to initialize")
+	}
+	_, err := runGit(vaultPath, "add", "-A")
+	return err
+}
+
+// Snapshot creates a commit of all current changes. It refuses to commit when
+// the working tree is clean, avoiding empty commits.
+func Snapshot(vaultPath, message string) error {
+	if !IsGitRepo(vaultPath) {
+		return fmt.Errorf("this vault is not a git repository. Run 'agentvault git init' to initialize")
+	}
+
+	changed, err := HasChanges(vaultPath)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return fmt.Errorf("nothing to commit: working tree clean")
+	}
+
+	if message == "" {
+		message = fmt.Sprintf("vault snapshot %s", time.Now().UTC().Format(time.RFC3339))
+	}
+
+	if err := StageAll(vaultPath); err != nil {
+		return fmt.Errorf("failed to stage changes: %w", err)
+	}
+	if _, err := runGit(vaultPath, "commit", "-m", message); err != nil {
+		return fmt.Errorf("failed to commit: %w", err)
+	}
+	return nil
 }

@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	gitCommitMessage string
-	gitLogLimit      int
+	gitCommitMessage   string
+	gitLogLimit        int
+	gitSnapshotMessage string
 )
 
 var gitCmd = &cobra.Command{
@@ -54,6 +55,19 @@ var gitInitCmd = &cobra.Command{
 	RunE:  runGitInit,
 }
 
+var gitAddCmd = &cobra.Command{
+	Use:   "add <files...>",
+	Short: "Stage files for commit",
+	Args:  cobra.MinimumNArgs(1),
+	RunE:  runGitAdd,
+}
+
+var gitSnapshotCmd = &cobra.Command{
+	Use:   "snapshot",
+	Short: "Commit all changes if there are any",
+	RunE:  runGitSnapshot,
+}
+
 func init() {
 	rootCmd.AddCommand(gitCmd)
 
@@ -62,11 +76,15 @@ func init() {
 	gitCmd.AddCommand(gitCommitCmd)
 	gitCmd.AddCommand(gitLogCmd)
 	gitCmd.AddCommand(gitInitCmd)
+	gitCmd.AddCommand(gitAddCmd)
+	gitCmd.AddCommand(gitSnapshotCmd)
 
 	gitCommitCmd.Flags().StringVarP(&gitCommitMessage, "message", "m", "", "Commit message (required)")
 	_ = gitCommitCmd.MarkFlagRequired("message")
 
 	gitLogCmd.Flags().IntVar(&gitLogLimit, "limit", 10, "Number of commits to show")
+
+	gitSnapshotCmd.Flags().StringVarP(&gitSnapshotMessage, "message", "m", "", "Snapshot commit message")
 }
 
 func runGitStatus(cmd *cobra.Command, args []string) error {
@@ -247,6 +265,47 @@ func runGitLog(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 	}
 
+	return nil
+}
+
+func runGitAdd(cmd *cobra.Command, args []string) error {
+	vp := mustRequireVault()
+
+	if !git.IsGitRepo(vp) {
+		fmt.Fprintln(os.Stderr, "This vault is not a git repository. Run 'agentvault git init' to initialize.")
+		os.Exit(1)
+	}
+
+	if err := git.Add(vp, args); err != nil {
+		return err
+	}
+
+	color.Green("✓ Staged %d file(s)", len(args))
+	return nil
+}
+
+func runGitSnapshot(cmd *cobra.Command, args []string) error {
+	vp := mustRequireVault()
+
+	if !git.IsGitRepo(vp) {
+		fmt.Fprintln(os.Stderr, "This vault is not a git repository. Run 'agentvault git init' to initialize.")
+		os.Exit(1)
+	}
+
+	if err := git.Snapshot(vp, gitSnapshotMessage); err != nil {
+		if strings.Contains(err.Error(), "nothing to commit") {
+			fmt.Println("Nothing to commit, working tree clean.")
+			return nil
+		}
+		return err
+	}
+
+	hash, err := git.LastCommitHash(vp)
+	if err != nil {
+		return err
+	}
+
+	color.Green("✓ Snapshot committed: %s", hash)
 	return nil
 }
 
