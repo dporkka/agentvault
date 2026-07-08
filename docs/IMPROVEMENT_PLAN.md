@@ -172,9 +172,9 @@ Deliverables:
 - Done — define release artifacts: CLI binaries, desktop installers, browser extension package, and mobile distribution strategy.
 - Done — add install/update documentation for each platform.
 - Scaffolded — signed desktop installers (macOS `.app` + `.dmg`, Windows NSIS `.exe`) and store publishing workflows (Chrome Web Store, App Store, Play Store) are secret-gated in CI.
-- Not started — add compatibility matrix for OS, Go, Node, Wails, Expo, browsers, and local AI providers.
-- Not started — add smoke tests for packaged CLI and desktop artifacts.
-- Not started — document security boundaries for localhost API, auth token handling, CORS, and extension permissions.
+- Done — add compatibility matrix for OS, Go, Node, Wails, Expo, browsers, and local AI providers.
+- Done — add smoke tests for packaged CLI artifacts; desktop artifact smoke tests remain for future work.
+- Done — document security boundaries for localhost API, auth token handling, CORS, and extension permissions.
 
 Exit criteria:
 

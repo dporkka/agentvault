@@ -269,9 +269,11 @@ agentvault/
 ├── docs/
 │   ├── API_CONTRACT.md
 │   ├── CODEBASE_ANALYSIS.md
+│   ├── COMPATIBILITY.md
 │   ├── IMPROVEMENT_PLAN.md
 │   ├── INSTALL.md
-│   └── PUBLISHING.md
+│   ├── PUBLISHING.md
+│   └── SECURITY.md
 ├── Makefile
 └── README.md
 ```
@@ -349,12 +351,14 @@ detailed status live in:
 
 Notable remaining work:
 
-- Add compatibility matrix for OS, Go, Node, Wails, Expo, browsers, and local AI providers.
-- Add smoke tests for packaged CLI and desktop artifacts.
-- Document security boundaries for the localhost API, auth token handling, CORS, and extension permissions.
+- Add client-side capture sync state indicators (unsynced, syncing, synced, failed) in the mobile app and browser extension.
+
+For platform requirements, see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+For security expectations, see [`docs/SECURITY.md`](docs/SECURITY.md).
 
 CI runs `make ci`, frontend builds, mobile type-checks, and the desktop Go build
-with the `webkit2_41` tag. Signed macOS/Windows installers and store publishing
+with the `webkit2_41` tag. Packaged CLI artifacts can be smoke-tested with
+`make smoke-test`. Signed macOS/Windows installers and store publishing
 workflows are secret-gated; see [`docs/PUBLISHING.md`](docs/PUBLISHING.md).
 
 ## License
