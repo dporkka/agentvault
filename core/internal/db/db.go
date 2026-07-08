@@ -4,10 +4,16 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"io"
+	"io/fs"
 	"log"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
 	"time"
 
+	"github.com/agentvault/core/migrations"
 	_ "modernc.org/sqlite"
 )
 
@@ -51,9 +57,99 @@ func (d *DB) Path() string {
 	return d.path
 }
 
-// RunMigrations executes the inline migration SQL.
+// RunMigrations executes embedded migration SQL when available, falling back to
+// the inline schema if no migration files are embedded.
 func (d *DB) RunMigrations() error {
-	return d.runInlineMigrations()
+	entries, err := fs.ReadDir(migrations.FS, ".")
+	if err != nil || len(entries) == 0 {
+		return d.runInlineMigrations()
+	}
+	return d.runEmbeddedMigrations(entries)
+}
+
+// migration represents a single embedded SQL migration.
+type migration struct {
+	version int
+	name    string
+	sql     string
+}
+
+var migrationVersionRe = regexp.MustCompile(`^(\d+)`)
+
+// runEmbeddedMigrations creates the schema from embedded migration files.
+func (d *DB) runEmbeddedMigrations(entries []fs.DirEntry) error {
+	var migrationsList []migration
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !regexp.MustCompile(`\.sql$`).MatchString(name) {
+			continue
+		}
+
+		match := migrationVersionRe.FindStringSubmatch(name)
+		if match == nil {
+			continue
+		}
+		version, err := strconv.Atoi(match[1])
+		if err != nil {
+			continue
+		}
+
+		f, err := migrations.FS.Open(name)
+		if err != nil {
+			return fmt.Errorf("failed to open migration %s: %w", name, err)
+		}
+		data, err := io.ReadAll(f)
+		_ = f.Close()
+		if err != nil {
+			return fmt.Errorf("failed to read migration %s: %w", name, err)
+		}
+
+		migrationsList = append(migrationsList, migration{
+			version: version,
+			name:    name,
+			sql:     string(data),
+		})
+	}
+
+	sort.Slice(migrationsList, func(i, j int) bool {
+		return migrationsList[i].version < migrationsList[j].version
+	})
+
+	// Ensure the migration tracking table exists before querying it.
+	if _, err := d.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version INTEGER PRIMARY KEY,
+			applied_at TEXT NOT NULL
+		)
+	`); err != nil {
+		return fmt.Errorf("failed to create schema_migrations: %w", err)
+	}
+
+	var currentVersion int
+	row := d.conn.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations")
+	if err := row.Scan(&currentVersion); err != nil {
+		return fmt.Errorf("failed to query current migration version: %w", err)
+	}
+
+	for _, m := range migrationsList {
+		if m.version <= currentVersion {
+			continue
+		}
+		if _, err := d.conn.Exec(m.sql); err != nil {
+			return fmt.Errorf("failed to run migration %s: %w", m.name, err)
+		}
+		if _, err := d.conn.Exec(
+			`INSERT OR REPLACE INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))`,
+			m.version,
+		); err != nil {
+			return fmt.Errorf("failed to record migration %s: %w", m.name, err)
+		}
+	}
+
+	return nil
 }
 
 // runInlineMigrations creates the schema directly when migration files aren't found.

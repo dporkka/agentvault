@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/agentvault/core/migrations"
 )
 
 func TestOpen(t *testing.T) {
@@ -125,5 +127,49 @@ func TestExecAndQuery(t *testing.T) {
 	}
 	if count != 2 {
 		t.Errorf("Expected 2 rows, got %d", count)
+	}
+}
+
+func TestRunMigrationsIdempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.MkdirAll(filepath.Join(tmpDir, ".agentvault"), 0755)
+
+	db, err := Open(tmpDir)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations failed: %v", err)
+	}
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations second run failed: %v", err)
+	}
+
+	var version int
+	err = db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
+	if err != nil {
+		t.Fatalf("Failed to query schema_migrations: %v", err)
+	}
+	if version != 1 {
+		t.Errorf("Expected migration version 1, got %d", version)
+	}
+}
+
+func TestEmbeddedMigrationsPresent(t *testing.T) {
+	entries, err := migrations.FS.ReadDir(".")
+	if err != nil {
+		t.Fatalf("Failed to read embedded migrations: %v", err)
+	}
+	found := false
+	for _, e := range entries {
+		if e.Name() == "001_init.sql" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected 001_init.sql to be embedded")
 	}
 }
