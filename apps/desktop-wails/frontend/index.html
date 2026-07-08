@@ -4,6 +4,17 @@
     <meta charset="UTF-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>AgentVault</title>
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem('agentvault-theme');
+          var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (theme === 'dark' || (theme !== 'light' && systemDark)) {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
 </head>
 <body>
 <div id="root"></div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Folder, FileText, ChevronRight, LayoutDashboard } from './Icons';
+import EmptyState from './EmptyState';
 import type { SearchResult } from '../types';
 
 interface Props {
@@ -50,27 +51,27 @@ export default function ProjectDashboard({ onOpenNote }: Props) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-sm text-[var(--text-muted)]">Loading projects...</div>
+        <div className="text-sm text-text-muted">Loading projects...</div>
       </div>
     );
   }
 
   if (projects.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
-        <LayoutDashboard className="w-12 h-12 mb-4 opacity-30" />
-        <p className="text-sm">No projects yet</p>
-        <p className="text-xs mt-1">Create notes with a project field to see them here</p>
-      </div>
+      <EmptyState
+        icon={<LayoutDashboard className="w-12 h-12" />}
+        title="No projects yet"
+        description="Create notes with a project field to see them here"
+      />
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-primary)]">
+    <div className="flex flex-col h-full bg-bg-primary">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-[var(--border)] bg-[var(--bg-secondary)]">
-        <h1 className="text-lg font-semibold text-[var(--text-primary)]">Projects</h1>
-        <p className="text-xs text-[var(--text-muted)] mt-0.5">
+      <div className="px-6 py-4 border-b border-border bg-bg-secondary">
+        <h1 className="text-lg font-semibold text-text-primary">Projects</h1>
+        <p className="text-xs text-text-muted mt-0.5">
           {projects.length} projects · {projects.reduce((a, p) => a + p.noteCount, 0)} notes
         </p>
       </div>
@@ -81,22 +82,22 @@ export default function ProjectDashboard({ onOpenNote }: Props) {
           {projects.map(project => (
             <div
               key={project.name}
-              className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border)] overflow-hidden"
+              className="bg-bg-secondary rounded-lg border border-border overflow-hidden"
             >
               <button
                 onClick={() => setExpandedProject(
                   expandedProject === project.name ? null : project.name
                 )}
-                className="w-full flex items-center justify-between px-4 py-3 hover:bg-[var(--bg-hover)] transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-bg-hover transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <Folder className="w-5 h-5 text-[var(--accent)]" />
-                  <span className="text-sm font-medium text-[var(--text-primary)]">
+                  <Folder className="w-5 h-5 text-accent" />
+                  <span className="text-sm font-medium text-text-primary">
                     {project.name}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="flex gap-2 text-xs text-[var(--text-muted)]">
+                  <div className="flex gap-2 text-xs text-text-muted">
                     <span>{project.noteCount} notes</span>
                     {project.decisionCount > 0 && (
                       <span>{project.decisionCount} decisions</span>
@@ -105,30 +106,30 @@ export default function ProjectDashboard({ onOpenNote }: Props) {
                       <span>{project.taskCount} tasks</span>
                     )}
                   </div>
-                  <ChevronRight className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${
+                  <ChevronRight className={`w-4 h-4 text-text-muted transition-transform ${
                     expandedProject === project.name ? 'rotate-90' : ''
                   }`} />
                 </div>
               </button>
 
               {expandedProject === project.name && (
-                <div className="border-t border-[var(--border)] px-4 py-2">
+                <div className="border-t border-border px-4 py-2">
                   {project.notes.map(note => (
                     <button
                       key={note.id}
                       onClick={() => onOpenNote(note.path)}
-                      className="w-full flex items-start gap-2.5 px-2 py-2 text-left hover:bg-[var(--bg-hover)] rounded transition-colors"
+                      className="w-full flex items-start gap-2.5 px-2 py-2 text-left hover:bg-bg-hover rounded transition-colors"
                     >
-                      <FileText className="w-4 h-4 mt-0.5 text-[var(--text-muted)] flex-shrink-0" />
+                      <FileText className="w-4 h-4 mt-0.5 text-text-muted flex-shrink-0" />
                       <div className="min-w-0">
-                        <div className="text-sm text-[var(--text-primary)] truncate">
+                        <div className="text-sm text-text-primary truncate">
                           {note.title}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">
                             {note.type}
                           </span>
-                          <span className="text-[10px] text-[var(--text-muted)]">
+                          <span className="text-[10px] text-text-muted">
                             {note.path}
                           </span>
                         </div>

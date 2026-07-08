@@ -30,8 +30,8 @@ function App() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[var(--bg-primary)]">
-        <div className="text-[var(--text-muted)] text-sm">Loading AgentVault...</div>
+      <div className="flex items-center justify-center h-screen bg-bg-primary">
+        <div className="text-text-muted text-sm">Loading AgentVault...</div>
       </div>
     );
   }

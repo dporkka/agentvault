@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SearchIcon, X, FileText } from './Icons';
+import EmptyState from './EmptyState';
 import type { SearchResult } from '../types';
 
 interface Props {
@@ -92,23 +93,23 @@ export default function SearchView({ onOpenNote }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-primary)]">
+    <div className="flex flex-col h-full bg-bg-primary">
       {/* Search Bar */}
-      <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--bg-secondary)]">
+      <div className="px-4 py-3 border-b border-border bg-bg-secondary">
         <div className="relative">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search notes... (press / to focus)"
-            className="w-full pl-10 pr-10 py-2 input"
+            className="w-full pl-10 pr-10 py-2 input transition-all duration-150 focus:ring-1 focus:ring-accent/50"
           />
           {query && (
             <button
               onClick={() => setQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
             >
               <X className="w-4 h-4" />
             </button>
@@ -121,10 +122,10 @@ export default function SearchView({ onOpenNote }: Props) {
             <button
               key={t}
               onClick={() => setTypeFilter(t)}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150 focus:outline-none focus:ring-1 focus:ring-accent/50 ${
                 typeFilter === t
-                  ? 'bg-[var(--accent)] text-white'
-                  : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
+                  ? 'bg-accent text-white'
+                  : 'bg-bg-tertiary text-text-muted hover:bg-bg-hover'
               }`}
             >
               {t || 'All'}
@@ -136,10 +137,10 @@ export default function SearchView({ onOpenNote }: Props) {
         <div className="flex items-center gap-3 mt-2">
           <button
             onClick={() => setVectorEnabled(v => !v)}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150 focus:outline-none focus:ring-1 focus:ring-accent/50 ${
               vectorEnabled
-                ? 'bg-[var(--accent)] text-white'
-                : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
+                ? 'bg-accent text-white'
+                : 'bg-bg-tertiary text-text-muted hover:bg-bg-hover'
             }`}
             title="Toggle semantic vector search"
           >
@@ -148,7 +149,7 @@ export default function SearchView({ onOpenNote }: Props) {
 
           {vectorEnabled && (
             <>
-              <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+              <label className="flex items-center gap-1.5 text-xs text-text-muted">
                 <span>Hybrid</span>
                 <input
                   type="range"
@@ -157,13 +158,13 @@ export default function SearchView({ onOpenNote }: Props) {
                   step={0.1}
                   value={hybridWeight}
                   onChange={(e) => setHybridWeight(parseFloat(e.target.value))}
-                  className="w-20 accent-[var(--accent)]"
+                  className="w-20 accent-accent"
                   title="0 = FTS only, 1 = vector only"
                 />
                 <span className="w-8 text-right tabular-nums">{hybridWeight.toFixed(1)}</span>
               </label>
 
-              <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+              <label className="flex items-center gap-1.5 text-xs text-text-muted">
                 <span>TopK</span>
                 <input
                   type="number"
@@ -174,7 +175,7 @@ export default function SearchView({ onOpenNote }: Props) {
                     const n = parseInt(e.target.value || '1', 10);
                     setTopK(Number.isNaN(n) ? 1 : Math.min(200, Math.max(1, n)));
                   }}
-                  className="w-14 px-1 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] text-xs tabular-nums"
+                  className="w-14 px-1 py-0.5 rounded bg-bg-tertiary text-text-primary border border-border text-xs tabular-nums"
                 />
               </label>
             </>
@@ -186,19 +187,17 @@ export default function SearchView({ onOpenNote }: Props) {
       <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center h-32">
-            <div className="text-sm text-[var(--text-muted)]">Searching...</div>
+            <div className="text-sm text-text-muted">Searching...</div>
           </div>
         ) : results.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-[var(--text-muted)]">
-            <SearchIcon className="w-10 h-10 mb-3 opacity-30" />
-            <p className="text-sm">
-              {query ? 'No results found' : 'Start typing to search your vault'}
-            </p>
-          </div>
+          <EmptyState
+            icon={<SearchIcon className="w-10 h-10" />}
+            title={query ? 'No results found' : 'Start typing to search your vault'}
+          />
         ) : (
           <div className="py-1">
             {!query && (
-              <div className="px-4 py-2 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">
+              <div className="px-4 py-2 text-xs font-medium text-text-muted uppercase tracking-wider">
                 Recent Notes
               </div>
             )}
@@ -206,33 +205,33 @@ export default function SearchView({ onOpenNote }: Props) {
               <button
                 key={result.id}
                 onClick={() => onOpenNote(result.path)}
-                className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors border-b border-[var(--border)]/50 ${
+                className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-all duration-150 border-b border-border/50 focus:outline-none focus:bg-accent/10 ${
                   index === selectedIndex
-                    ? 'bg-[var(--accent)]/10'
-                    : 'hover:bg-[var(--bg-hover)]'
+                    ? 'bg-accent/10'
+                    : 'hover:bg-bg-hover'
                 }`}
               >
-                <FileText className="w-4 h-4 mt-0.5 text-[var(--text-muted)] flex-shrink-0" />
+                <FileText className="w-4 h-4 mt-0.5 text-text-muted flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium text-[var(--text-primary)] truncate">
+                    <span className="text-sm font-medium text-text-primary truncate">
                       {result.title}
                     </span>
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getTypeColor(result.type)}`}>
                       {result.type}
                     </span>
                     {result.project && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-bg-tertiary text-text-muted">
                         {result.project}
                       </span>
                     )}
                   </div>
                   {result.snippet && (
-                    <p className="text-xs text-[var(--text-muted)] line-clamp-2">
+                    <p className="text-xs text-text-muted line-clamp-2">
                       {result.snippet}
                     </p>
                   )}
-                  <div className="flex items-center gap-2 mt-1 text-[10px] text-[var(--text-muted)]">
+                  <div className="flex items-center gap-2 mt-1 text-[10px] text-text-muted">
                     <span>{result.path}</span>
                     {result.updatedAt && (
                       <span>{result.updatedAt}</span>
@@ -246,7 +245,7 @@ export default function SearchView({ onOpenNote }: Props) {
       </div>
 
       {/* Status Bar */}
-      <div className="px-4 py-1.5 border-t border-[var(--border)] bg-[var(--bg-secondary)] text-xs text-[var(--text-muted)]">
+      <div className="px-4 py-1.5 border-t border-border bg-bg-secondary text-xs text-text-muted">
         {results.length} {results.length === 1 ? 'result' : 'results'}
         {query && ` for "${query}"`}
       </div>

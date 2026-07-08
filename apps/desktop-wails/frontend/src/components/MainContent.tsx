@@ -30,7 +30,7 @@ export default function MainContent({
       {activeView === 'editor' && (
         <Suspense
           fallback={
-            <div className="flex-1 flex items-center justify-center text-[var(--text-muted)] text-sm">
+            <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
               Loading editor…
             </div>
           }

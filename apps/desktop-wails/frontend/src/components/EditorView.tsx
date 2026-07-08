@@ -100,19 +100,19 @@ export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: P
   }, [handleSave]);
 
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-primary)]">
+    <div className="flex flex-col h-full bg-bg-primary">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border)] bg-[var(--bg-secondary)]">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-bg-secondary">
         <div className="flex items-center gap-3">
-          <FileText className="w-4 h-4 text-[var(--text-muted)]" />
-          <span className="text-sm font-medium text-[var(--text-primary)]">
+          <FileText className="w-4 h-4 text-text-muted" />
+          <span className="text-sm font-medium text-text-primary">
             {title}
           </span>
           {isDirty && (
-            <span className="text-xs text-[var(--warning)]">unsaved</span>
+            <span className="text-xs text-warning">unsaved</span>
           )}
           {savePath && (
-            <span className="text-xs text-[var(--text-muted)] ml-2">{savePath}</span>
+            <span className="text-xs text-text-muted ml-2">{savePath}</span>
           )}
         </div>
 
@@ -164,7 +164,7 @@ export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: P
               className="h-full text-sm"
             />
           ) : (
-            <div className="flex items-center justify-center h-full text-[var(--text-muted)] text-sm gap-2">
+            <div className="flex items-center justify-center h-full text-text-muted text-sm gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
               Loading editor...
             </div>
@@ -172,7 +172,7 @@ export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: P
         </div>
 
         {showPreview && (
-          <div className="w-2/5 border-l border-[var(--border)] overflow-auto bg-[var(--bg-secondary)] p-6">
+          <div className="w-2/5 border-l border-border overflow-auto bg-bg-secondary p-6">
             <div className="prose prose-invert prose-sm max-w-none">
               <ReactMarkdown>{content}</ReactMarkdown>
             </div>

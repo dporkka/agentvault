@@ -4,6 +4,25 @@
 
 @layer base {
   :root {
+    /* Light theme (default) */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f4f6f9;
+    --bg-tertiary: #e8ebf0;
+    --bg-hover: #dfe3ea;
+    --border: #d1d7e0;
+    --text-primary: #1a1d23;
+    --text-secondary: #4b5563;
+    --text-muted: #8a94a6;
+    --accent: #4f7cff;
+    --accent-hover: #3a68e8;
+    --success: #16a34a;
+    --warning: #ca8a04;
+    --error: #dc2626;
+  }
+
+  .dark,
+  [data-theme="dark"] {
+    /* Dark theme — original AgentVault palette */
     --bg-primary: #0f1117;
     --bg-secondary: #1a1d27;
     --bg-tertiary: #232734;
@@ -23,10 +42,20 @@
     box-sizing: border-box;
   }
 
+  html {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  html,
+  html.dark {
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
   body {
     margin: 0;
     padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: theme('fontFamily.sans');
     background-color: var(--bg-primary);
     color: var(--text-primary);
     overflow: hidden;
@@ -39,7 +68,7 @@
     overflow: hidden;
   }
 
-  /* Scrollbar styling */
+  /* Scrollbar styling — works in both themes using semantic tokens */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -60,7 +89,7 @@
 
   /* Selection */
   ::selection {
-    background: rgba(79, 124, 255, 0.3);
+    background: color-mix(in srgb, var(--accent) 25%, transparent);
   }
 }
 
@@ -70,22 +99,22 @@
   }
 
   .btn-primary {
-    @apply btn bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)];
+    @apply btn bg-accent text-white hover:bg-accent-hover;
   }
 
   .btn-secondary {
-    @apply btn bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border)];
+    @apply btn bg-bg-tertiary text-text-primary hover:bg-bg-hover border border-border;
   }
 
   .btn-ghost {
-    @apply btn text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)];
+    @apply btn text-text-secondary hover:text-text-primary hover:bg-bg-hover;
   }
 
   .input {
-    @apply bg-[var(--bg-secondary)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors;
+    @apply bg-bg-secondary border border-border rounded px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-colors;
   }
 
   .panel {
-    @apply bg-[var(--bg-secondary)] border-r border-[var(--border)] flex flex-col;
+    @apply bg-bg-secondary border-r border-border flex flex-col;
   }
 }

@@ -121,15 +121,15 @@ export default function Sidebar({
 
   if (collapsed) {
     return (
-      <div className="w-12 flex flex-col items-center py-3 gap-1 bg-[var(--bg-secondary)] border-r border-[var(--border)]">
+      <div className="w-12 flex flex-col items-center py-3 gap-1 bg-bg-secondary border-r border-border">
         {navItems.map(item => (
           <button
             key={item.id}
             onClick={() => onViewChange(item.id)}
             className={`p-2 rounded-lg transition-colors ${
               activeView === item.id
-                ? 'text-[var(--accent)] bg-[var(--accent)]/10'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                ? 'text-accent bg-accent/10'
+                : 'text-text-muted hover:text-text-primary hover:bg-bg-hover'
             }`}
             title={item.label}
           >
@@ -141,18 +141,18 @@ export default function Sidebar({
   }
 
   return (
-    <div className="w-60 flex flex-col bg-[var(--bg-secondary)] border-r border-[var(--border)]">
+    <div className="w-60 flex flex-col bg-bg-secondary border-r border-border">
       {/* Vault Header */}
-      <div className="px-3 py-2.5 border-b border-[var(--border)]">
+      <div className="px-3 py-2.5 border-b border-border">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[var(--accent)]/10 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-[var(--accent)]" />
+          <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-accent" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-[var(--text-primary)] truncate" title={vaultName}>
+            <div className="text-sm font-medium text-text-primary truncate" title={vaultName}>
               {vaultName}
             </div>
-            <div className="text-xs text-[var(--text-muted)]">
+            <div className="text-xs text-text-muted">
               {indexStatus.noteCount} notes
             </div>
           </div>
@@ -178,8 +178,8 @@ export default function Sidebar({
             onClick={() => onViewChange(item.id)}
             className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm transition-colors ${
               activeView === item.id
-                ? 'text-[var(--accent)] bg-[var(--accent)]/10 font-medium'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                ? 'text-accent bg-accent/10 font-medium'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'
             }`}
           >
             <item.icon className="w-4 h-4" />
@@ -189,18 +189,18 @@ export default function Sidebar({
       </div>
 
       {/* Divider */}
-      <div className="mx-3 my-2 border-t border-[var(--border)]" />
+      <div className="mx-3 my-2 border-t border-border" />
 
       {/* Folder Tree */}
       <div className="flex-1 overflow-auto px-2">
-        <div className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider px-2.5 py-1.5">
+        <div className="text-xs font-medium text-text-muted uppercase tracking-wider px-2.5 py-1.5">
           Folders
         </div>
         {vaultTree.map(item => (
           <div key={item.path}>
             <button
               onClick={() => toggleFolder(item.name)}
-              className="w-full flex items-center gap-1 px-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded"
+              className="w-full flex items-center gap-1 px-2 py-1 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded"
             >
               {expandedFolders.has(item.name) ? (
                 <ChevronDown className="w-3 h-3" />
@@ -217,16 +217,16 @@ export default function Sidebar({
       {/* Recent */}
       {recentNotes.length > 0 && (
         <>
-          <div className="mx-3 my-2 border-t border-[var(--border)]" />
+          <div className="mx-3 my-2 border-t border-border" />
           <div className="px-2 pb-2 max-h-40 overflow-auto">
-            <div className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider px-2.5 py-1.5">
+            <div className="text-xs font-medium text-text-muted uppercase tracking-wider px-2.5 py-1.5">
               Recent
             </div>
             {recentNotes.map(note => (
               <button
                 key={note.path}
                 onClick={() => onOpenNote(note.path)}
-                className="w-full flex items-center gap-2 px-2.5 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded truncate"
+                className="w-full flex items-center gap-2 px-2.5 py-1 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded truncate"
                 title={note.title}
               >
                 <FileText className="w-3.5 h-3.5 flex-shrink-0" />
@@ -238,27 +238,27 @@ export default function Sidebar({
       )}
 
       {/* Footer */}
-      <div className="px-3 py-2 border-t border-[var(--border)] space-y-1.5">
+      <div className="px-3 py-2 border-t border-border space-y-1.5">
         {/* Status indicators */}
         <div className="space-y-1">
-          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]" title="Indexing status">
+          <div className="flex items-center gap-2 text-xs text-text-muted" title="Indexing status">
             {indexStatus.isIndexing ? (
               <>
-                <Loader2 className="w-3.5 h-3.5 text-[var(--accent)] animate-spin" />
-                <span className="text-[var(--accent)]">Indexing...</span>
+                <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
+                <span className="text-accent">Indexing...</span>
               </>
             ) : (
               <>
-                <Activity className="w-3.5 h-3.5 text-[var(--success)]" />
+                <Activity className="w-3.5 h-3.5 text-success" />
                 <span>Indexed {indexStatus.noteCount} notes</span>
               </>
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]" title={aiStatus?.error || (aiStatus?.enabled ? `${aiStatus.provider} · ${aiStatus.model}` : 'AI not configured')}>
+          <div className="flex items-center gap-2 text-xs text-text-muted" title={aiStatus?.error || (aiStatus?.enabled ? `${aiStatus.provider} · ${aiStatus.model}` : 'AI not configured')}>
             {aiStatus?.enabled ? (
               <>
-                <CheckCircle className="w-3.5 h-3.5 text-[var(--success)]" />
+                <CheckCircle className="w-3.5 h-3.5 text-success" />
                 <span className="truncate">
                   AI: {aiStatus.provider}
                 </span>
@@ -274,14 +274,14 @@ export default function Sidebar({
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-1.5 border-t border-[var(--border)]">
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+        <div className="flex items-center justify-between pt-1.5 border-t border-border">
+          <div className="flex items-center gap-1.5 text-xs text-text-muted">
             <GitBranch className="w-3.5 h-3.5" />
             <span>main</span>
           </div>
           <button
             onClick={onToggleCollapse}
-            className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)]"
+            className="p-1 rounded hover:bg-bg-hover text-text-muted"
             title="Collapse sidebar"
           >
             <PanelRight className="w-4 h-4" />

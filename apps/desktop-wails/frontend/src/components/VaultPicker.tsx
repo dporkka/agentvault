@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { FolderOpen, Plus, HardDrive, AlertCircle, Info, X, Loader2 } from './Icons';
+import { useState, useCallback, useEffect } from 'react';
+import { FolderOpen, Plus, HardDrive, AlertCircle, AlertTriangle, Info, X, Loader2, Clock, Folder, ChevronRight } from './Icons';
 
 type NoticeType = 'error' | 'info';
 interface Notice {
@@ -11,12 +11,51 @@ interface Props {
   onVaultOpened: () => void;
 }
 
+const RECENT_VAULTS_KEY = 'agentvault-recent-vaults';
+const MAX_RECENT_VAULTS = 5;
+
+function loadRecentVaults(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(RECENT_VAULTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) {
+      return parsed;
+    }
+  } catch {
+    // Ignore malformed storage.
+  }
+  return [];
+}
+
+function saveRecentVaults(paths: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(paths));
+  } catch {
+    // Ignore storage errors (e.g. private browsing).
+  }
+}
+
+function addRecentVault(path: string): string[] {
+  const current = loadRecentVaults();
+  const next = [path, ...current.filter((p) => p !== path)].slice(0, MAX_RECENT_VAULTS);
+  saveRecentVaults(next);
+  return next;
+}
+
 export default function VaultPicker({ onVaultOpened }: Props) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedIsVault, setSelectedIsVault] = useState<boolean | null>(null);
   const [isOpening, setIsOpening] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [recentVaults, setRecentVaults] = useState<string[]>([]);
+
+  useEffect(() => {
+    setRecentVaults(loadRecentVaults());
+  }, []);
 
   const clearNotice = useCallback(() => {
     setNotice(null);
@@ -37,6 +76,7 @@ export default function VaultPicker({ onVaultOpened }: Props) {
       const vault = await window.go.main.VaultService.IsVault(path);
       if (vault) {
         await window.go.main.VaultService.OpenVault(path);
+        setRecentVaults(addRecentVault(path));
         onVaultOpened();
       } else {
         setSelectedPath(path);
@@ -78,6 +118,7 @@ export default function VaultPicker({ onVaultOpened }: Props) {
       }
 
       await window.go.main.VaultService.InitVault(target);
+      setRecentVaults(addRecentVault(target));
       onVaultOpened();
     } catch (err: any) {
       setNotice({
@@ -89,70 +130,134 @@ export default function VaultPicker({ onVaultOpened }: Props) {
     }
   }, [onVaultOpened, clearNotice]);
 
+  const openRecentVault = useCallback(async (path: string) => {
+    clearNotice();
+    setSelectedPath(path);
+    setSelectedIsVault(null);
+    setIsOpening(true);
+    try {
+      const vault = await window.go.main.VaultService.IsVault(path);
+      if (vault) {
+        await window.go.main.VaultService.OpenVault(path);
+        setRecentVaults(addRecentVault(path));
+        onVaultOpened();
+      } else {
+        setSelectedIsVault(false);
+        setNotice({
+          type: 'info',
+          message: `This folder is no longer an AgentVault. Use "Create New Vault" to initialize it.`,
+        });
+        setRecentVaults((prev) => prev.filter((p) => p !== path));
+      }
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || 'Failed to open vault',
+      });
+    } finally {
+      setIsOpening(false);
+    }
+  }, [onVaultOpened, clearNotice]);
+
   const canCreateHere = selectedPath && selectedIsVault === false;
+  const isBusy = isOpening || isCreating;
 
   return (
-    <div className="flex items-center justify-center h-screen bg-[var(--bg-primary)]">
-      <div className="w-[520px]">
+    <div className="flex items-center justify-center h-screen bg-bg-primary px-6">
+      <div className="w-full max-w-[520px]">
         <div className="text-center mb-10">
-          <div className="flex items-center justify-center mb-4">
-            <HardDrive className="w-10 h-10 text-[var(--accent)]" />
+          <div className="flex items-center justify-center mb-5">
+            <div className="relative">
+              <div className="absolute inset-0 bg-accent/20 blur-2xl rounded-full" aria-hidden="true" />
+              <HardDrive className="relative w-12 h-12 text-accent" />
+            </div>
           </div>
-          <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-2">
-            AgentVault
+          <h1 className="text-4xl font-bold tracking-tight text-text-primary mb-3">
+            <span className="bg-gradient-to-r from-accent to-indigo-400 bg-clip-text text-transparent">
+              AgentVault
+            </span>
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-base text-text-secondary">
             Your notes, decisions, docs, and research — structured for humans, searchable by agents
           </p>
         </div>
 
+        {recentVaults.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3 text-text-muted">
+              <Clock className="w-4 h-4" />
+              <span className="text-xs font-semibold uppercase tracking-wider">Recent vaults</span>
+            </div>
+            <div className="space-y-2">
+              {recentVaults.map((path) => (
+                <button
+                  key={path}
+                  onClick={() => openRecentVault(path)}
+                  disabled={isBusy}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-secondary border border-border hover:bg-bg-hover hover:border-accent transition-all text-left group disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <Folder className="w-5 h-5 text-text-muted group-hover:text-accent flex-shrink-0" />
+                  <span className="flex-1 min-w-0 text-sm text-text-primary truncate font-mono">
+                    {path}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-text-muted group-hover:text-accent flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
           <button
             onClick={handleOpenVault}
-            disabled={isOpening || isCreating}
-            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] hover:bg-[var(--bg-hover)] hover:border-[var(--accent)] transition-all text-left group disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={isBusy}
+            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-lg bg-bg-secondary border border-border hover:bg-bg-hover hover:border-accent transition-all text-left group disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isOpening ? (
-              <Loader2 className="w-5 h-5 text-[var(--accent)] animate-spin" />
+              <Loader2 className="w-5 h-5 text-accent animate-spin" />
             ) : (
-              <FolderOpen className="w-5 h-5 text-[var(--text-muted)] group-hover:text-[var(--accent)]" />
+              <FolderOpen className="w-5 h-5 text-text-muted group-hover:text-accent" />
             )}
             <div>
-              <div className="text-sm font-medium text-[var(--text-primary)]">
-                {isOpening ? 'Opening...' : 'Open Existing Vault'}
+              <div className="text-sm font-medium text-text-primary">
+                {isOpening ? 'Opening vault…' : 'Open Existing Vault'}
               </div>
-              <div className="text-xs text-[var(--text-muted)]">Select an AgentVault folder</div>
+              <div className="text-xs text-text-muted">
+                {isOpening ? 'Reading folder contents' : 'Select an AgentVault folder'}
+              </div>
             </div>
           </button>
 
           <button
             onClick={() => handleCreateVault()}
-            disabled={isCreating || isOpening}
-            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] hover:bg-[var(--bg-hover)] hover:border-[var(--accent)] transition-all text-left group disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={isBusy}
+            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-lg bg-bg-secondary border border-border hover:bg-bg-hover hover:border-accent transition-all text-left group disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isCreating ? (
-              <Loader2 className="w-5 h-5 text-[var(--accent)] animate-spin" />
+              <Loader2 className="w-5 h-5 text-accent animate-spin" />
             ) : (
-              <Plus className="w-5 h-5 text-[var(--text-muted)] group-hover:text-[var(--accent)]" />
+              <Plus className="w-5 h-5 text-text-muted group-hover:text-accent" />
             )}
             <div>
-              <div className="text-sm font-medium text-[var(--text-primary)]">
-                {isCreating ? 'Creating...' : 'Create New Vault'}
+              <div className="text-sm font-medium text-text-primary">
+                {isCreating ? 'Creating vault…' : 'Create New Vault'}
               </div>
-              <div className="text-xs text-[var(--text-muted)]">Initialize a new AgentVault in any folder</div>
+              <div className="text-xs text-text-muted">
+                {isCreating ? 'Initializing files' : 'Initialize a new AgentVault in any folder'}
+              </div>
             </div>
           </button>
         </div>
 
         {selectedPath && (
-          <div className="mt-4 px-4 py-2.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-xs">
-            <span className="text-[var(--text-muted)]">Selected:</span>{' '}
-            <span className="text-[var(--text-primary)] font-mono break-all">{selectedPath}</span>
+          <div className="mt-4 px-4 py-2.5 rounded-lg bg-bg-secondary border border-border text-xs">
+            <span className="text-text-muted">Selected:</span>{' '}
+            <span className="text-text-primary font-mono break-all">{selectedPath}</span>
             {selectedIsVault !== null && (
               <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${
                 selectedIsVault
-                  ? 'bg-green-500/10 text-green-400'
-                  : 'bg-yellow-500/10 text-yellow-400'
+                  ? 'bg-success/10 text-success'
+                  : 'bg-warning/10 text-warning'
               }`}>
                 {selectedIsVault ? 'vault' : 'not a vault'}
               </span>
@@ -161,11 +266,11 @@ export default function VaultPicker({ onVaultOpened }: Props) {
         )}
 
         {canCreateHere && (
-          <div className="mt-3 px-4 py-3 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/20 text-sm">
+          <div className="mt-3 px-4 py-3 rounded-lg bg-accent/10 border border-accent/20 text-sm">
             <div className="flex items-start gap-2.5">
-              <Info className="w-4 h-4 text-[var(--accent)] mt-0.5 flex-shrink-0" />
+              <Info className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
               <div className="flex-1">
-                <p className="text-[var(--text-primary)]">
+                <p className="text-text-primary">
                   Want to use this folder? Initialize it as a vault.
                 </p>
                 <button
@@ -173,7 +278,7 @@ export default function VaultPicker({ onVaultOpened }: Props) {
                   disabled={isCreating}
                   className="mt-2 btn-primary text-xs"
                 >
-                  {isCreating ? 'Initializing...' : 'Create Vault Here'}
+                  {isCreating ? 'Initializing…' : 'Create Vault Here'}
                 </button>
               </div>
             </div>
@@ -183,13 +288,13 @@ export default function VaultPicker({ onVaultOpened }: Props) {
         {notice && (
           <div className={`mt-4 px-4 py-3 rounded-lg border text-sm flex items-start gap-2.5 ${
             notice.type === 'error'
-              ? 'bg-red-500/10 border-red-500/20 text-red-400'
-              : 'bg-blue-500/10 border-blue-500/20 text-blue-400'
+              ? 'bg-error/10 border-error/20 text-error'
+              : 'bg-warning/10 border-warning/20 text-warning'
           }`}>
             {notice.type === 'error' ? (
               <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
             ) : (
-              <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
             )}
             <span className="flex-1">{notice.message}</span>
             <button
@@ -202,7 +307,7 @@ export default function VaultPicker({ onVaultOpened }: Props) {
           </div>
         )}
 
-        <div className="mt-8 text-center text-xs text-[var(--text-muted)]">
+        <div className="mt-8 text-center text-xs text-text-muted">
           Local-first AI knowledge operating system
         </div>
       </div>
