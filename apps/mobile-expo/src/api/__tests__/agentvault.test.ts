@@ -63,10 +63,10 @@ describe('checkHealth', () => {
     await expect(checkHealth()).resolves.toBe(true);
   });
 
-  it('returns false when the client throws', async () => {
+  it('throws when the client throws', async () => {
     (createClient as jest.Mock).mockReturnValue({
       checkHealth: jest.fn().mockRejectedValue(new Error('boom')),
     });
-    await expect(checkHealth()).resolves.toBe(false);
+    await expect(checkHealth()).rejects.toThrow('boom');
   });
 });

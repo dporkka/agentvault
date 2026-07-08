@@ -53,7 +53,12 @@ export default function ProjectPicker({ selected, onChange }: ProjectPickerProps
 
   return (
     <>
-      <TouchableOpacity style={styles.selector} onPress={() => setOpen(true)}>
+      <TouchableOpacity
+        style={styles.selector}
+        onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`Select project, current: ${selected || 'none'}`}
+      >
         <Text style={styles.selectorLabel}>Project</Text>
         <Text style={styles.selectorValue}>{selected || 'Select project...'}</Text>
       </TouchableOpacity>
@@ -63,7 +68,11 @@ export default function ProjectPicker({ selected, onChange }: ProjectPickerProps
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Select Project</Text>
-              <TouchableOpacity onPress={() => setOpen(false)}>
+              <TouchableOpacity
+                onPress={() => setOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close project picker"
+              >
                 <Text style={styles.closeBtn}>Close</Text>
               </TouchableOpacity>
             </View>
@@ -77,7 +86,12 @@ export default function ProjectPicker({ selected, onChange }: ProjectPickerProps
                 onChangeText={setCustomInput}
                 onSubmitEditing={addCustom}
               />
-              <TouchableOpacity style={styles.customAddBtn} onPress={addCustom}>
+              <TouchableOpacity
+                style={styles.customAddBtn}
+                onPress={addCustom}
+                accessibilityRole="button"
+                accessibilityLabel="Add custom project"
+              >
                 <Text style={styles.customAddText}>Add</Text>
               </TouchableOpacity>
             </View>
@@ -89,6 +103,9 @@ export default function ProjectPicker({ selected, onChange }: ProjectPickerProps
                 <TouchableOpacity
                   style={[styles.projectItem, item === selected && styles.projectItemActive]}
                   onPress={() => selectProject(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select project ${item}`}
+                  accessibilityState={{ selected: item === selected }}
                 >
                   <Text
                     style={[
@@ -134,7 +151,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: '#00000088',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   sheet: {
@@ -185,7 +202,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   customAddText: {
-    color: '#fff',
+    color: colors.textInverse,
     fontWeight: typography.weights.semibold,
     fontSize: typography.sizes.md,
   },
@@ -198,7 +215,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
   },
   projectItemActive: {
-    backgroundColor: `${colors.accent}22`,
+    backgroundColor: colors.accentMuted,
   },
   projectItemText: {
     color: colors.textPrimary,

@@ -44,7 +44,12 @@ export default function TagPicker({ selected, onChange, suggestions }: TagPicker
           onSubmitEditing={addCustomTag}
           returnKeyType="done"
         />
-        <TouchableOpacity style={styles.addBtn} onPress={addCustomTag}>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={addCustomTag}
+          accessibilityRole="button"
+          accessibilityLabel="Add tag"
+        >
           <Text style={styles.addBtnText}>+</Text>
         </TouchableOpacity>
       </View>
@@ -52,7 +57,13 @@ export default function TagPicker({ selected, onChange, suggestions }: TagPicker
       {selected.length > 0 && (
         <View style={styles.selectedRow}>
           {selected.map((tag) => (
-            <TouchableOpacity key={tag} style={styles.selectedTag} onPress={() => toggleTag(tag)}>
+            <TouchableOpacity
+              key={tag}
+              style={styles.selectedTag}
+              onPress={() => toggleTag(tag)}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove tag ${tag}`}
+            >
               <Text style={styles.selectedTagText}>{tag} x</Text>
             </TouchableOpacity>
           ))}
@@ -72,6 +83,9 @@ export default function TagPicker({ selected, onChange, suggestions }: TagPicker
               key={tag}
               style={[styles.chip, isActive && styles.chipActive]}
               onPress={() => toggleTag(tag)}
+              accessibilityRole="button"
+              accessibilityLabel={`Toggle tag ${tag}`}
+              accessibilityState={{ selected: isActive }}
             >
               <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{tag}</Text>
             </TouchableOpacity>
@@ -116,7 +130,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addBtnText: {
-    color: '#fff',
+    color: colors.textInverse,
     fontSize: 18,
     fontWeight: typography.weights.semibold,
   },
@@ -127,7 +141,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   selectedTag: {
-    backgroundColor: `${colors.accent}22`,
+    backgroundColor: colors.accentMuted,
     borderColor: colors.accent,
     borderWidth: 1,
     borderRadius: radii.md,

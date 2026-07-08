@@ -12,6 +12,7 @@ import {
   DEFAULT_BASE_URL,
 } from '@agentvault/contract';
 import { getSettings } from '../storage/localInbox';
+import { classifyApiError } from './errors';
 import type { Capture } from '../types';
 
 export { DEFAULT_BASE_URL };
@@ -34,12 +35,12 @@ export async function createMobileClient(overrides?: ClientOverrides): Promise<A
 }
 
 export async function checkHealth(url?: string): Promise<boolean> {
+  const client = await createMobileClient(url ? { baseUrl: url } : undefined);
   try {
-    const client = await createMobileClient(url ? { baseUrl: url } : undefined);
     await client.checkHealth();
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    throw classifyApiError(err);
   }
 }
 
@@ -83,11 +84,11 @@ export async function getRecentNotes(limit?: number, url?: string): Promise<Sear
   return client.getRecent({ limit });
 }
 
-export async function verifyToken(url?: string): Promise<AuthVerifyResponse | null> {
+export async function verifyToken(url?: string): Promise<AuthVerifyResponse> {
+  const client = await createMobileClient(url ? { baseUrl: url } : undefined);
   try {
-    const client = await createMobileClient(url ? { baseUrl: url } : undefined);
     return await client.verifyAuth();
-  } catch {
-    return null;
+  } catch (err) {
+    throw classifyApiError(err);
   }
 }

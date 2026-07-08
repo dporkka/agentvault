@@ -49,6 +49,8 @@ export default function CaptureCard({ capture, onPress, onDelete, onRetry }: Cap
       onPress={() => onPress?.(capture)}
       onLongPress={() => onDelete?.(capture.id)}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`Capture ${capture.title}`}
     >
       <View style={styles.header}>
         <View style={[styles.typeBadge, { backgroundColor: typeColors.bg }]}>
@@ -64,6 +66,7 @@ export default function CaptureCard({ capture, onPress, onDelete, onRetry }: Cap
             onPress={() => onDelete(capture.id)}
             accessibilityLabel="Delete capture"
             accessibilityRole="button"
+            accessibilityState={{ disabled: !onDelete }}
           >
             <Ionicons name="trash-outline" size={16} color={colors.error} />
           </TouchableOpacity>
@@ -91,6 +94,7 @@ export default function CaptureCard({ capture, onPress, onDelete, onRetry }: Cap
               onPress={() => onRetry(capture)}
               accessibilityLabel="Retry sync"
               accessibilityRole="button"
+              accessibilityState={{ disabled: !onRetry }}
             >
               <Text style={[styles.retryText, { color: statusColor }]}>Retry</Text>
             </TouchableOpacity>

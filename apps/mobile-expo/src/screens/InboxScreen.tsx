@@ -176,12 +176,19 @@ export default function InboxScreen() {
           <TouchableOpacity
             style={[styles.filterBtn, filter === 'pending' && styles.filterBtnActive]}
             onPress={() => setFilter((f) => (f === 'all' ? 'pending' : 'all'))}
+            accessibilityRole="button"
+            accessibilityLabel={filter === 'pending' ? 'Show all captures' : 'Show pending captures'}
           >
             <Text style={[styles.filterText, filter === 'pending' && styles.filterTextActive]}>
               {filter === 'pending' ? 'Pending' : 'All'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.retryAllBtn} onPress={handleRetryAll}>
+          <TouchableOpacity
+            style={styles.retryAllBtn}
+            onPress={handleRetryAll}
+            accessibilityRole="button"
+            accessibilityLabel="Retry all failed captures"
+          >
             <Text style={styles.retryAllText}>Retry all</Text>
           </TouchableOpacity>
           <ConnectionBadge />

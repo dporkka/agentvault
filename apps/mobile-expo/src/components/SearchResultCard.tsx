@@ -11,7 +11,13 @@ interface SearchResultCardProps {
 export default function SearchResultCard({ result, onPress }: SearchResultCardProps) {
   const typeColors = getSemanticTypeColor(result.type);
   return (
-    <TouchableOpacity style={styles.card} onPress={() => onPress?.(result)} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => onPress?.(result)}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${result.title}`}
+    >
       <View style={styles.header}>
         <Text style={styles.title} numberOfLines={1}>
           {result.title}

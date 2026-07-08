@@ -55,42 +55,47 @@ export default function SettingsScreen() {
   const handleTest = async () => {
     // Persist the URL being tested so the client config matches.
     await saveSettings(draft);
-    const ok = await checkHealth(draft.serverUrl);
-    setHealth(ok);
-    Alert.alert(
-      ok ? 'Connected' : 'Unreachable',
-      ok ? 'Server is responding.' : 'Could not reach the server. Check the URL and network.',
-    );
+    try {
+      await checkHealth(draft.serverUrl);
+      setHealth(true);
+      Alert.alert('Connected', 'Server is responding.');
+    } catch (err) {
+      setHealth(false);
+      const message = err instanceof Error ? err.message : 'Could not reach the server.';
+      Alert.alert('Unreachable', message);
+    }
   };
 
   const handleVerifyToken = async () => {
     await saveSettings(draft);
     setVerifying(true);
-    const result = await verifyToken(draft.serverUrl);
-    setVerifying(false);
-    if (!result) {
+    try {
+      const result = await verifyToken(draft.serverUrl);
+      setVerifying(false);
+      if (!result.hasToken) {
+        setTokenStatus('missing');
+        Alert.alert(
+          'Token Missing',
+          'No token was sent. Enter the token printed by agentvault serve.',
+        );
+        return;
+      }
+      if (!result.tokenValid) {
+        setTokenStatus('invalid');
+        Alert.alert(
+          'Invalid Token',
+          'The server rejected this token. Copy the token printed by agentvault serve.',
+        );
+        return;
+      }
+      setTokenStatus('valid');
+      Alert.alert('Token Valid', 'Your token is accepted by the server.');
+    } catch (err) {
+      setVerifying(false);
       setTokenStatus('unknown');
-      Alert.alert('Unreachable', 'Could not contact the server to verify the token.');
-      return;
+      const message = err instanceof Error ? err.message : 'Could not verify the token.';
+      Alert.alert('Unreachable', message);
     }
-    if (!result.hasToken) {
-      setTokenStatus('missing');
-      Alert.alert(
-        'Token Missing',
-        'No token was sent. Enter the token printed by agentvault serve.',
-      );
-      return;
-    }
-    if (!result.tokenValid) {
-      setTokenStatus('invalid');
-      Alert.alert(
-        'Invalid Token',
-        'The server rejected this token. Copy the token printed by agentvault serve.',
-      );
-      return;
-    }
-    setTokenStatus('valid');
-    Alert.alert('Token Valid', 'Your token is accepted by the server.');
   };
 
   const handleSyncAll = async () => {
@@ -161,7 +166,12 @@ export default function SettingsScreen() {
               <Text style={styles.healthText}>
                 {health === true ? 'Online' : health === false ? 'Offline' : 'Unknown'}
               </Text>
-              <TouchableOpacity style={styles.testBtn} onPress={handleTest}>
+              <TouchableOpacity
+                style={styles.testBtn}
+                onPress={handleTest}
+                accessibilityRole="button"
+                accessibilityLabel="Test server connection"
+              >
                 <Text style={styles.testBtnText}>Test</Text>
               </TouchableOpacity>
             </View>
@@ -187,6 +197,9 @@ export default function SettingsScreen() {
               style={[styles.actionBtn, styles.actionBtnSecondary]}
               onPress={handleVerifyToken}
               disabled={verifying}
+              accessibilityRole="button"
+              accessibilityLabel={verifying ? 'Verifying token' : 'Verify auth token'}
+              accessibilityState={{ disabled: verifying }}
             >
               <Text style={styles.actionBtnTextSecondary}>
                 {verifying ? 'Verifying...' : 'Verify Token'}
@@ -215,6 +228,9 @@ export default function SettingsScreen() {
               style={[styles.actionBtn, styles.actionBtnPrimary]}
               onPress={handleSyncAll}
               disabled={syncing}
+              accessibilityRole="button"
+              accessibilityLabel={syncing ? 'Syncing all captures' : 'Sync all captures to server'}
+              accessibilityState={{ disabled: syncing }}
             >
               <Text style={styles.actionBtnTextPrimary}>
                 {syncing ? 'Syncing...' : 'Sync All to Server'}
@@ -224,6 +240,8 @@ export default function SettingsScreen() {
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnDanger]}
               onPress={handleClear}
+              accessibilityRole="button"
+              accessibilityLabel="Clear local inbox"
             >
               <Text style={styles.actionBtnTextDanger}>Clear Local Inbox</Text>
             </TouchableOpacity>
@@ -352,7 +370,7 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
   },
   actionBtnTextPrimary: {
-    color: '#fff',
+    color: colors.textInverse,
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
   },

@@ -132,6 +132,9 @@ export default function CaptureScreen() {
               style={[styles.btn, styles.btnSecondary, loading && styles.btnDisabled]}
               onPress={handleSaveLocal}
               disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel={loading ? 'Saving to inbox' : 'Save capture to inbox'}
+              accessibilityState={{ disabled: loading }}
             >
               <Text style={[styles.btnText, styles.btnTextSecondary]}>
                 {loading ? 'Saving...' : 'Save to Inbox'}
@@ -142,6 +145,9 @@ export default function CaptureScreen() {
               style={[styles.btn, styles.btnPrimary, loading && styles.btnDisabled]}
               onPress={handleSendNow}
               disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel={loading ? 'Sending to server' : 'Send capture to server'}
+              accessibilityState={{ disabled: loading }}
             >
               <Text style={styles.btnText}>{loading ? 'Sending...' : 'Send to Server'}</Text>
             </TouchableOpacity>
@@ -243,7 +249,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   btnText: {
-    color: '#fff',
+    color: colors.textInverse,
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
   },

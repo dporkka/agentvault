@@ -184,7 +184,12 @@ export default function SearchScreen() {
             autoCapitalize="none"
             clearButtonMode="while-editing"
           />
-          <TouchableOpacity style={styles.searchBtn} onPress={handleSubmit}>
+          <TouchableOpacity
+            style={styles.searchBtn}
+            onPress={handleSubmit}
+            accessibilityRole="button"
+            accessibilityLabel="Search vault"
+          >
             <Text style={styles.searchBtnText}>Search</Text>
           </TouchableOpacity>
         </View>
@@ -196,6 +201,7 @@ export default function SearchScreen() {
             onValueChange={setVectorEnabled}
             trackColor={{ false: colors.borderSubtle, true: colors.accent }}
             thumbColor={colors.textPrimary}
+            accessibilityLabel="Vector search"
           />
         </View>
 
@@ -226,6 +232,9 @@ export default function SearchScreen() {
               style={styles.stepperBtn}
               onPress={() => adjustTopK(-TOPK_STEP)}
               disabled={topK <= TOPK_MIN}
+              accessibilityRole="button"
+              accessibilityLabel="Decrease result limit"
+              accessibilityState={{ disabled: topK <= TOPK_MIN }}
             >
               <Text style={styles.stepperBtnText}>−</Text>
             </TouchableOpacity>
@@ -234,6 +243,9 @@ export default function SearchScreen() {
               style={styles.stepperBtn}
               onPress={() => adjustTopK(TOPK_STEP)}
               disabled={topK >= TOPK_MAX}
+              accessibilityRole="button"
+              accessibilityLabel="Increase result limit"
+              accessibilityState={{ disabled: topK >= TOPK_MAX }}
             >
               <Text style={styles.stepperBtnText}>+</Text>
             </TouchableOpacity>

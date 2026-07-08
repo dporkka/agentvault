@@ -48,7 +48,12 @@ export default function NoteDetailScreen({
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
@@ -61,6 +66,23 @@ export default function NoteDetailScreen({
       {error ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setLoading(true);
+              setError('');
+              getNote(id)
+                .then((data) => {
+                  setNote(data);
+                  navigation.setOptions({ title: data.title });
+                })
+                .catch((err) => setError(err instanceof Error ? err.message : 'Could not load note'))
+                .finally(() => setLoading(false));
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading note"
+          >
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 
@@ -143,6 +165,13 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     textAlign: 'center',
   },
+  retryText: {
+    color: colors.accent,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
   scroll: {
     flex: 1,
   },
@@ -169,7 +198,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   projectBadge: {
-    backgroundColor: `${colors.accent}22`,
+    backgroundColor: colors.accentMuted,
     borderRadius: radii.sm,
     paddingHorizontal: 10,
     paddingVertical: 4,

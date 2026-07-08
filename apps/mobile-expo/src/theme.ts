@@ -17,18 +17,24 @@ export const colors = {
   textSecondary: '#9ca3af',
   textMuted: '#6b7280',
 
+  // Text on colored/filled backgrounds
+  textInverse: '#ffffff',
+
   // Accents
   accent: '#4f7cff',
   accentHover: '#6b93ff',
-  accentMuted: '#4f7cff33',
+  accentMuted: 'rgba(79, 124, 255, 0.15)',
 
   // Status
   success: '#22c55e',
-  successMuted: '#22c55e22',
+  successMuted: 'rgba(34, 197, 94, 0.2)',
   warning: '#f59e0b',
   error: '#ef4444',
-  errorMuted: '#ef444422',
+  errorMuted: 'rgba(239, 68, 68, 0.13)',
   info: '#4f7cff',
+
+  // Overlays
+  overlay: 'rgba(0, 0, 0, 0.5)',
 };
 
 export const spacing = {
@@ -74,11 +80,11 @@ export const layout = {
 } as const;
 
 export const semanticTypeColors = {
-  note: { bg: '#22c55e22', text: '#4ade80' },
-  decision: { bg: '#f59e0b22', text: '#fbbf24' },
-  task: { bg: '#3b82f622', text: '#60a5fa' },
-  meeting: { bg: '#a855f722', text: '#c084fc' },
-  source: { bg: '#f43f5e22', text: '#fb7185' },
+  note: { bg: 'rgba(34, 197, 94, 0.13)', text: '#4ade80' },
+  decision: { bg: 'rgba(245, 158, 11, 0.13)', text: '#fbbf24' },
+  task: { bg: 'rgba(59, 130, 246, 0.13)', text: '#60a5fa' },
+  meeting: { bg: 'rgba(168, 85, 247, 0.13)', text: '#c084fc' },
+  source: { bg: 'rgba(244, 63, 94, 0.13)', text: '#fb7185' },
 } as const;
 
 export function getSemanticTypeColor(type?: string) {

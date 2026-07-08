@@ -39,7 +39,12 @@ export default class ErrorBoundary extends Component<Props, State> {
           <Text style={styles.message}>
             {this.state.error?.message ?? 'An unexpected error occurred.'}
           </Text>
-          <TouchableOpacity style={styles.button} onPress={this.handleReset}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={this.handleReset}
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+          >
             <Text style={styles.buttonText}>Try again</Text>
           </TouchableOpacity>
         </View>
@@ -77,7 +82,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   buttonText: {
-    color: '#fff',
+    color: colors.textInverse,
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.bold,
   },

@@ -91,6 +91,9 @@ export default function HomeScreen(_props: RootTabScreenProps<'Home'>) {
             style={[styles.captureBtn, !quickText.trim() && styles.captureBtnDisabled]}
             onPress={handleQuickCapture}
             disabled={!quickText.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Capture idea"
+            accessibilityState={{ disabled: !quickText.trim() }}
           >
             <Text style={styles.captureBtnText}>Capture</Text>
           </TouchableOpacity>
@@ -109,6 +112,9 @@ export default function HomeScreen(_props: RootTabScreenProps<'Home'>) {
           style={[styles.syncBtn, syncing && styles.syncBtnActive]}
           onPress={handleSync}
           disabled={syncing}
+          accessibilityRole="button"
+          accessibilityLabel={syncing ? 'Syncing captures' : 'Sync all captures'}
+          accessibilityState={{ disabled: syncing }}
         >
           <Text style={styles.syncBtnText}>{syncing ? 'Syncing...' : 'Sync All'}</Text>
         </TouchableOpacity>
@@ -200,7 +206,7 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.base,
   },
   toast: {
-    backgroundColor: `${colors.success}33`,
+    backgroundColor: colors.successMuted,
     borderRadius: radii.md,
     padding: 10,
     marginBottom: 10,

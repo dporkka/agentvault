@@ -25,6 +25,12 @@ jest.mock('../../context/SettingsContext', () => {
 
 jest.useFakeTimers();
 
+async function flushPromises(count = 5) {
+  for (let i = 0; i < count; i++) {
+    await Promise.resolve();
+  }
+}
+
 const activeHooks: Array<() => void> = [];
 
 afterEach(() => {
@@ -64,15 +70,18 @@ describe('useConnection', () => {
     (checkHealth as jest.Mock).mockResolvedValue(true);
   });
 
-  it('starts in the checking state', () => {
+  it('starts in the checking state', async () => {
     const { result } = renderHook(() => useConnection(5000));
     expect(result.current.status).toBe('checking');
+    await act(async () => {
+      await flushPromises();
+    });
   });
 
   it('marks online when the network and server health check succeed', async () => {
     const { result } = renderHook(() => useConnection(5000));
     await act(async () => {
-      await Promise.resolve();
+      await flushPromises();
     });
     expect(result.current.status).toBe('online');
   });
@@ -81,7 +90,7 @@ describe('useConnection', () => {
     (NetInfo.fetch as jest.Mock).mockResolvedValue({ isConnected: false });
     const { result } = renderHook(() => useConnection(5000));
     await act(async () => {
-      await Promise.resolve();
+      await flushPromises();
     });
     expect(result.current.status).toBe('offline');
   });
@@ -90,7 +99,7 @@ describe('useConnection', () => {
     (checkHealth as jest.Mock).mockResolvedValue(false);
     const { result } = renderHook(() => useConnection(5000));
     await act(async () => {
-      await Promise.resolve();
+      await flushPromises();
     });
     expect(result.current.status).toBe('offline');
   });
@@ -98,7 +107,7 @@ describe('useConnection', () => {
   it('polls health on the configured interval', async () => {
     const { result } = renderHook(() => useConnection(5000));
     await act(async () => {
-      await Promise.resolve();
+      await flushPromises();
     });
     expect(checkHealth).toHaveBeenCalledTimes(1);
     expect(result.current.status).toBe('online');
@@ -116,7 +125,7 @@ describe('useConnection', () => {
     (checkHealth as jest.Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const { result } = renderHook(() => useConnection(5000));
     await act(async () => {
-      await Promise.resolve();
+      await flushPromises();
     });
 
     let healthy: boolean | undefined;
