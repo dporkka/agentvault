@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentVault Mobile Search</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 390px;
+      height: 844px;
+      background: #0f1117;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif;
+      color: #e4e6eb;
+      overflow: hidden;
+    }
+    .phone {
+      width: 390px;
+      height: 844px;
+      background: #0f1117;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .statusbar {
+      height: 44px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding: 8px 20px 4px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #e4e6eb;
+    }
+    .content {
+      flex: 1;
+      padding: 12px 16px 0;
+      overflow: auto;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 8px 0 18px;
+    }
+    .title { font-size: 24px; font-weight: 800; color: #e4e6eb; }
+    .badge {
+      background: rgba(34, 197, 94, 0.13);
+      color: #22c55e;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .search-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .search-input {
+      flex: 1;
+      background: #1a1d27;
+      border: 1px solid #252836;
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: #e4e6eb;
+      font-size: 16px;
+      outline: none;
+    }
+    .search-input::placeholder { color: #6b7280; }
+    .search-btn {
+      background: #4f7cff;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 0 18px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .option-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .option-label { font-size: 14px; color: #9ca3af; }
+    .switch {
+      width: 48px;
+      height: 28px;
+      background: #4f7cff;
+      border-radius: 14px;
+      position: relative;
+    }
+    .switch::after {
+      content: '';
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      background: #fff;
+      border-radius: 50%;
+      top: 2px;
+      right: 2px;
+    }
+    .slider-section { margin-bottom: 14px; }
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .slider-track {
+      height: 6px;
+      background: #252836;
+      border-radius: 3px;
+      position: relative;
+    }
+    .slider-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 50%;
+      background: #4f7cff;
+      border-radius: 3px;
+    }
+    .slider-thumb {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 18px;
+      height: 18px;
+      background: #6b93ff;
+      border-radius: 50%;
+    }
+    .slider-value { color: #4f7cff; font-weight: 600; font-size: 14px; }
+    .stepper { display: flex; align-items: center; gap: 10px; }
+    .stepper-btn {
+      width: 32px;
+      height: 32px;
+      background: #1a1d27;
+      border: 1px solid #252836;
+      border-radius: 6px;
+      color: #4f7cff;
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .stepper-value { font-size: 16px; font-weight: 600; color: #e4e6eb; min-width: 22px; text-align: center; }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 6px 0 10px;
+    }
+    .result-item {
+      background: #1a1d27;
+      border: 1px solid #252836;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .result-title { font-size: 15px; font-weight: 600; color: #e4e6eb; margin-bottom: 6px; }
+    .result-meta { display: flex; gap: 6px; margin-bottom: 6px; }
+    .badge-type {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge-type.decision { background: rgba(245, 158, 11, 0.13); color: #fbbf24; }
+    .badge-type.task { background: rgba(59, 130, 246, 0.13); color: #60a5fa; }
+    .badge-type.note { background: rgba(34, 197, 94, 0.13); color: #4ade80; }
+    .badge-type.project { background: #232734; color: #9ca3af; }
+    .result-snippet { font-size: 13px; color: #9ca3af; line-height: 1.4; }
+    .tabbar {
+      height: 60px;
+      background: #1a1d27;
+      border-top: 1px solid #252836;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding-bottom: 6px;
+    }
+    .tab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      color: #6b7280;
+      font-size: 10px;
+      font-weight: 500;
+    }
+    .tab.active { color: #4f7cff; font-weight: 700; }
+    .tab svg { width: 22px; height: 22px; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="statusbar">
+      <span>9:41</span>
+      <span>●●● ●●● ●●●●</span>
+    </div>
+    <div class="content">
+      <div class="header">
+        <div class="title">Search Vault</div>
+        <div class="badge">Connected</div>
+      </div>
+
+      <div class="search-row">
+        <input class="search-input" type="text" value="vector search" />
+        <button class="search-btn">Search</button>
+      </div>
+
+      <div class="option-row">
+        <span class="option-label">Vector search</span>
+        <div class="switch"></div>
+      </div>
+
+      <div class="slider-section">
+        <div class="slider-header">
+          <span class="option-label">Hybrid weight</span>
+          <span class="slider-value">0.5</span>
+        </div>
+        <div class="slider-track">
+          <div class="slider-fill"></div>
+          <div class="slider-thumb"></div>
+        </div>
+      </div>
+
+      <div class="option-row">
+        <span class="option-label">Results limit</span>
+        <div class="stepper">
+          <div class="stepper-btn">−</div>
+          <div class="stepper-value">10</div>
+          <div class="stepper-btn">+</div>
+        </div>
+      </div>
+
+      <div class="section-title">Search results</div>
+
+      <div class="result-item">
+        <div class="result-title">Use Postgres for primary storage</div>
+        <div class="result-meta">
+          <span class="badge-type decision">Decision</span>
+          <span class="badge-type project">platform</span>
+        </div>
+        <div class="result-snippet">Postgres gives us row-level security, JSONB, and vector extension support for hybrid search.</div>
+      </div>
+
+      <div class="result-item">
+        <div class="result-title">Build hybrid search API endpoint</div>
+        <div class="result-meta">
+          <span class="badge-type task">Task</span>
+          <span class="badge-type project">platform</span>
+        </div>
+        <div class="result-snippet">Implement POST /search with hybrid_weight parameter and return ranked results.</div>
+      </div>
+
+      <div class="result-item">
+        <div class="result-title">Vector search implementation plan</div>
+        <div class="result-meta">
+          <span class="badge-type note">Note</span>
+          <span class="badge-type project">platform</span>
+        </div>
+        <div class="result-snippet">Chunk notes, embed with nomic-embed-text, store chunks, and merge FTS5 scores.</div>
+      </div>
+    </div>
+
+    <div class="tabbar">
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Home
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        Capture
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        Inbox
+      </div>
+      <div class="tab active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Search
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </div>
+    </div>
+  </div>
+</body>
+</html>

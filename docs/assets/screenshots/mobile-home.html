@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentVault Mobile Home</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 390px;
+      height: 844px;
+      background: #0f1117;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif;
+      color: #e4e6eb;
+      overflow: hidden;
+    }
+    .phone {
+      width: 390px;
+      height: 844px;
+      background: #0f1117;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .statusbar {
+      height: 44px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding: 8px 20px 4px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #e4e6eb;
+    }
+    .content {
+      flex: 1;
+      padding: 12px 16px 0;
+      overflow: auto;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin: 8px 0 18px;
+    }
+    .logo { font-size: 26px; font-weight: 800; color: #e4e6eb; }
+    .subtitle { font-size: 14px; color: #6b7280; margin-top: 2px; }
+    .badge {
+      background: rgba(34, 197, 94, 0.13);
+      color: #22c55e;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .capture-card {
+      background: #1a1d27;
+      border: 1px solid #252836;
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+    .capture-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: #e4e6eb;
+      font-size: 16px;
+      min-height: 60px;
+      resize: none;
+      outline: none;
+      font-family: inherit;
+    }
+    .capture-input::placeholder { color: #6b7280; }
+    .capture-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .char-count { font-size: 12px; color: #6b7280; }
+    .btn-primary {
+      background: #4f7cff;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 18px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .list-title { font-size: 17px; font-weight: 700; color: #e4e6eb; }
+    .btn-small {
+      background: rgba(34, 197, 94, 0.13);
+      color: #22c55e;
+      border: none;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .capture-item {
+      background: #1a1d27;
+      border: 1px solid #252836;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .capture-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 6px;
+    }
+    .capture-title { font-size: 15px; font-weight: 600; color: #e4e6eb; }
+    .capture-status {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #6b7280;
+      background: #232734;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .capture-status.synced { color: #22c55e; background: rgba(34, 197, 94, 0.13); }
+    .capture-text { font-size: 13px; color: #9ca3af; line-height: 1.4; }
+    .capture-meta { font-size: 11px; color: #4b5563; margin-top: 6px; }
+    .tabbar {
+      height: 60px;
+      background: #1a1d27;
+      border-top: 1px solid #252836;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding-bottom: 6px;
+    }
+    .tab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      color: #6b7280;
+      font-size: 10px;
+      font-weight: 500;
+    }
+    .tab.active { color: #4f7cff; font-weight: 700; }
+    .tab svg { width: 22px; height: 22px; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="statusbar">
+      <span>9:41</span>
+      <span>●●● ●●● ●●●●</span>
+    </div>
+    <div class="content">
+      <div class="header">
+        <div>
+          <div class="logo">AgentVault</div>
+          <div class="subtitle">Capture anywhere</div>
+        </div>
+        <div class="badge">Connected</div>
+      </div>
+
+      <div class="capture-card">
+        <textarea class="capture-input" placeholder="Quick capture... jot an idea">Idea: add a native share extension so articles can be captured from any iOS app.</textarea>
+        <div class="capture-actions">
+          <span class="char-count">82/500</span>
+          <button class="btn-primary">Capture</button>
+        </div>
+      </div>
+
+      <div class="list-header">
+        <span class="list-title">Recent Captures</span>
+        <button class="btn-small">Sync All</button>
+      </div>
+
+      <div class="capture-item">
+        <div class="capture-item-header">
+          <div class="capture-title">Share extension idea...</div>
+          <span class="capture-status synced">Synced</span>
+        </div>
+        <div class="capture-text">Idea: add a native share extension so articles can be captured from any iOS app.</div>
+        <div class="capture-meta">2 min ago · text</div>
+      </div>
+
+      <div class="capture-item">
+        <div class="capture-item-header">
+          <div class="capture-title">Meeting notes: sprint planning</div>
+          <span class="capture-status">Unsynced</span>
+        </div>
+        <div class="capture-text">Discussed vector search timeline, decided to ship hybrid search in v0.5.</div>
+        <div class="capture-meta">1 hr ago · text</div>
+      </div>
+
+      <div class="capture-item">
+        <div class="capture-item-header">
+          <div class="capture-title">Link: Modern vector databases</div>
+          <span class="capture-status synced">Synced</span>
+        </div>
+        <div class="capture-text">Survey of pgvector, Pinecone, and Weaviate trade-offs.</div>
+        <div class="capture-meta">3 hr ago · url</div>
+      </div>
+    </div>
+
+    <div class="tabbar">
+      <div class="tab active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Home
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        Capture
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        Inbox
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Search
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </div>
+    </div>
+  </div>
+</body>
+</html>

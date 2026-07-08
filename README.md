@@ -21,7 +21,7 @@ AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The sam
 ## Table of Contents
 
 - [Features](#features)
-- [Screenshot](#screenshot)
+- [Screenshots](#screenshots)
 - [Quick Start](#quick-start)
 - [Install](#install)
 - [CLI Reference](#cli-reference)
@@ -47,13 +47,27 @@ AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The sam
 | **Multi-client support** | First-party desktop (Wails), web (Vite), browser extension (MV3), and mobile (Expo) apps. |
 | **Vault diagnostics** | `agentvault doctor` checks config, database, migrations, links, orphan chunks, embeddings, and API auth. |
 
-## Screenshot
+## Screenshots
+
+### Desktop
 
 <p align="center">
-  <img src="docs/assets/screenshot.png" alt="AgentVault desktop app screenshot" width="960">
+  <img src="docs/assets/screenshots/desktop.png" alt="AgentVault desktop app screenshot" width="960">
 </p>
 
-The desktop app shows the inbox, a Markdown editor with live preview, and sync-state indicators for each note.
+The desktop app shows the sidebar, search results, a Markdown editor with live preview, and a global status bar.
+
+### Mobile
+
+<p align="center">
+  <img src="docs/assets/screenshots/mobile-home.png" alt="AgentVault mobile home screen" width="260">
+  &nbsp;
+  <img src="docs/assets/screenshots/mobile-search.png" alt="AgentVault mobile search screen" width="260">
+  &nbsp;
+  <img src="docs/assets/screenshots/mobile-note.png" alt="AgentVault mobile note detail screen" width="260">
+</p>
+
+The mobile app focuses on quick capture, hybrid search, and reading notes on the go.
 
 ## Quick Start
 

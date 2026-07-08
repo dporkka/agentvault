@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentVault Mobile Note</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 390px;
+      height: 844px;
+      background: #0f1117;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif;
+      color: #e4e6eb;
+      overflow: hidden;
+    }
+    .phone {
+      width: 390px;
+      height: 844px;
+      background: #0f1117;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .statusbar {
+      height: 44px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding: 8px 20px 4px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #e4e6eb;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      padding: 10px 16px 14px;
+      border-bottom: 1px solid #252836;
+    }
+    .back-btn {
+      color: #4f7cff;
+      font-size: 16px;
+      font-weight: 600;
+      padding-right: 12px;
+    }
+    .header-title {
+      flex: 1;
+      font-size: 17px;
+      font-weight: 700;
+      color: #e4e6eb;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .scroll {
+      flex: 1;
+      overflow: auto;
+      padding: 16px;
+    }
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .meta-badge {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .meta-badge.type { background: #232734; color: #4f7cff; }
+    .meta-badge.project { background: rgba(79, 124, 255, 0.15); color: #4f7cff; }
+    .meta-badge.status { background: #252836; color: #9ca3af; }
+    .title {
+      font-size: 24px;
+      font-weight: 800;
+      color: #e4e6eb;
+      margin-bottom: 6px;
+      line-height: 1.2;
+    }
+    .path {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 14px;
+    }
+    .tags-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .tag {
+      background: #252836;
+      color: #9ca3af;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .divider {
+      height: 1px;
+      background: #252836;
+      margin-bottom: 18px;
+    }
+    .body {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #e4e6eb;
+    }
+    .body h2 {
+      font-size: 17px;
+      font-weight: 700;
+      color: #e4e6eb;
+      margin: 18px 0 8px;
+    }
+    .body p {
+      color: #9ca3af;
+      margin-bottom: 12px;
+    }
+    .body ul {
+      padding-left: 18px;
+      margin-bottom: 12px;
+    }
+    .body li {
+      color: #9ca3af;
+      margin-bottom: 6px;
+    }
+    .body code {
+      background: #232734;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #4f7cff;
+    }
+    .tabbar {
+      height: 60px;
+      background: #1a1d27;
+      border-top: 1px solid #252836;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding-bottom: 6px;
+    }
+    .tab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      color: #6b7280;
+      font-size: 10px;
+      font-weight: 500;
+    }
+    .tab svg { width: 22px; height: 22px; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="statusbar">
+      <span>9:41</span>
+      <span>●●● ●●● ●●●●</span>
+    </div>
+    <div class="header">
+      <span class="back-btn">← Back</span>
+      <span class="header-title">Use Postgres for primary storage</span>
+    </div>
+    <div class="scroll">
+      <div class="meta-row">
+        <span class="meta-badge type">Decision</span>
+        <span class="meta-badge project">platform</span>
+        <span class="meta-badge status">Accepted</span>
+      </div>
+      <div class="title">Use Postgres for primary storage</div>
+      <div class="path">20-decisions/2026-06-28_use_postgres.md</div>
+      <div class="tags-row">
+        <span class="tag">database</span>
+        <span class="tag">vector</span>
+        <span class="tag">platform</span>
+      </div>
+      <div class="divider"></div>
+      <div class="body">
+        <h2>Context</h2>
+        <p>We need a durable store that supports structured relational queries, JSONB for flexible metadata, and vector search via <code>pgvector</code>.</p>
+        <h2>Decision</h2>
+        <p>Use Postgres as the primary database. SQLite remains the local vault index and can be rebuilt from Markdown at any time.</p>
+        <h2>Consequences</h2>
+        <ul>
+          <li>Single operational datastore simplifies backups.</li>
+          <li>pgvector extension enables semantic search without a separate service.</li>
+          <li>Requires Postgres 15+ in production.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="tabbar">
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Home
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        Capture
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        Inbox
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Search
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </div>
+    </div>
+  </div>
+</body>
+</html>

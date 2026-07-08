@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentVault Desktop Screenshot</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 1280px;
+      height: 800px;
+      overflow: hidden;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f1117;
+      color: #e4e6eb;
+    }
+    .app {
+      display: flex;
+      width: 1280px;
+      height: 800px;
+    }
+    /* Sidebar */
+    .sidebar {
+      width: 220px;
+      background: #1a1d27;
+      border-right: 1px solid #252836;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+      padding: 0 8px;
+    }
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #4f7cff, #6366f1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 14px;
+      color: #fff;
+    }
+    .brand-text {
+      font-size: 18px;
+      font-weight: 700;
+      background: linear-gradient(90deg, #4f7cff, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .vault-name {
+      font-size: 12px;
+      color: #6b7280;
+      padding: 0 8px 12px;
+      border-bottom: 1px solid #252836;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #9ca3af;
+      margin-bottom: 2px;
+      cursor: default;
+    }
+    .nav-item.active {
+      background: rgba(79, 124, 255, 0.12);
+      color: #4f7cff;
+      font-weight: 600;
+    }
+    .nav-item:hover:not(.active) {
+      background: #2a2e3b;
+    }
+    .icon { width: 16px; height: 16px; }
+    .new-btn {
+      margin-top: auto;
+      background: #4f7cff;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: default;
+    }
+    /* Main */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .workspace {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+    /* Search panel */
+    .search-panel {
+      width: 45%;
+      border-right: 1px solid #252836;
+      display: flex;
+      flex-direction: column;
+      background: #0f1117;
+    }
+    .search-bar {
+      padding: 14px 16px;
+      border-bottom: 1px solid #252836;
+      background: #1a1d27;
+    }
+    .search-input {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #252836;
+      border-radius: 8px;
+      padding: 9px 12px 9px 34px;
+      color: #e4e6eb;
+      font-size: 13px;
+      outline: none;
+    }
+    .search-input::placeholder { color: #6b7280; }
+    .search-icon {
+      position: absolute;
+      left: 26px;
+      top: 23px;
+      color: #6b7280;
+    }
+    .filters {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .filter {
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      background: #232734;
+      color: #6b7280;
+    }
+    .filter.active {
+      background: #4f7cff;
+      color: #fff;
+    }
+    .results {
+      flex: 1;
+      overflow: auto;
+    }
+    .section-label {
+      padding: 10px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .result-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(37, 40, 54, 0.6);
+      display: flex;
+      gap: 10px;
+      cursor: default;
+    }
+    .result-item:hover, .result-item.active {
+      background: rgba(79, 124, 255, 0.08);
+    }
+    .result-icon { color: #6b7280; margin-top: 2px; }
+    .result-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: #e4e6eb;
+      margin-bottom: 4px;
+    }
+    .result-meta {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge.decision { background: rgba(245, 158, 11, 0.13); color: #fbbf24; }
+    .badge.task { background: rgba(59, 130, 246, 0.13); color: #60a5fa; }
+    .badge.note { background: rgba(34, 197, 94, 0.13); color: #4ade80; }
+    .badge.source { background: rgba(244, 63, 94, 0.13); color: #fb7185; }
+    .badge.project { background: #232734; color: #9ca3af; }
+    .result-snippet {
+      font-size: 12px;
+      color: #6b7280;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .result-path {
+      font-size: 10px;
+      color: #4b5563;
+      margin-top: 4px;
+    }
+    /* Editor panel */
+    .editor-panel {
+      width: 55%;
+      display: flex;
+      flex-direction: column;
+      background: #0f1117;
+    }
+    .editor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid #252836;
+      background: #1a1d27;
+    }
+    .toolbar-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .toolbar-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      background: #232734;
+      color: #9ca3af;
+      border: 1px solid #252836;
+    }
+    .btn.primary {
+      background: #4f7cff;
+      color: #fff;
+      border-color: #4f7cff;
+    }
+    .editor-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+    .code-pane {
+      width: 55%;
+      background: #0f1117;
+      padding: 14px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #9ca3af;
+      overflow: auto;
+      border-right: 1px solid #252836;
+    }
+    .code-pane .h1 { color: #e4e6eb; font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+    .code-pane .frontmatter { color: #6b7280; margin-bottom: 12px; }
+    .code-pane .kv { color: #4f7cff; }
+    .code-pane .text { color: #9ca3af; }
+    .code-pane .bullet { color: #6b7280; }
+    .preview-pane {
+      width: 45%;
+      background: #14161d;
+      padding: 18px;
+      overflow: auto;
+    }
+    .preview-pane h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #e4e6eb;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #252836;
+      padding-bottom: 10px;
+    }
+    .preview-pane p {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #9ca3af;
+      margin-bottom: 12px;
+    }
+    .preview-pane ul {
+      padding-left: 18px;
+      margin-bottom: 12px;
+    }
+    .preview-pane li {
+      font-size: 13px;
+      color: #9ca3af;
+      margin-bottom: 6px;
+    }
+    .preview-pane code {
+      background: #232734;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #4f7cff;
+    }
+    /* Status bar */
+    .status-bar {
+      height: 32px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-top: 1px solid #252836;
+      background: #1a1d27;
+      font-size: 11px;
+      color: #6b7280;
+    }
+    .status-bar .vault { color: #e4e6eb; font-weight: 500; }
+    .spacer { flex: 1; }
+    .status-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+    }
+    .status-dot.warning { background: #f59e0b; }
+    .status-dot.accent { background: #4f7cff; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">AV</div>
+        <div class="brand-text">AgentVault</div>
+      </div>
+      <div class="vault-name">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"/></svg>
+        my-vault
+      </div>
+      <nav>
+        <div class="nav-item active">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Search
+        </div>
+        <div class="nav-item">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Editor
+        </div>
+        <div class="nav-item">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Inbox
+          <span style="margin-left:auto;font-size:10px;background:#4f7cff;color:#fff;padding:1px 5px;border-radius:8px;">3</span>
+        </div>
+        <div class="nav-item">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Decisions
+        </div>
+        <div class="nav-item">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Tasks
+        </div>
+        <div class="nav-item">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/></svg>
+          Projects
+        </div>
+        <div class="nav-item">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </div>
+      </nav>
+      <button class="new-btn">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Note
+      </button>
+    </aside>
+
+    <main class="main">
+      <div class="workspace">
+        <div class="search-panel">
+          <div class="search-bar" style="position:relative;">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input class="search-input" type="text" value="vector search" />
+            <div class="filters">
+              <span class="filter active">All</span>
+              <span class="filter">Note</span>
+              <span class="filter">Decision</span>
+              <span class="filter">Task</span>
+              <span class="filter">Meeting</span>
+              <span class="filter">Source</span>
+            </div>
+          </div>
+          <div class="results">
+            <div class="section-label">Search Results</div>
+            <div class="result-item active">
+              <svg class="result-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <div>
+                <div class="result-title">Use Postgres for primary storage</div>
+                <div class="result-meta">
+                  <span class="badge decision">Decision</span>
+                  <span class="badge project">platform</span>
+                </div>
+                <div class="result-snippet">We evaluated SQLite, Postgres, and MySQL. Postgres gives us row-level security, JSONB, and vector extension support for hybrid search.</div>
+                <div class="result-path">20-decisions/2026-06-28_use_postgres.md</div>
+              </div>
+            </div>
+            <div class="result-item">
+              <svg class="result-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <div>
+                <div class="result-title">Vector search implementation plan</div>
+                <div class="result-meta">
+                  <span class="badge note">Note</span>
+                  <span class="badge project">platform</span>
+                </div>
+                <div class="result-snippet">Plan for adding pgvector-backed semantic search: chunk notes, embed with nomic-embed-text, store chunks, and merge FTS5 scores.</div>
+                <div class="result-path">10-notes/vector_search_plan.md</div>
+              </div>
+            </div>
+            <div class="result-item">
+              <svg class="result-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <div>
+                <div class="result-title">Build hybrid search API endpoint</div>
+                <div class="result-meta">
+                  <span class="badge task">Task</span>
+                  <span class="badge project">platform</span>
+                </div>
+                <div class="result-snippet">Implement POST /search with hybrid_weight parameter. Combine FTS5 and vector scores and return ranked results with snippets.</div>
+                <div class="result-path">30-tasks/hybrid_search_api.md</div>
+              </div>
+            </div>
+            <div class="result-item">
+              <svg class="result-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <div>
+                <div class="result-title">Article: Modern vector databases</div>
+                <div class="result-meta">
+                  <span class="badge source">Source</span>
+                </div>
+                <div class="result-snippet">Survey of pgvector, Pinecone, and Weaviate. Trade-offs for on-premise vs. managed vector search.</div>
+                <div class="result-path">40-sources/modern_vector_databases.md</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="editor-panel">
+          <div class="editor-toolbar">
+            <div class="toolbar-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Use Postgres for primary storage
+              <span style="color:#f59e0b;font-size:11px;">unsaved</span>
+            </div>
+            <div class="toolbar-actions">
+              <button class="btn">Hide Preview</button>
+              <button class="btn primary">Save</button>
+              <button class="btn">AI</button>
+            </div>
+          </div>
+          <div class="editor-body">
+            <div class="code-pane">
+              <div class="frontmatter">---<br><span class="kv">type</span>: decision<br><span class="kv">project</span>: platform<br><span class="kv">status</span>: accepted<br><span class="kv">tags</span>: [database, vector]<br>---</div>
+              <div class="h1">Use Postgres for primary storage</div>
+              <div class="text"><span style="color:#4f7cff;">## Context</span></div>
+              <div class="text">We need a durable store that supports:</div>
+              <div class="text"><span class="bullet">-</span> structured relational queries</div>
+              <div class="text"><span class="bullet">-</span> JSONB for flexible metadata</div>
+              <div class="text"><span class="bullet">-</span> vector search via pgvector</div>
+              <div class="text"><span style="color:#4f7cff;">## Decision</span></div>
+              <div class="text">Use Postgres as the primary database.</div>
+              <div class="text"><span style="color:#4f7cff;">## Consequences</span></div>
+              <div class="text"><span class="bullet">+</span> Single operational datastore</div>
+              <div class="text"><span class="bullet">+</span> pgvector extension for embeddings</div>
+              <div class="text"><span class="bullet">-</span> Requires Postgres 15+</div>
+            </div>
+            <div class="preview-pane">
+              <h1>Use Postgres for primary storage</h1>
+              <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+                <span class="badge decision">Decision</span>
+                <span class="badge project">platform</span>
+                <span class="badge note">accepted</span>
+              </div>
+              <h2 style="font-size:15px;color:#e4e6eb;margin:16px 0 8px;">Context</h2>
+              <p>We need a durable store that supports structured relational queries, JSONB for flexible metadata, and vector search via <code>pgvector</code>.</p>
+              <h2 style="font-size:15px;color:#e4e6eb;margin:16px 0 8px;">Decision</h2>
+              <p>Use Postgres as the primary database. SQLite remains the local vault index and can be rebuilt from Markdown at any time.</p>
+              <h2 style="font-size:15px;color:#e4e6eb;margin:16px 0 8px;">Consequences</h2>
+              <ul>
+                <li>Single operational datastore simplifies backups.</li>
+                <li>pgvector extension enables semantic search without a separate service.</li>
+                <li>Requires Postgres 15+ in production.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="status-bar">
+        <span class="vault">my-vault</span>
+        <span>|</span>
+        <span>42 notes</span>
+        <span class="spacer"></span>
+        <div class="status-group">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          <span>API running on 127.0.0.1:47321</span>
+        </div>
+        <div class="status-group"><div class="status-dot"></div><span>Auth OK</span></div>
+        <div class="status-group"><div class="status-dot"></div><span>Indexed</span></div>
+        <div class="status-group"><div class="status-dot warning"></div><span>AI offline</span></div>
+        <div style="width:1px;height:14px;background:#252836;margin:0 4px;"></div>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
