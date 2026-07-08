@@ -12,6 +12,11 @@ import { SettingsProvider } from './src/context/SettingsContext';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { useAutoSync } from './src/hooks/useAutoSync';
 import type { RootStackParamList, RootTabParamList } from './src/navigation/types';
+
+function SyncBootstrap() {
+  useAutoSync();
+  return null;
+}
 import HomeScreen from './src/screens/HomeScreen';
 import CaptureScreen from './src/screens/CaptureScreen';
 import InboxScreen from './src/screens/InboxScreen';
@@ -96,12 +101,12 @@ function MainTabs() {
 }
 
 export default function App() {
-  useAutoSync();
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
         <SettingsProvider>
           <NavigationContainer>
+            <SyncBootstrap />
             <StatusBar style="light" />
             <Stack.Navigator screenOptions={{ headerShown: false }}>
               <Stack.Screen name="MainTabs" component={MainTabs} />

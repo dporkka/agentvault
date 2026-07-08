@@ -13,9 +13,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 };
 
 /**
- * Load settings. The auth token is stored in SecureStore; everything else
- * is stored in AsyncStorage. If a token exists in AsyncStorage from a
- * previous version, it is migrated to SecureStore.
+ * Load settings. Non-sensitive settings come from AsyncStorage; the auth token
+ * is read from SecureStore only. If SecureStore cannot be accessed, the token
+ * is treated as missing and the user must re-authenticate.
  */
 export async function loadSettings(): Promise<AppSettings> {
   const [data, secureToken] = await Promise.all([
@@ -32,34 +32,26 @@ export async function loadSettings(): Promise<AppSettings> {
     }
   }
 
-  // Migrate token from AsyncStorage to SecureStore if needed.
-  if (!secureToken && parsed.token) {
-    await SecureStore.setItemAsync(TOKEN_KEY, parsed.token).catch(() => {
-      // If SecureStore fails, fall back to keeping it in AsyncStorage.
-    });
-  }
-
   return {
     ...DEFAULT_APP_SETTINGS,
     ...parsed,
-    token: secureToken ?? parsed.token ?? '',
+    token: secureToken ?? '',
   };
 }
 
 /**
- * Persist settings. The auth token is written to SecureStore separately.
+ * Persist settings. Non-sensitive settings go to AsyncStorage; the auth token
+ * is stored only in SecureStore. If SecureStore fails, the error propagates so
+ * the UI can warn the user instead of silently falling back to insecure storage.
  */
 export async function persistSettings(settings: AppSettings): Promise<void> {
   const { token, ...rest } = settings;
-  await Promise.all([
-    AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(rest)),
-    token
-      ? SecureStore.setItemAsync(TOKEN_KEY, token).catch(() => {
-          // If SecureStore is unavailable, keep the token in AsyncStorage.
-          AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...rest, token }));
-        })
-      : SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {
-          AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(rest));
-        }),
-  ]);
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(rest));
+
+  if (token) {
+    await SecureStore.setItemAsync(TOKEN_KEY, token);
+  } else {
+    // Ignore deletion failures; there is no secret to leak when clearing the token.
+    await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
+  }
 }
