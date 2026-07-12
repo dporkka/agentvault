@@ -18,6 +18,8 @@ import { syncCaptures, formatSyncResult } from '../storage/sync';
 import { checkHealth, verifyToken } from '../api/agentvault';
 import type { AppSettings } from '../types';
 import { colors, spacing, radii, typography } from '../theme';
+import ServerConfigSection from '../components/ServerConfigSection';
+import ActionsSection from '../components/ActionsSection';
 
 export default function SettingsScreen() {
   const { settings, saveSettings, loaded } = useSettings();
@@ -136,132 +138,22 @@ export default function SettingsScreen() {
       >
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
           <Text style={styles.header}>Settings</Text>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Server</Text>
-            <Text style={styles.label}>Server URL</Text>
-            <TextInput
-              style={styles.input}
-              value={draft.serverUrl}
-              onChangeText={(v) => update({ serverUrl: v })}
-              placeholder={DEFAULT_BASE_URL}
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              keyboardType="url"
-            />
-            <View style={styles.healthRow}>
-              <View
-                style={[
-                  styles.healthDot,
-                  {
-                    backgroundColor:
-                      health === true
-                        ? colors.success
-                        : health === false
-                          ? colors.error
-                          : colors.textMuted,
-                  },
-                ]}
-              />
-              <Text style={styles.healthText}>
-                {health === true ? 'Online' : health === false ? 'Offline' : 'Unknown'}
-              </Text>
-              <TouchableOpacity
-                style={styles.testBtn}
-                onPress={handleTest}
-                accessibilityRole="button"
-                accessibilityLabel="Test server connection"
-              >
-                <Text style={styles.testBtnText}>Test</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.label}>
-              Auth Token
-              {tokenStatus === 'valid' && <Text style={{ color: colors.success }}> • valid</Text>}
-              {tokenStatus === 'invalid' && <Text style={{ color: colors.error }}> • invalid</Text>}
-              {tokenStatus === 'missing' && (
-                <Text style={{ color: colors.warning }}> • missing</Text>
-              )}
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={draft.token}
-              onChangeText={(v) => update({ token: v })}
-              placeholder="X-AgentVault-Token (printed by 'serve')"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              secureTextEntry
-            />
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnSecondary]}
-              onPress={handleVerifyToken}
-              disabled={verifying}
-              accessibilityRole="button"
-              accessibilityLabel={verifying ? 'Verifying token' : 'Verify auth token'}
-              accessibilityState={{ disabled: verifying }}
-            >
-              <Text style={styles.actionBtnTextSecondary}>
-                {verifying ? 'Verifying...' : 'Verify Token'}
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.hint}>Required to sync captures to the server.</Text>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Defaults</Text>
-            <Text style={styles.label}>Default Project</Text>
-            <TextInput
-              style={styles.input}
-              value={draft.defaultProject}
-              onChangeText={(v) => update({ defaultProject: v })}
-              placeholder="e.g. inbox"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Actions</Text>
-
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnPrimary]}
-              onPress={handleSyncAll}
-              disabled={syncing}
-              accessibilityRole="button"
-              accessibilityLabel={syncing ? 'Syncing all captures' : 'Sync all captures to server'}
-              accessibilityState={{ disabled: syncing }}
-            >
-              <Text style={styles.actionBtnTextPrimary}>
-                {syncing ? 'Syncing...' : 'Sync All to Server'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnDanger]}
-              onPress={handleClear}
-              accessibilityRole="button"
-              accessibilityLabel="Clear local inbox"
-            >
-              <Text style={styles.actionBtnTextDanger}>Clear Local Inbox</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>App</Text>
-              <Text style={styles.infoValue}>AgentVault Mobile</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Version</Text>
-              <Text style={styles.infoValue}>0.1.0</Text>
-            </View>
-            <Text style={styles.aboutText}>
-              Capture-first mobile companion for AgentVault. All captures are stored locally and
-              synced when the server is reachable.
-            </Text>
-          </View>
+          <ServerConfigSection
+            draft={draft}
+            health={health}
+            tokenStatus={tokenStatus}
+            verifying={verifying}
+            onUpdate={update}
+            onTest={handleTest}
+            onVerifyToken={handleVerifyToken}
+          />
+          <ActionsSection
+            draft={draft}
+            syncing={syncing}
+            onUpdate={update}
+            onSyncAll={handleSyncAll}
+            onClear={handleClear}
+          />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
