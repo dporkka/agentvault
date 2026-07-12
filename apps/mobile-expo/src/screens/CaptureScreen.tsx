@@ -17,6 +17,7 @@ import { useSettings } from '../context/SettingsContext';
 import ProjectPicker from '../components/ProjectPicker';
 import TagPicker from '../components/TagPicker';
 import { colors, spacing, radii, typography } from '../theme';
+import { buildPayload, validateCapture } from '../utils/captureValidation';
 
 export default function CaptureScreen() {
   const { settings } = useSettings();
@@ -44,21 +45,12 @@ export default function CaptureScreen() {
     if (!error) setTimeout(() => setMessage(''), 2500);
   };
 
-  const buildPayload = () => ({
-    type: 'text' as const,
-    title: title.trim() || body.trim().slice(0, 50) || 'Untitled',
-    text: body.trim(),
-    project: project || undefined,
-    tags,
-  });
 
   const handleSaveLocal = async () => {
-    if (!title.trim() && !body.trim()) {
-      showMessage('Enter a title or body', true);
-      return;
-    }
+    const error = validateCapture(title, body);
+    if (error) { showMessage(error, true); return; }
     setLoading(true);
-    await addCapture(buildPayload());
+    await addCapture(buildPayload(title, body, project, tags));
     setLoading(false);
     showMessage('Saved to inbox');
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -66,19 +58,17 @@ export default function CaptureScreen() {
   };
 
   const handleSendNow = async () => {
-    if (!title.trim() && !body.trim()) {
-      showMessage('Enter a title or body', true);
-      return;
-    }
+    const error = validateCapture(title, body);
+    if (error) { showMessage(error, true); return; }
     setLoading(true);
     try {
-      await sendCapture(buildPayload());
+      await sendCapture(buildPayload(title, body, project, tags));
       showMessage('Sent to server!');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       reset();
     } catch {
       showMessage('Server unreachable. Saved to inbox instead.', true);
-      await addCapture(buildPayload());
+      await addCapture(buildPayload(title, body, project, tags));
     }
     setLoading(false);
   };
