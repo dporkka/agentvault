@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import type { Extension } from '@codemirror/state';
 import { oneDark } from '@codemirror/theme-one-dark';
@@ -13,13 +13,13 @@ interface Props {
 }
 
 export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: Props) {
+  const editorRef = useRef<any>(null);
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [title, setTitle] = useState('Untitled');
   const [noteType, setNoteType] = useState<string>('note');
   const [isDirty, setIsDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
-  // The path the editor actually writes to. For an existing note this mirrors
   // the prop; for a new note it is assigned a unique path on first save so
   // repeated saves update one file instead of overwriting a fixed name.
   const [savePath, setSavePath] = useState<string | null>(notePath);
@@ -84,6 +84,34 @@ export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: P
     setIsDirty(false);
   }, [savePath, title, content, noteType]);
 
+  const wrapSelection = useCallback((before: string, after: string) => {
+    const view = editorRef.current?.view;
+    if (!view) return;
+    const { from, to } = view.state.selection.main;
+    const selected = view.state.sliceDoc(from, to);
+    view.dispatch({
+      changes: { from, to, insert: before + selected + after },
+      selection: { anchor: from + before.length, head: from + before.length + selected.length },
+    });
+    view.focus();
+    setContent(view.state.doc.toString());
+    setIsDirty(true);
+  }, []);
+
+  const prefixLine = useCallback((prefix: string) => {
+    const view = editorRef.current?.view;
+    if (!view) return;
+    const { from } = view.state.selection.main;
+    const line = view.state.doc.lineAt(from);
+    view.dispatch({
+      changes: { from: line.from, insert: prefix },
+      selection: { anchor: line.from + prefix.length },
+    });
+    view.focus();
+    setContent(view.state.doc.toString());
+    setIsDirty(true);
+  }, []);
+
   // Keyboard shortcut: Ctrl+S
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -98,75 +126,97 @@ export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: P
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-bg-secondary">
-        <div className="flex items-center gap-3">
-          <FileText className="w-4 h-4 text-text-muted" />
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-text-primary">
-              {title}
-            </span>
-            {!savePath && (
-              <div className="flex items-center gap-1">
-                {(['note', 'decision', 'task', 'meeting', 'source'] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setNoteType(t)}
-                    className={`text-[10px] px-1.5 py-0.5 rounded-full transition-colors ${
-                      noteType === t
-                        ? 'type-badge type-badge-' + t
-                        : 'bg-bg-tertiary text-text-muted hover:text-text-secondary'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            )}
-            {isDirty && (
-              <span className="text-xs text-warning">unsaved</span>
-            )}
-            {savePath && (
-              <span className="text-xs text-text-muted">{savePath}</span>
-            )}
+      <div className="flex flex-col border-b border-border bg-bg-secondary">
+        {/* Top row: title + save/preview */}
+        <div className="flex items-center justify-between px-4 py-2">
+          <div className="flex items-center gap-3">
+            <FileText className="w-4 h-4 text-text-muted" />
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-text-primary">
+                {title}
+              </span>
+              {!savePath && (
+                <div className="flex items-center gap-1">
+                  {(['note', 'decision', 'task', 'meeting', 'source'] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setNoteType(t)}
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full transition-colors ${
+                        noteType === t
+                          ? 'type-badge type-badge-' + t
+                          : 'bg-bg-tertiary text-text-muted hover:text-text-secondary'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {isDirty && (
+                <span className="text-xs text-warning">unsaved</span>
+              )}
+              {savePath && (
+                <span className="text-xs text-text-muted">{savePath}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className="btn-ghost text-xs"
+            >
+              {showPreview ? 'Hide Preview' : 'Show Preview'}
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!isDirty}
+              className="btn-primary flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              Save
+            </button>
+            <button
+              onClick={onToggleAIPanel}
+              className="btn-ghost"
+              title={aiPanelOpen ? 'Close AI Panel' : 'Open AI Panel'}
+            >
+              {aiPanelOpen ? (
+                <PanelRightClose className="w-4 h-4" />
+              ) : (
+                <PanelRight className="w-4 h-4" />
+              )}
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowPreview(!showPreview)}
-            className="btn-ghost text-xs"
-          >
-            {showPreview ? 'Hide Preview' : 'Show Preview'}
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!isDirty}
-            className="btn-primary flex items-center gap-1.5 disabled:opacity-50"
-          >
-            <Save className="w-3.5 h-3.5" />
-            Save
-          </button>
-          <button
-            onClick={onToggleAIPanel}
-            className="btn-ghost"
-            title={aiPanelOpen ? 'Close AI Panel' : 'Open AI Panel'}
-          >
-            {aiPanelOpen ? (
-              <PanelRightClose className="w-4 h-4" />
-            ) : (
-              <PanelRight className="w-4 h-4" />
-            )}
-          </button>
+        {/* Formatting toolbar */}
+        <div className="flex items-center gap-0.5 px-4 py-1 border-t border-border/50">
+          {[
+            { label: 'B', title: 'Bold', action: () => wrapSelection('**', '**') },
+            { label: 'I', title: 'Italic', action: () => wrapSelection('*', '*') },
+            { label: 'H', title: 'Heading', action: () => prefixLine('## ') },
+            { label: '\u2194', title: 'Link', action: () => wrapSelection('[', '](url)') },
+            { label: '\u2022', title: 'Bullet list', action: () => prefixLine('- ') },
+            { label: '\u3009', title: 'Code block', action: () => wrapSelection('```\n', '\n```') },
+          ].map((btn) => (
+            <button
+              key={btn.title}
+              onClick={btn.action}
+              title={btn.title}
+              className="px-2 py-1 text-xs text-text-muted hover:text-text-primary hover:bg-bg-hover rounded transition-colors"
+            >
+              {btn.label}
+            </button>
+          ))}
         </div>
       </div>
-
       {/* Editor + Preview */}
       <div className="flex flex-1 overflow-hidden">
         <div className={`${showPreview ? 'w-3/5' : 'w-full'} overflow-auto`}>
           {markdownExt ? (
             <CodeMirror
-              value={content}
+              ref={editorRef}
               height="100%"
               extensions={[markdownExt]}
               theme={oneDark}
