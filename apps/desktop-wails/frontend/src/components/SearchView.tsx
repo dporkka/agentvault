@@ -82,13 +82,14 @@ export default function SearchView({ onOpenNote }: Props) {
 
   const typeFilters = ['', 'note', 'decision', 'task', 'meeting', 'source'];
 
-  const getTypeColor = (type: string) => {
+  const getTypeBadgeClass = (type: string): string => {
     switch (type) {
-      case 'decision': return 'bg-purple-500/20 text-purple-400';
-      case 'task': return 'bg-blue-500/20 text-blue-400';
-      case 'meeting': return 'bg-green-500/20 text-green-400';
-      case 'source': return 'bg-yellow-500/20 text-yellow-400';
-      default: return 'bg-gray-500/20 text-gray-400';
+      case 'note': return 'type-badge type-badge-note';
+      case 'decision': return 'type-badge type-badge-decision';
+      case 'task': return 'type-badge type-badge-task';
+      case 'meeting': return 'type-badge type-badge-meeting';
+      case 'source': return 'type-badge type-badge-source';
+      default: return 'type-badge type-badge-default';
     }
   };
 
@@ -217,7 +218,7 @@ export default function SearchView({ onOpenNote }: Props) {
                     <span className="text-sm font-medium text-text-primary truncate">
                       {result.title}
                     </span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getTypeColor(result.type)}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getTypeBadgeClass(result.type)}`}>
                       {result.type}
                     </span>
                     {result.project && (

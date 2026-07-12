@@ -98,6 +98,11 @@ func (a *AnthropicProvider) Chat(ctx context.Context, messages []Message) (strin
 	return result, nil
 }
 
+// ChatJSON implements AIProvider.ChatJSON by requesting structured output.
+func (a *AnthropicProvider) ChatJSON(ctx context.Context, messages []Message, result interface{}) error {
+	return chatJSONResponse(ctx, a, messages, result)
+}
+
 // HealthCheck verifies the Anthropic API is reachable.
 func (a *AnthropicProvider) HealthCheck(ctx context.Context) error {
 	if a.client.apiKey == "" {

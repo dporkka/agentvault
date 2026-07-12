@@ -120,6 +120,8 @@ export function Popup() {
     }
   };
 
+  // On mount, try to read any prefill data the background worker
+  // may have already stored.
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
@@ -139,6 +141,26 @@ export function Popup() {
         });
       });
     });
+  }, []);
+
+  // Listen for prefilledData changes from the background worker,
+  // so the popup updates even when opened before the background
+  // finishes extracting page metadata.
+  useEffect(() => {
+    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+      const change = changes['prefilledData'];
+      if (change?.newValue) {
+        const prefilled = change.newValue;
+        setPageData({
+          title: prefilled.title || '',
+          url: prefilled.url || '',
+          selectedText: prefilled.selectedText || '',
+        });
+        setActiveTab('clip');
+      }
+    };
+    chrome.storage.session.onChanged.addListener(listener);
+    return () => chrome.storage.session.onChanged.removeListener(listener);
   }, []);
 
   const renderTabButton = (tab: Tab) => {
@@ -189,7 +211,6 @@ export function Popup() {
               type="text"
               value={baseUrlInput}
               onChange={(e) => setBaseUrlInput(e.target.value)}
-              onBlur={(e) => saveBaseUrl(e.target.value)}
               placeholder={API_BASE}
               className="input"
             />
@@ -208,7 +229,6 @@ export function Popup() {
               type="password"
               value={tokenInput}
               onChange={(e) => setTokenInput(e.target.value)}
-              onBlur={(e) => saveToken(e.target.value)}
               placeholder="X-AgentVault-Token (printed by 'serve')"
               className="input"
             />
@@ -216,6 +236,16 @@ export function Popup() {
               Run <code>agentvault serve</code> and paste the printed token here to clip pages.
             </span>
           </div>
+          <button
+            onClick={async () => {
+              await saveBaseUrl(baseUrlInput);
+              await saveToken(tokenInput);
+            }}
+            className="btn btn-primary"
+            style={{ marginTop: '8px' }}
+          >
+            Connect
+          </button>
         </div>
       )}
 

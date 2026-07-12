@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '@/api/client';
 import { DEFAULT_BASE_URL, type AuthVerifyResponse } from '@agentvault/contract';
 
@@ -13,13 +13,28 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ open, onClose }) => {
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (open) {
+      previousFocusRef.current = document.activeElement as HTMLElement;
       setServerUrl(api.getBaseUrl());
       setToken(api.getToken());
       setError(null);
       setSuccess(false);
+      // Focus the first input after render
+      requestAnimationFrame(() => {
+        modalRef.current?.querySelector<HTMLInputElement>('input')?.focus();
+      });
+    }
+  }, [open]);
+
+  // Return focus to the element that opened the modal on close
+  useEffect(() => {
+    if (!open && previousFocusRef.current) {
+      previousFocusRef.current.focus();
+      previousFocusRef.current = null;
     }
   }, [open]);
 
@@ -33,12 +48,10 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ open, onClose }) => {
 
     try {
       const health = await api.checkHealth();
-      if (!health || !health.status) {
-        throw new Error('Server is reachable but returned an unexpected response.');
-      }
+      if (!health) throw new Error('Server is unreachable');
     } catch (err) {
       setTesting(false);
-      setError(err instanceof Error ? err.message : 'Could not connect to the server.');
+      setError(err instanceof Error ? err.message : 'Connection failed');
       return;
     }
 
@@ -52,7 +65,7 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ open, onClose }) => {
     setTesting(false);
 
     if (verify && !verify.tokenValid && token) {
-      setError('The server rejected this token. Copy the token printed when you run agentvault serve.');
+      setError('Token is invalid. Check the token printed by agentvault serve.');
       return;
     }
 
@@ -60,20 +73,54 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ open, onClose }) => {
     setTimeout(onClose, 600);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onClose();
+      return;
+    }
+    if (e.key === 'Tab') {
+      const focusable = Array.from(
+        modalRef.current?.querySelectorAll<HTMLElement>(
+          'input:not([disabled]), button:not([disabled])'
+        ) || []
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md bg-vault-bg-secondary border border-vault-border rounded-xl shadow-xl p-6">
-        <h2 className="text-lg font-semibold text-vault-text-primary mb-1">Connect to AgentVault</h2>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="conn-modal-title"
+    >
+      <div
+        ref={modalRef}
+        className="w-full max-w-md bg-vault-bg-secondary border border-vault-border rounded-xl shadow-xl p-6"
+        onKeyDown={handleKeyDown}
+      >
+        <h2 id="conn-modal-title" className="text-lg font-semibold text-vault-text-primary mb-1">Connect to AgentVault</h2>
         <p className="text-xs text-vault-text-muted mb-5">
           Enter the server URL and the token printed by <code className="text-vault-accent">agentvault serve</code>.
         </p>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-vault-text-secondary mb-1.5">Server URL</label>
+            <label htmlFor="conn-server-url" className="block text-xs font-medium text-vault-text-secondary mb-1.5">Server URL</label>
             <input
+              id="conn-server-url"
               type="text"
               value={serverUrl}
               onChange={(e) => { setServerUrl(e.target.value); setError(null); setSuccess(false); }}
@@ -83,8 +130,9 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ open, onClose }) => {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-vault-text-secondary mb-1.5">Auth Token</label>
+            <label htmlFor="conn-auth-token" className="block text-xs font-medium text-vault-text-secondary mb-1.5">Auth Token</label>
             <input
+              id="conn-auth-token"
               type="password"
               value={token}
               onChange={(e) => { setToken(e.target.value); setError(null); setSuccess(false); }}
@@ -94,7 +142,7 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ open, onClose }) => {
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 p-3 rounded-lg text-sm bg-red-500/10 text-red-400">
+            <div className="flex items-start gap-2 p-3 rounded-lg text-sm bg-red-500/10 text-red-400" role="alert">
               <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
               </svg>

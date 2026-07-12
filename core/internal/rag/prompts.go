@@ -38,12 +38,9 @@ func buildSystemPrompt(sources []Source) string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString("Answer the user's question using the sources above. Format:\n")
-	b.WriteString("1. Direct answer\n")
-	b.WriteString("2. Supporting sources (cite paths)\n")
-	b.WriteString("3. Confidence level (high/medium/low)\n")
-	b.WriteString("4. Any caveats or limitations\n")
-	b.WriteString("5. Suggested next actions if applicable\n")
+	b.WriteString("Answer the user's question using the sources above. Respond with a JSON object matching this exact schema:\n")
+	b.WriteString(`{"answer": "string", "confidence": "low|medium|high", "caveats": ["string"], "suggestedActions": ["string"], "missingInfo": "string"}`)
+	b.WriteString("\n\nInclude all fields. Use empty arrays/strings for fields with nothing to report.")
 
 	return b.String()
 }

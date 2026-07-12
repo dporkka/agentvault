@@ -76,6 +76,11 @@ func (o *OpenRouterProvider) Chat(ctx context.Context, messages []Message) (stri
 	return chatResp.Choices[0].Message.Content, nil
 }
 
+// ChatJSON implements AIProvider.ChatJSON by requesting structured output.
+func (o *OpenRouterProvider) ChatJSON(ctx context.Context, messages []Message, result interface{}) error {
+	return chatJSONResponse(ctx, o, messages, result)
+}
+
 // HealthCheck verifies the OpenRouter API is reachable.
 func (o *OpenRouterProvider) HealthCheck(ctx context.Context) error {
 	if o.client.apiKey == "" {

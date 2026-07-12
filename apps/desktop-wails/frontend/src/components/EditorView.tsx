@@ -16,6 +16,7 @@ export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: P
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [title, setTitle] = useState('Untitled');
+  const [noteType, setNoteType] = useState<string>('note');
   const [isDirty, setIsDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   // The path the editor actually writes to. For an existing note this mirrors
@@ -70,22 +71,18 @@ export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: P
   }, [originalContent]);
 
   const handleSave = useCallback(async () => {
-    // For a brand-new note, generate a unique filename once so we don't
-    // clobber a fixed "untitled.md"; reuse it for subsequent saves.
     let path = savePath;
     if (!path) {
-      const slug =
-        (title || 'untitled')
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '') || 'untitled';
-      path = `10-notes/${slug}-${Date.now()}.md`;
+      // For a brand-new note, route through CreateNote so the file lands
+      // in the correct folder per note type (templates.FolderRelForType).
+      const relPath = await window.go.main.NoteService.CreateNote(noteType, title, '');
+      path = relPath;
       setSavePath(path);
     }
     await window.go.main.NoteService.SaveNote(path, content);
     setOriginalContent(content);
     setIsDirty(false);
-  }, [savePath, title, content]);
+  }, [savePath, title, content, noteType]);
 
   // Keyboard shortcut: Ctrl+S
   useEffect(() => {
@@ -105,15 +102,34 @@ export default function EditorView({ notePath, aiPanelOpen, onToggleAIPanel }: P
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-bg-secondary">
         <div className="flex items-center gap-3">
           <FileText className="w-4 h-4 text-text-muted" />
-          <span className="text-sm font-medium text-text-primary">
-            {title}
-          </span>
-          {isDirty && (
-            <span className="text-xs text-warning">unsaved</span>
-          )}
-          {savePath && (
-            <span className="text-xs text-text-muted ml-2">{savePath}</span>
-          )}
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-text-primary">
+              {title}
+            </span>
+            {!savePath && (
+              <div className="flex items-center gap-1">
+                {(['note', 'decision', 'task', 'meeting', 'source'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setNoteType(t)}
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full transition-colors ${
+                      noteType === t
+                        ? 'type-badge type-badge-' + t
+                        : 'bg-bg-tertiary text-text-muted hover:text-text-secondary'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
+            {isDirty && (
+              <span className="text-xs text-warning">unsaved</span>
+            )}
+            {savePath && (
+              <span className="text-xs text-text-muted">{savePath}</span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

@@ -83,6 +83,11 @@ func (o *OpenAIProvider) Chat(ctx context.Context, messages []Message) (string, 
 	return chatResp.Choices[0].Message.Content, nil
 }
 
+// ChatJSON implements AIProvider.ChatJSON by requesting structured output.
+func (o *OpenAIProvider) ChatJSON(ctx context.Context, messages []Message, result interface{}) error {
+	return chatJSONResponse(ctx, o, messages, result)
+}
+
 // HealthCheck verifies the OpenAI API is reachable by calling /v1/models.
 func (o *OpenAIProvider) HealthCheck(ctx context.Context) error {
 	if o.client.apiKey == "" {

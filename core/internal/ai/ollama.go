@@ -68,6 +68,11 @@ func (o *OllamaProvider) Chat(ctx context.Context, messages []Message) (string, 
 	return chatResp.Message.Content, nil
 }
 
+// ChatJSON implements AIProvider.ChatJSON by requesting structured output.
+func (o *OllamaProvider) ChatJSON(ctx context.Context, messages []Message, result interface{}) error {
+	return chatJSONResponse(ctx, o, messages, result)
+}
+
 // HealthCheck verifies Ollama is reachable by calling /api/tags.
 func (o *OllamaProvider) HealthCheck(ctx context.Context) error {
 	return o.client.DoHealthCheck(ctx, "/api/tags")

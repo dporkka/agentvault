@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { searchVault, getNote } from '@shared/api';
 import type { SearchResult, NoteDetail } from '@shared/types';
 
@@ -36,6 +36,8 @@ export function SearchPanel() {
   const [selectedNote, setSelectedNote] = useState<NoteDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const detailModalRef = useRef<HTMLDivElement>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
 
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return;
@@ -60,6 +62,7 @@ export function SearchPanel() {
 
   const openDetail = useCallback(async (id: string) => {
     setDetailLoading(true); setDetailError('');
+    lastFocusedRef.current = document.activeElement as HTMLElement;
     try {
       const note = await getNote(id);
       if (!note) {
@@ -76,9 +79,18 @@ export function SearchPanel() {
     }
   }, []);
 
+  // When the detail modal opens, focus its close button.
+  useEffect(() => {
+    if (selectedNote && detailModalRef.current) {
+      const closeBtn = detailModalRef.current.querySelector<HTMLButtonElement>('[data-close]');
+      closeBtn?.focus();
+    }
+  }, [selectedNote]);
+
   const closeDetail = useCallback(() => {
     setSelectedNote(null);
     setDetailError('');
+    requestAnimationFrame(() => lastFocusedRef.current?.focus());
   }, []);
 
   return (
@@ -195,7 +207,7 @@ export function SearchPanel() {
       {selectedNote && (
         <div className="modal-overlay">
           <div
-            className="modal"
+            ref={detailModalRef}
             role="dialog"
             aria-modal="true"
           >
@@ -205,7 +217,7 @@ export function SearchPanel() {
                 <span className="badge">{selectedNote.type}</span>
               </div>
               <button
-                onClick={closeDetail}
+                data-close
                 aria-label="Close note detail"
                 className="icon-btn icon-btn--lg"
               >

@@ -13,6 +13,10 @@ type Message struct {
 type AIProvider interface {
 	Name() string
 	Chat(ctx context.Context, messages []Message) (string, error)
+	// ChatJSON sends messages and expects a structured JSON response.
+	// It appends a JSON-format instruction to the prompt and unmarshals
+	// the response into result, which must be a pointer to a struct.
+	ChatJSON(ctx context.Context, messages []Message, result interface{}) error
 	HealthCheck(ctx context.Context) error
 }
 

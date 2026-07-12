@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import {
   View,
   Text,
@@ -60,6 +61,7 @@ export default function CaptureScreen() {
     await addCapture(buildPayload());
     setLoading(false);
     showMessage('Saved to inbox');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     reset();
   };
 
@@ -72,6 +74,7 @@ export default function CaptureScreen() {
     try {
       await sendCapture(buildPayload());
       showMessage('Sent to server!');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       reset();
     } catch {
       showMessage('Server unreachable. Saved to inbox instead.', true);
@@ -182,8 +185,8 @@ const styles = StyleSheet.create({
   toast: {
     backgroundColor: colors.successMuted,
     borderRadius: radii.md,
-    padding: 10,
-    marginBottom: 14,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
     alignItems: 'center',
   },
   toastError: {
@@ -228,7 +231,7 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: spacing.sm,
     marginTop: spacing.xl,
   },
   btn: {

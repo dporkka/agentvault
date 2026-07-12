@@ -4,7 +4,7 @@ import { api } from '@/api/client';
 import { useApi } from '@/hooks/useApi';
 import EmptyState from '@/components/EmptyState';
 import type { SearchResult } from '@agentvault/contract';
-
+import { typeBadgeClass } from '@/utils/styles';
 const ProjectDashboard: React.FC = () => {
   const { data: projects, loading: projectsLoading, error: projectsError } = useApi(
     () => api.getProjects(),
@@ -17,7 +17,6 @@ const ProjectDashboard: React.FC = () => {
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
   const navigate = useNavigate();
-
   // Load notes when project is selected
   useEffect(() => {
     if (!selectedProject) {
@@ -48,17 +47,6 @@ const ProjectDashboard: React.FC = () => {
     loadNotes();
     return () => { cancelled = true; };
   }, [selectedProject]);
-
-  const typeBadgeClass = (type: string): string => {
-    switch (type) {
-      case 'note': return 'type-badge-note';
-      case 'decision': return 'type-badge-decision';
-      case 'task': return 'type-badge-task';
-      case 'meeting': return 'type-badge-meeting';
-      case 'source': return 'type-badge-source';
-      default: return 'type-badge-default';
-    }
-  };
 
   return (
     <div className="h-full flex flex-col">

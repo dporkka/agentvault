@@ -3,21 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '@/api/client';
 import { useDebounce } from '@/hooks/useDebounce';
 import EmptyState from '@/components/EmptyState';
+import { typeBadgeClass, TYPE_FILTERS, type TypeFilter } from '@/utils/styles';
+
 import type { SearchResult } from '@agentvault/contract';
-
-const TYPE_FILTERS = ['all', 'note', 'decision', 'task', 'meeting', 'source'] as const;
-type TypeFilter = (typeof TYPE_FILTERS)[number];
-
-const typeBadgeClass = (type: string): string => {
-  switch (type) {
-    case 'note': return 'type-badge-note';
-    case 'decision': return 'type-badge-decision';
-    case 'task': return 'type-badge-task';
-    case 'meeting': return 'type-badge-meeting';
-    case 'source': return 'type-badge-source';
-    default: return 'type-badge-default';
-  }
-};
 
 const SearchView: React.FC = () => {
   const [query, setQuery] = useState('');
@@ -138,6 +126,10 @@ const SearchView: React.FC = () => {
             placeholder="Search notes... (press / to focus)"
             className="w-full bg-vault-bg-tertiary border border-vault-border rounded-lg pl-10 pr-4 py-2.5 text-sm text-vault-text-primary placeholder-vault-text-muted focus:border-vault-accent focus:ring-1 focus:ring-vault-accent transition-colors outline-none"
             autoComplete="off"
+            role="combobox"
+            aria-expanded={results.length > 0}
+            aria-controls="search-results"
+            aria-activedescendant={selectedIndex >= 0 ? `result-${selectedIndex}` : undefined}
           />
           {loading && (
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -193,7 +185,7 @@ const SearchView: React.FC = () => {
       </div>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto px-6 py-3" ref={resultsRef}>
+      <div id="search-results" className="flex-1 overflow-y-auto px-6 py-3" ref={resultsRef} role="listbox" aria-label="Search results">
         {query.trim().length === 0 && !loading && (
           <EmptyState
             className="h-full"
@@ -226,6 +218,9 @@ const SearchView: React.FC = () => {
         {results.map((result, idx) => (
           <button
             key={result.id}
+            id={`result-${idx}`}
+            role="option"
+            aria-selected={selectedIndex === idx}
             onClick={() => navigate(`/note/${encodeURIComponent(result.id)}`)}
             onMouseEnter={() => setSelectedIndex(idx)}
             className={`w-full text-left p-3 rounded-lg mb-1 transition-colors group ${

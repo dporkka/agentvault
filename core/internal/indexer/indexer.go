@@ -196,8 +196,15 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 		noteID = fileID
 	}
 
+	// Begin a transaction so all writes for this file are atomic.
+	tx, err := idx.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback() // no-op after Commit
+
 	// Upsert files table
-	_, err = idx.db.Exec(`
+	_, err = tx.Exec(`
 		INSERT INTO files (id, path, content_hash, created_at, updated_at, indexed_at)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
@@ -212,7 +219,7 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 	// Upsert notes table
 	tagsStr := strings.Join(doc.Frontmatter.Tags, ", ")
 	entitiesStr := strings.Join(doc.Frontmatter.Entities, ", ")
-	_, err = idx.db.Exec(`
+	_, err = tx.Exec(`
 		INSERT INTO notes (id, file_id, title, type, status, project, created_at, updated_at, source_quality, body)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
@@ -231,12 +238,12 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 	}
 
 	// Delete and re-insert tags
-	_, err = idx.db.Exec("DELETE FROM tags WHERE note_id = ?", noteID)
+	_, err = tx.Exec("DELETE FROM tags WHERE note_id = ?", noteID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete old tags: %w", err)
 	}
 	for _, tag := range doc.Frontmatter.Tags {
-		_, err = idx.db.Exec("INSERT INTO tags (note_id, tag) VALUES (?, ?)", noteID, tag)
+		_, err = tx.Exec("INSERT INTO tags (note_id, tag) VALUES (?, ?)", noteID, tag)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert tag: %w", err)
 		}
@@ -244,15 +251,21 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 
 	// Update FTS index. notes_fts is an FTS5 virtual table, which does not
 	// support UPSERT/ON CONFLICT, so replace any existing row via delete+insert.
-	if _, err := idx.db.Exec("DELETE FROM notes_fts WHERE note_id = ?", noteID); err != nil {
+	if _, err := tx.Exec("DELETE FROM notes_fts WHERE note_id = ?", noteID); err != nil {
 		return nil, fmt.Errorf("failed to clear FTS row: %w", err)
 	}
-	_, err = idx.db.Exec(`
+	_, err = tx.Exec(`
 		INSERT INTO notes_fts (note_id, title, body, tags, entities)
 		VALUES (?, ?, ?, ?, ?)
 	`, noteID, doc.Frontmatter.Title, doc.Body, tagsStr, entitiesStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update FTS: %w", err)
+	}
+
+	// Commit the transaction before doing embeddings (which is a separate,
+	// potentially long-running operation with its own DB writes).
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	// Generate embeddings if configured

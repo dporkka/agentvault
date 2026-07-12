@@ -13,7 +13,6 @@ import (
 	"github.com/agentvault/core/internal/search"
 )
 
-var listMarkerRe = regexp.MustCompile(`^(?:[-*]|\d+\.)\s+`)
 
 // Pipeline orchestrates search + AI generation for source-grounded answers.
 type Pipeline struct {
@@ -93,17 +92,24 @@ func (p *Pipeline) Ask(ctx context.Context, question string) (*Answer, error) {
 	// 4. Build prompt with sources
 	messages := BuildPrompt(sources, question)
 
-	// 5. Call AI provider with timeout
+	// 5. Call AI provider with timeout, preferring structured JSON output
 	aiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	rawAnswer, err := p.provider.Chat(aiCtx, messages)
-	if err != nil {
-		return nil, fmt.Errorf("AI provider failed: %w", err)
+	var answer *Answer
+	if err := p.provider.ChatJSON(aiCtx, messages, answer); err != nil {
+		// Fall back to text-based parsing when structured output fails
+		rawAnswer, chatErr := p.provider.Chat(aiCtx, messages)
+		if chatErr != nil {
+			return nil, fmt.Errorf("AI provider failed: %w", chatErr)
+		}
+		answer = ParseAnswer(rawAnswer, sources)
 	}
 
-	// 6. Parse response into structured Answer
-	answer := ParseAnswer(rawAnswer, sources)
+	// 6. If ChatJSON failed to produce an answer, ParseAnswer returned one
+	if answer == nil {
+		answer = &Answer{Answer: "Unable to generate answer.", Confidence: "low"}
+	}
 
 	// 7. Always include sources
 	answer.Sources = sources
@@ -111,8 +117,26 @@ func (p *Pipeline) Ask(ctx context.Context, question string) (*Answer, error) {
 	return answer, nil
 }
 
-// ParseAnswer extracts structured information from the AI's raw response.
-// If the response doesn't follow the expected format, we use the whole thing as the answer.
+
+// isListItem reports whether line starts with a markdown list marker.
+func isListItem(line string) bool {
+	return strings.HasPrefix(line, "-") || strings.HasPrefix(line, "*") || listMarkerDigitRe.MatchString(line)
+}
+
+// listMarkerDigitRe matches lines starting with a digit followed by ".".
+var listMarkerDigitRe = regexp.MustCompile(`^\d+\.`)
+
+// trimListItem removes the leading markdown list marker from line.
+func trimListItem(line string) string {
+	line = strings.TrimSpace(line)
+	if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "*") {
+		return strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "-"), "*"))
+	}
+	return listMarkerDigitRe.ReplaceAllString(line, "")
+}
+// ParseAnswer extracts structured information from the AI's raw text response.
+// DEPRECATED: Only used as a fallback when ChatJSON (structured output) fails.
+// Prefer the JSON-structured path in Pipeline.Ask.
 func ParseAnswer(raw string, sources []Source) *Answer {
 	ans := &Answer{
 		Answer:     raw,
@@ -158,8 +182,8 @@ func ParseAnswer(raw string, sources []Source) *Answer {
 			if line == "" {
 				continue
 			}
-			if listMarkerRe.MatchString(line) {
-				action := strings.TrimSpace(listMarkerRe.ReplaceAllString(line, ""))
+			if isListItem(line) {
+				action := strings.TrimSpace(trimListItem(line))
 				ans.SuggestedActions = append(ans.SuggestedActions, action)
 			} else if strings.Contains(line, ":") && len(ans.SuggestedActions) == 0 {
 				continue

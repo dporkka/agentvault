@@ -57,25 +57,33 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ onCreated, onCancel }) => {
         </div>
 
         {/* Type */}
-        <div>
-          <label className="block text-sm font-medium text-vault-text-secondary mb-1">Type</label>
+        <fieldset>
+          <legend className="block text-sm font-medium text-vault-text-secondary mb-1">Type</legend>
           <div className="flex flex-wrap gap-1.5">
             {NOTE_TYPES.map((t) => (
-              <button
+              <label
                 key={t}
-                type="button"
-                onClick={() => setType(t)}
-                className={`px-3 py-1 text-xs font-medium rounded-full capitalize transition-colors ${
+                htmlFor={`note-type-${t}`}
+                className={`px-3 py-1 text-xs font-medium rounded-full capitalize transition-colors cursor-pointer select-none ${
                   type === t
                     ? 'bg-vault-accent text-white'
                     : 'bg-vault-bg-tertiary text-vault-text-secondary hover:bg-vault-bg-hover'
                 }`}
               >
+                <input
+                  type="radio"
+                  id={`note-type-${t}`}
+                  name="note-type"
+                  value={t}
+                  checked={type === t}
+                  onChange={() => setType(t)}
+                  className="sr-only"
+                />
                 {t}
-              </button>
+              </label>
             ))}
           </div>
-        </div>
+        </fieldset>
 
         {/* Project */}
         <div>

@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ask } from '@shared/api';
+import { renderMarkdown } from '@shared/markdown';
 import type { AskResponse, AskSource } from '@agentvault/contract';
 
 interface Message {
@@ -118,7 +119,7 @@ export function AskPanel() {
 
   return (
     <div className="ask-panel">
-      <div className="ask-panel__messages">
+      <div className="ask-panel__messages" aria-live="polite" aria-atomic="false">
         {messages.length === 0 && !loading && (
           <div className="empty-state">
             Ask your vault a question. Answers are grounded in your notes.
@@ -131,7 +132,7 @@ export function AskPanel() {
               key={m.id}
               className={`message-bubble ${isUser ? 'message-bubble--user' : 'message-bubble--assistant'}`}
             >
-              {m.text}
+              {isUser ? <span>{m.text}</span> : <span dangerouslySetInnerHTML={{ __html: renderMarkdown(m.text) }} />}
               {m.role === 'assistant' && m.response && (
                 <>
                   <Sources sources={m.response.sources} />

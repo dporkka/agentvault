@@ -30,7 +30,7 @@ type DB struct {
 // Open opens the SQLite database at <vaultPath>/.agentvault/agentvault.db.
 func Open(vaultPath string) (*DB, error) {
 	dbPath := filepath.Join(vaultPath, ".agentvault", "agentvault.db")
-	conn, err := sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)")
+	conn, err := sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database at %s: %w", dbPath, err)
 	}
@@ -38,9 +38,10 @@ func Open(vaultPath string) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	// Configure connection pool for better performance
-	conn.SetMaxOpenConns(1) // SQLite doesn't support concurrent writes
-	conn.SetMaxIdleConns(5)
+	// Configure connection pool for better performance.
+	// WAL mode allows concurrent readers; writes are serialized by SQLite.
+	conn.SetMaxOpenConns(16)
+	conn.SetMaxIdleConns(4)
 	conn.SetConnMaxLifetime(time.Hour)
 
 	return &DB{conn: conn, path: dbPath}, nil
@@ -59,6 +60,11 @@ func (d *DB) Conn() *sql.DB {
 // Path returns the database file path.
 func (d *DB) Path() string {
 	return d.path
+}
+
+// Begin starts a new database transaction.
+func (d *DB) Begin() (*sql.Tx, error) {
+	return d.conn.Begin()
 }
 
 // RunMigrations executes embedded migration SQL when available, falling back to

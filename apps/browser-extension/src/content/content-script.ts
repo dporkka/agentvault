@@ -74,5 +74,38 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (request.action === 'extractPage') {
     sendResponse(extractPageData());
   }
+  if (request.action === 'captureSuccess') {
+    showCaptureToast();
+  }
   return true;
 });
+
+function showCaptureToast(): void {
+  const toast = document.createElement('div');
+  toast.textContent = '\u2714 Saved to AgentVault';
+  Object.assign(toast.style, {
+    position: 'fixed',
+    bottom: '24px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: '#1a1d27',
+    color: '#e4e6eb',
+    border: '1px solid #2e3344',
+    borderRadius: '24px',
+    padding: '10px 20px',
+    fontSize: '13px',
+    fontFamily: 'system-ui, sans-serif',
+    fontWeight: '500',
+    zIndex: '2147483647',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+    opacity: '0',
+    transition: 'opacity 0.3s ease',
+    pointerEvents: 'none',
+  });
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => { toast.style.opacity = '1'; });
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 2000);
+}

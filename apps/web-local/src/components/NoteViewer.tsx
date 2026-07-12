@@ -2,21 +2,11 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import type { NoteDetail } from '@agentvault/contract';
+import { typeBadgeClass } from '@/utils/styles';
 
 interface NoteViewerProps {
   note: NoteDetail;
 }
-
-const typeBadgeClass = (type: string): string => {
-  switch (type) {
-    case 'note': return 'type-badge-note';
-    case 'decision': return 'type-badge-decision';
-    case 'task': return 'type-badge-task';
-    case 'meeting': return 'type-badge-meeting';
-    case 'source': return 'type-badge-source';
-    default: return 'type-badge-default';
-  }
-};
 
 const NoteViewer: React.FC<NoteViewerProps> = ({ note }) => {
   const [showRaw, setShowRaw] = useState(false);
