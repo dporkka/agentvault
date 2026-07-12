@@ -74,7 +74,7 @@ export interface ApiClient {
   verifyAuth(): Promise<AuthVerifyResponse>;
   getVaultStatus(): Promise<VaultStatus>;
   triggerIndex(opts?: IndexOptions): Promise<IndexResult>;
-  search(params: SearchParams): Promise<SearchResult[]>;
+  search(params: SearchParams, signal?: AbortSignal): Promise<SearchResult[]>;
   getNote(id: string): Promise<NoteDetail>;
   createNote(req: CreateNoteRequest): Promise<CreateNoteResponse>;
   capture(req: CaptureRequest): Promise<CaptureResponse>;
@@ -112,7 +112,7 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
   let baseUrl = (opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
   const tokenStore = opts.tokenStore ?? inMemoryTokenStore(opts.token ?? '');
 
-  async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, auth = true): Promise<T> {
+  async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, auth = true, signal?: AbortSignal): Promise<T> {
     const url = path.startsWith('http') ? path : `${baseUrl}${path}`;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (auth) {
@@ -125,6 +125,7 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
+        signal,
       });
     } catch (err) {
       throw new ApiError(
@@ -183,9 +184,9 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     async triggerIndex(idxOpts?: IndexOptions) {
       return call<IndexResult>('POST', '/vault/index', idxOpts ?? {});
     },
-    search(params) {
+    search(params, signal?) {
       const qs = buildSearch(params);
-      return call<SearchResult[]>('GET', qs ? `/search?${qs}` : '/search', undefined, false);
+      return call<SearchResult[]>('GET', qs ? `/search?${qs}` : '/search', undefined, false, signal);
     },
     getNote(id) {
       return call<NoteDetail>('GET', `/notes/${encodeURIComponent(id)}`, undefined, false);

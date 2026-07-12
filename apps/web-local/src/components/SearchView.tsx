@@ -5,8 +5,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import EmptyState from '@/components/EmptyState';
 import { typeBadgeClass, TYPE_FILTERS, type TypeFilter } from '@/utils/styles';
 
-import type { SearchResult } from '@agentvault/contract';
-
+import type { SearchResult, SearchParams } from '@agentvault/contract';
 const SearchView: React.FC = () => {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -29,36 +28,33 @@ const SearchView: React.FC = () => {
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
 
     async function doSearch() {
-      setLoading(true);
-      setError(null);
       try {
+        setLoading(true);
+        setError(null);
         const type = typeFilter === 'all' ? undefined : typeFilter;
-        const params: import('@agentvault/contract').SearchParams = {
+        const params: SearchParams = {
           q: debouncedQuery,
           type,
           vector: vectorEnabled || undefined,
           hybridWeight: vectorEnabled ? hybridWeight : undefined,
         };
-        const res = await api.search(params);
-        if (!cancelled) {
-          setResults(res);
-          setSelectedIndex(-1);
-        }
+        const res = await api.search(params, controller.signal);
+        setResults(res);
+        setSelectedIndex(-1);
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Search failed');
-        }
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setError(err instanceof Error ? err.message : 'Search failed');
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
     }
 
     doSearch();
 
-    return () => { cancelled = true; };
+    return () => controller.abort();
   }, [debouncedQuery, typeFilter, vectorEnabled, hybridWeight]);
 
   // Keyboard shortcuts
@@ -79,7 +75,6 @@ const SearchView: React.FC = () => {
       searchInputRef.current?.blur();
     }
   }, [results, selectedIndex, navigate]);
-
   // Global "/" shortcut
   useEffect(() => {
     function onDocKeyDown(e: KeyboardEvent) {
