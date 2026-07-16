@@ -28,7 +28,7 @@ const HomeCaptureCard = memo(function HomeCaptureCard({ capture, onDelete }: Hom
 });
 
 export default function HomeScreen(_props: RootTabScreenProps<'Home'>) {
-  const [quickText, setQuickText] = useState('');
+  const [quickTags, setQuickTags] = useState('');
   const { captures, loading, refresh } = useCaptures(20);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState('');
@@ -55,11 +55,16 @@ export default function HomeScreen(_props: RootTabScreenProps<'Home'>) {
   };
 
   const handleQuickCapture = async () => {
-    const text = quickText.trim();
+    const text = quickTags.trim();
     if (!text) return;
     const title = text.length > 50 ? text.slice(0, 50) + '...' : text;
-    await addCapture({ type: 'text', title, text, tags: ['quick'] });
-    setQuickText('');
+    const tags = quickTags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    await addCapture({ type: 'text', title, text, tags: tags.length ? tags : ['quick'] });
+    setQuickTags('');
+    setQuickTags('');
     showMessage('Saved to inbox');
     refresh();
   };
@@ -92,20 +97,28 @@ export default function HomeScreen(_props: RootTabScreenProps<'Home'>) {
           style={styles.input}
           placeholder="Quick capture... jot an idea"
           placeholderTextColor={colors.textMuted}
-          value={quickText}
-          onChangeText={setQuickText}
+          value={quickTags}
+          onChangeText={setQuickTags}
           multiline
           maxLength={500}
         />
+        <TextInput
+          style={styles.tagInput}
+          placeholder="Tags (comma-separated)"
+          placeholderTextColor={colors.textMuted}
+          value={quickTags}
+          onChangeText={setQuickTags}
+          maxLength={200}
+        />
         <View style={styles.quickActions}>
-          <Text style={styles.charCount}>{quickText.length}/500</Text>
+          <Text style={styles.charCount}>{quickTags.length}/500</Text>
           <TouchableOpacity
-            style={[styles.captureBtn, !quickText.trim() && styles.captureBtnDisabled]}
+            style={[styles.captureBtn, !quickTags.trim() && styles.captureBtnDisabled]}
             onPress={handleQuickCapture}
-            disabled={!quickText.trim()}
+            disabled={!quickTags.trim()}
             accessibilityRole="button"
             accessibilityLabel="Capture idea"
-            accessibilityState={{ disabled: !quickText.trim() }}
+            accessibilityState={{ disabled: !quickTags.trim() }}
           >
             <Text style={styles.captureBtnText}>Capture</Text>
           </TouchableOpacity>
@@ -206,6 +219,14 @@ const styles = StyleSheet.create({
     minHeight: 60,
     textAlignVertical: 'top',
     lineHeight: 20,
+  },
+  tagInput: {
+    color: colors.textPrimary,
+    fontSize: typography.sizes.sm,
+    marginTop: 8,
+    paddingVertical: 4,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
   },
   quickActions: {
     flexDirection: 'row',

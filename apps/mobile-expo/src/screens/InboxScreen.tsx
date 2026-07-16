@@ -1,13 +1,14 @@
 import React, { useMemo, useState, useCallback, memo } from 'react';
 import { View, Text, FlatList, RefreshControl, Alert, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import type { Capture } from '../types';
 import { deleteCapture } from '../storage/localInbox';
 import { syncCaptures, formatSyncResult, isSyncable, canRetry } from '../storage/sync';
 import { useCaptures } from '../hooks/useCaptures';
 import CaptureCard from '../components/CaptureCard';
 import ConnectionBadge from '../components/ConnectionBadge';
-import { colors, spacing, typography } from '../theme';
+import { colors, spacing, radii, typography } from '../theme';
 
 interface GroupedCaptures {
   date: string;
@@ -80,21 +81,13 @@ const CaptureRow = memo(function CaptureRow({ capture, onDelete, onSync, onRetry
   );
 });
 
-const CaptureRow = memo(function CaptureRow({ capture, onDelete, onSync, onRetry }: CaptureRowProps) {
-  return (
-    <CaptureCard
-      capture={capture}
-      onDelete={onDelete}
-      onPress={() => onSync(capture)}
-      onRetry={onRetry}
-    />
-  );
-});
 
 export default function InboxScreen() {
   const { captures, loading, refresh } = useCaptures();
   const [filter, setFilter] = useState<Filter>('all');
   const [syncing, setSyncing] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filteredCaptures = useMemo(() => {
     if (filter === 'pending') {
@@ -172,6 +165,35 @@ export default function InboxScreen() {
     refresh();
   }, [captures, refresh]);
 
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleBatchDelete = useCallback(async () => {
+    const ids = [...selectedIds];
+    await Promise.all(ids.map((id) => deleteCapture(id)));
+    setSelectedIds(new Set());
+    setSelectMode(false);
+    refresh();
+  }, [selectedIds, refresh]);
+
+  const handleBatchSync = useCallback(async () => {
+    const ids = [...selectedIds];
+    let failed = 0;
+    for (const id of ids) {
+      const result = await syncCaptures({ captureId: id, continueOnError: true });
+      if (result.failed > 0) failed++;
+    }
+    if (failed > 0) Alert.alert('Sync', `${failed} of ${ids.length} failed to sync.`);
+    setSelectedIds(new Set());
+    setSelectMode(false);
+    refresh();
+  }, [selectedIds, refresh]);
+
   const renderItem = useCallback(({ item }: { item: ListItem }) => {
     if (item.type === 'header') {
       return <HeaderRow date={item.date} />;
@@ -182,9 +204,12 @@ export default function InboxScreen() {
         onDelete={handleDelete}
         onSync={handleSyncOne}
         onRetry={handleRetryOne}
+        selectMode={selectMode}
+        selected={selectedIds.has(item.capture.id)}
+        onToggleSelect={handleToggleSelect}
       />
     );
-  }, [handleDelete, handleSyncOne, handleRetryOne]);
+  }, [handleDelete, handleSyncOne, handleRetryOne, selectMode, selectedIds, handleToggleSelect]);
 
   const keyExtractor = useCallback((item: ListItem) => item.id, []);
 
@@ -219,6 +244,16 @@ export default function InboxScreen() {
           >
             <Text style={styles.retryAllText}>Retry all</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterBtn, selectMode && styles.filterBtnActive]}
+            onPress={() => { setSelectMode((m) => !m); setSelectedIds(new Set()); }}
+            accessibilityRole="button"
+            accessibilityLabel={selectMode ? 'Cancel selection' : 'Select captures'}
+          >
+            <Text style={[styles.filterText, selectMode && styles.filterTextActive]}>
+              {selectMode ? 'Cancel' : 'Select'}
+            </Text>
+          </TouchableOpacity>
           <ConnectionBadge />
         </View>
       </View>
@@ -238,6 +273,29 @@ export default function InboxScreen() {
         }
         contentContainerStyle={items.length === 0 ? styles.emptyContainer : undefined}
       />
+
+      {selectMode && (
+        <View style={styles.batchBar}>
+          <TouchableOpacity
+            style={styles.batchDeleteBtn}
+            onPress={handleBatchDelete}
+            disabled={selectedIds.size === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Delete selected captures"
+          >
+            <Text style={styles.batchDeleteText}>Delete ({selectedIds.size})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.batchSyncBtn}
+            onPress={handleBatchSync}
+            disabled={selectedIds.size === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Sync selected captures"
+          >
+            <Text style={styles.batchSyncText}>Sync ({selectedIds.size})</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -330,5 +388,62 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  batchBar: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+  },
+  batchDeleteBtn: {
+    flex: 1,
+    backgroundColor: colors.errorMuted,
+    borderRadius: radii.md,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
+  batchDeleteText: {
+    color: colors.error,
+    fontWeight: typography.weights.semibold,
+    fontSize: typography.sizes.sm,
+  },
+  batchSyncBtn: {
+    flex: 1,
+    backgroundColor: colors.successMuted,
+    borderRadius: radii.md,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.success,
+  },
+  batchSyncText: {
+    color: colors.success,
+    fontWeight: typography.weights.semibold,
+    fontSize: typography.sizes.sm,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: colors.borderSubtle,
+    marginRight: 10,
+    marginTop: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  selectRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  selectCardFlex: {
+    flex: 1,
   },
 });

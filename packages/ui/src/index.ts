@@ -6,3 +6,6 @@ export type { TypeBadgeProps } from './components/TypeBadge';
 
 export { CommandPalette } from './components/CommandPalette';
 export type { CommandPaletteProps, SearchResult } from './components/CommandPalette';
+
+export { Toast } from './components/Toast';
+export type { ToastProps } from './components/Toast';

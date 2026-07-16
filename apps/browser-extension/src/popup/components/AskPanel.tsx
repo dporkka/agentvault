@@ -81,12 +81,35 @@ function LoadingBubble() {
   );
 }
 
+const STORAGE_KEY = 'askpanel.messages';
+
 export function AskPanel() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
+
+  // Restore messages from session storage on mount
+  useEffect(() => {
+    chrome.storage.session.get(STORAGE_KEY).then((result) => {
+      if (result[STORAGE_KEY]) setMessages(result[STORAGE_KEY]);
+    });
+  }, []);
+
+  // Persist messages on every change
+  useEffect(() => {
+    chrome.storage.session.set({ [STORAGE_KEY]: messages });
+  }, [messages]);
+
+  // Listen for external storage changes
+  useEffect(() => {
+    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (changes[STORAGE_KEY]?.newValue) setMessages(changes[STORAGE_KEY].newValue);
+    };
+    chrome.storage.session.onChanged.addListener(listener);
+    return () => chrome.storage.session.onChanged.removeListener(listener);
+  }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -116,7 +139,6 @@ export function AskPanel() {
       setLoading(false);
     }
   }, [input, loading]);
-
   return (
     <div className="ask-panel">
       <div className="ask-panel__messages" aria-live="polite" aria-atomic="false">

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { searchVault, getNote } from '@shared/api';
+import { searchVault, getNote, getProjects } from '@shared/api';
 import type { SearchResult, NoteDetail } from '@shared/types';
 
 const NOTE_TYPES = [
@@ -27,6 +27,8 @@ export function SearchPanel() {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
+  const [projects, setProjects] = useState<string[]>([]);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,6 +41,10 @@ export function SearchPanel() {
   const detailModalRef = useRef<HTMLDivElement>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
 
+
+  useEffect(() => {
+    getProjects().then(setProjects).catch(() => {});
+  }, []);
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return;
     setLoading(true); setError(''); setSearched(true);
@@ -48,6 +54,7 @@ export function SearchPanel() {
         q: query,
         type: typeFilter || undefined,
         status: statusFilter || undefined,
+        project: projectFilter || undefined,
         vector: vectorEnabled || undefined,
         hybridWeight: vectorEnabled ? hybridWeight : undefined,
       };
@@ -58,7 +65,7 @@ export function SearchPanel() {
     } finally {
       setLoading(false);
     }
-  }, [query, typeFilter, statusFilter, vectorEnabled, hybridWeight]);
+  }, [query, typeFilter, statusFilter, projectFilter, vectorEnabled, hybridWeight]);
 
   const openDetail = useCallback(async (id: string) => {
     setDetailLoading(true); setDetailError('');
@@ -135,6 +142,17 @@ export function SearchPanel() {
           >
             {STATUSES.map((s) => (
               <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+          <select
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+            className="select flex-1"
+            aria-label="Filter by project"
+          >
+            <option value="">All projects</option>
+            {projects.map((p) => (
+              <option key={p} value={p}>{p}</option>
             ))}
           </select>
         </div>
