@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import VaultStatus from './VaultStatus';
 import ConnectionModal from './ConnectionModal';
+import { CommandPalette } from '@agentvault/ui';
 import { api } from '@/api/client';
 import type { VaultStatus as VaultStatusType } from '@agentvault/contract';
 
@@ -17,6 +18,7 @@ const Layout: React.FC = () => {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(true);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const checkConnection = async () => {
     try {
@@ -132,12 +134,27 @@ const Layout: React.FC = () => {
           <Outlet />
         </main>
       </div>
-
       <ConnectionModal
         open={showConnectionModal}
         onClose={() => {
           setShowConnectionModal(false);
           checkConnection();
+        }}
+      />
+      <CommandPalette
+        isOpen={paletteOpen}
+        onToggle={() => setPaletteOpen(p => !p)}
+        onSelectNote={(id) => { navigate(`/note/${id}`); setPaletteOpen(false); }}
+        onSelectAction={(action) => {
+          if (action.startsWith('/')) { navigate(action); }
+          else if (action === 'new-note') { navigate('/new'); }
+          else if (action === 'capture') { navigate('/capture'); }
+          else if (action === 'ask') { navigate('/ask'); }
+          setPaletteOpen(false);
+        }}
+        searchNotes={async (q, limit) => {
+          const results = await api.search({ q, limit });
+          return results.map(r => ({ id: r.id, title: r.title, type: r.type, path: r.path, snippet: r.snippet }));
         }}
       />
     </div>
