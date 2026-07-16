@@ -50,7 +50,35 @@ interface CaptureRowProps {
   onDelete: (id: string) => void;
   onSync: (cap: Capture) => void;
   onRetry: (cap: Capture) => void;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
+
+const CaptureRow = memo(function CaptureRow({ capture, onDelete, onSync, onRetry, selectMode, selected, onToggleSelect }: CaptureRowProps) {
+  return (
+    <View style={selectMode && styles.selectRow}>
+      {selectMode && (
+        <TouchableOpacity
+          style={[styles.checkbox, selected && styles.checkboxActive]}
+          onPress={() => onToggleSelect?.(capture.id)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: selected }}
+        >
+          {selected && <Ionicons name="checkmark" size={14} color={colors.textPrimary} />}
+        </TouchableOpacity>
+      )}
+      <View style={selectMode && styles.selectCardFlex}>
+        <CaptureCard
+          capture={capture}
+          onDelete={onDelete}
+          onPress={selectMode ? undefined : () => onSync(capture)}
+          onRetry={onRetry}
+        />
+      </View>
+    </View>
+  );
+});
 
 const CaptureRow = memo(function CaptureRow({ capture, onDelete, onSync, onRetry }: CaptureRowProps) {
   return (
