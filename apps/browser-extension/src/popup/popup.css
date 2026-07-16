@@ -1,3 +1,6 @@
+@import '@agentvault/ui/tokens.css';
+
+/* Extension-specific overrides */
 :root {
   /* Backgrounds */
   --av-bg-primary: #0f1117;

@@ -1,5 +1,6 @@
 // Central theme tokens for AgentVault Mobile.
-// Keep this file dependency-free so it can be imported anywhere.
+// Keep in sync with @agentvault/ui/tokens.css (canonical source).
+// This file is dependency-free so it can be imported anywhere.
 
 export const colors = {
   // Backgrounds
