@@ -1,0 +1,1105 @@
+openapi: "3.1.0"
+info:
+  title: AgentVault Local API
+  description: |
+    Local-first knowledge vault with Markdown-native storage, full-text +
+    vector hybrid search, source-grounded RAG, multi-turn AI conversations,
+    knowledge graph, file watching, daily notes, and agent workspace protocol.
+
+    All endpoints return `application/json`.  The server binds `127.0.0.1:47321`
+    by default.  `GET` endpoints are open; write endpoints require the auth
+    token (printed at startup) in `X-AgentVault-Token` or `Authorization: Bearer <token>`.
+
+    This spec is the **canonical source** for the API contract.  The Go types
+    in `core/internal/contract/` and the TypeScript types in
+    `packages/contract/src/` must stay in sync with this file.
+  version: "0.2.0"
+  contact:
+    name: AgentVault
+    url: https://github.com/dporkka/agentvault
+
+servers:
+  - url: http://127.0.0.1:47321
+    description: Default local server
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Vault
+  - name: Notes
+  - name: Links
+  - name: Capture
+  - name: Ask
+  - name: Lists
+  - name: Daily
+  - name: Graph
+  - name: Conversations
+  - name: Git
+
+components:
+  securitySchemes:
+    AgentVaultToken:
+      type: apiKey
+      in: header
+      name: X-AgentVault-Token
+      description: Random token printed by `agentvault serve` at startup.
+
+  schemas:
+    # ── Health ──
+    HealthResponse:
+      type: object
+      required: [status, vault, version]
+      properties:
+        status:
+          type: string
+          example: "ok"
+        vault:
+          type: string
+          example: "/home/user/vault"
+        version:
+          type: string
+          example: "0.2.0"
+
+    # ── Auth ──
+    AuthVerifyResponse:
+      type: object
+      required: [status, server, version, hasToken, tokenValid]
+      properties:
+        status:
+          type: string
+          example: "ok"
+        server:
+          type: string
+          example: "agentvault"
+        version:
+          type: string
+          example: "0.2.0"
+        hasToken:
+          type: boolean
+        tokenValid:
+          type: boolean
+
+    # ── Vault ──
+    VaultStatus:
+      type: object
+      required: [path, isVault]
+      properties:
+        path:
+          type: string
+        isVault:
+          type: boolean
+        noteCount:
+          type: integer
+        version:
+          type: string
+          format: date-time
+        watching:
+          type: boolean
+          description: "File watcher active"
+
+    IndexOptions:
+      type: object
+      properties:
+        force:
+          type: boolean
+        rebuild:
+          type: boolean
+        path:
+          type: string
+        embed:
+          type: boolean
+
+    IndexResult:
+      type: object
+      required: [scanned, added, updated, removed, skipped, duration]
+      properties:
+        scanned:
+          type: integer
+        added:
+          type: integer
+        updated:
+          type: integer
+        removed:
+          type: integer
+        skipped:
+          type: integer
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/IndexError"
+          nullable: true
+        chunksAdded:
+          type: integer
+        embedErrors:
+          type: integer
+        duration:
+          type: integer
+          description: "nanoseconds"
+
+    IndexError:
+      type: object
+      required: [path, error]
+      properties:
+        path:
+          type: string
+        error:
+          type: string
+
+    # ── Search ──
+    SearchResult:
+      type: object
+      required: [id, title, path, type]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        path:
+          type: string
+        type:
+          type: string
+          enum: [note
+        project:
+          type: string
+        status:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        snippet:
+          type: string
+        score:
+          type: number
+        updatedAt:
+          type: string
+
+    # ── Notes ──
+    NoteDetail:
+      type: object
+      required: [id, title, path, type, content]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        path:
+          type: string
+        type:
+          type: string
+        project:
+          type: string
+        status:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        content:
+          type: string
+          description: "Raw markdown with frontmatter"
+
+    CreateNoteRequest:
+      type: object
+      required: [title]
+      properties:
+        type:
+          type: string
+          default: "note"
+          enum: [note
+        title:
+          type: string
+        project:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    CreateNoteResponse:
+      type: object
+      required: [path, id]
+      properties:
+        path:
+          type: string
+        id:
+          type: string
+
+    UpdateNoteRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+        project:
+          type: string
+
+    UpdateNoteResponse:
+      type: object
+      required: [path, id]
+      properties:
+        path:
+          type: string
+        id:
+          type: string
+
+    DeleteNoteResponse:
+      type: object
+      required: [path, id]
+      properties:
+        path:
+          type: string
+          example: "90-archive/note.md"
+        id:
+          type: string
+
+    AnnotateRequest:
+      type: object
+      properties:
+        agentName:
+          type: string
+        notes:
+          type: string
+        status:
+          type: string
+          enum: [claimed
+        priority:
+          type: integer
+        extra:
+          type: object
+          additionalProperties:
+            type: string
+
+    # ── Links ──
+    Link:
+      type: object
+      required: [id, fromNoteId, rawTarget, linkType]
+      properties:
+        id:
+          type: integer
+        fromNoteId:
+          type: string
+        toNoteId:
+          type: string
+          nullable: true
+        rawTarget:
+          type: string
+        linkType:
+          type: string
+          enum: [wiki
+
+    NoteLinks:
+      type: object
+      required: [backlinks, outgoing]
+      properties:
+        backlinks:
+          type: array
+          items:
+              $ref: "#/components/schemas/Link"
+        outgoing:
+          type: array
+          items:
+              $ref: "#/components/schemas/Link"
+
+    # ── Capture ──
+    CaptureRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          default: "webpage"
+        title:
+          type: string
+          default: "Untitled Capture"
+        url:
+          type: string
+        text:
+          type: string
+        project:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        external_id:
+          type: string
+          description: "Idempotency key"
+
+    CaptureResponse:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: string
+
+    # ── Ask ──
+    AskRequest:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+        useVector:
+          type: boolean
+        hybridWeight:
+          type: number
+          minimum: 0
+          maximum: 1
+        topK:
+          type: integer
+        maxSources:
+          type: integer
+
+    AskSource:
+      type: object
+      required: [id, path, title]
+      properties:
+        id:
+          type: string
+        path:
+          type: string
+        title:
+          type: string
+        excerpt:
+          type: string
+
+    AskResponse:
+      type: object
+      required: [answer, sources, confidence]
+      properties:
+        answer:
+          type: string
+        sources:
+          type: array
+          items:
+              $ref: "#/components/schemas/AskSource"
+        confidence:
+          type: string
+          enum: [high
+        caveats:
+          type: array
+          items:
+            type: string
+        missingInfo:
+          type: string
+        suggestedActions:
+          type: array
+          items:
+            type: string
+
+    # ── Daily ──
+    DailyResponse:
+      type: object
+      required: [path, date, title, content]
+      properties:
+        path:
+          type: string
+        date:
+          type: string
+          format: date
+        title:
+          type: string
+        content:
+          type: string
+
+    # ── Graph ──
+    GraphNode:
+      type: object
+      required: [id, title, type]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        type:
+          type: string
+        project:
+          type: string
+
+    GraphEdge:
+      type: object
+      required: [fromId, toId, linkType]
+      properties:
+        fromId:
+          type: string
+        toId:
+          type: string
+        linkType:
+          type: string
+
+    Graph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          items:
+              $ref: "#/components/schemas/GraphNode"
+        edges:
+          type: array
+          items:
+              $ref: "#/components/schemas/GraphEdge"
+
+    # ── Conversations ──
+    Conversation:
+      type: object
+      required: [id, title, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+              $ref: "#/components/schemas/ConversationMessage"
+
+    ConversationMessage:
+      type: object
+      required: [id, role, content, createdAt]
+      properties:
+        id:
+          type: integer
+        role:
+          type: string
+          enum: [user
+        content:
+          type: string
+        sourcesJson:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateConversationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          default: "Untitled"
+
+    ConversationAskRequest:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+
+    # ── Git ──
+    GitModifiedFile:
+      type: object
+      required: [path, staged]
+      properties:
+        path:
+          type: string
+        staged:
+          type: boolean
+
+    GitStatus:
+      type: object
+      required: [branch, clean, isGitRepo]
+      properties:
+        branch:
+          type: string
+        clean:
+          type: boolean
+        ahead:
+          type: integer
+        behind:
+          type: integer
+        modifiedFiles:
+          type: array
+          items:
+              $ref: "#/components/schemas/GitModifiedFile"
+        untrackedFiles:
+          type: array
+          items:
+            type: string
+        isGitRepo:
+          type: boolean
+
+    # ── Common ──
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        detail:
+          type: string
+
+paths:
+  # ═══════════════════════════════════════════════════════════════════
+  # Health
+  # ═══════════════════════════════════════════════════════════════════
+  /health:
+    get:
+      tags: [Health]
+      summary: Server health and identity
+      operationId: checkHealth
+      responses:
+        '200':
+          description: Server is running
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/HealthResponse'
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Auth
+  # ═══════════════════════════════════════════════════════════════════
+  /auth/verify:
+    get:
+      tags: [Auth]
+      summary: Verify stored auth token
+      operationId: verifyAuth
+      responses:
+        '200':
+          description: Token validity check
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/AuthVerifyResponse'
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Vault
+  # ═══════════════════════════════════════════════════════════════════
+  /vault/status:
+    get:
+      tags: [Vault]
+      summary: Vault metadata and indexing status
+      operationId: getVaultStatus
+      responses:
+        '200':
+          description: Vault status
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/VaultStatus'
+
+  /vault/index:
+    post:
+      tags: [Vault]
+      summary: Trigger vault indexing
+      operationId: triggerIndex
+      security: [{ AgentVaultToken: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+            $ref: '#/components/schemas/IndexOptions'
+      responses:
+        '200':
+          description: Indexing results
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/IndexResult'
+        '401': $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Search
+  # ═══════════════════════════════════════════════════════════════════
+  /search:
+    get:
+      tags: [Lists]
+      summary: Full-text and hybrid search
+      operationId: search
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search query text
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: project
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+        - name: vector
+          in: query
+          schema:
+            type: boolean
+        - name: hybrid_weight
+          in: query
+          schema:
+            type: number
+        - name: topk
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Search results (array)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+            $ref: "#/components/schemas/SearchResult"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Notes CRUD
+  # ═══════════════════════════════════════════════════════════════════
+  /notes/{id}:
+    get:
+      tags: [Notes]
+      summary: Read a note by ID
+      operationId: getNote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Note with full content
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/NoteDetail'
+        '404': $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Notes]
+      summary: Update a note
+      operationId: updateNote
+      security: [{ AgentVaultToken: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+            $ref: '#/components/schemas/UpdateNoteRequest'
+      responses:
+        '200':
+          description: Updated note metadata
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/UpdateNoteResponse'
+        '401': $ref: "#/components/schemas/ErrorResponse"
+        '404': $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Notes]
+      summary: Archive a note (soft delete)
+      operationId: deleteNote
+      security: [{ AgentVaultToken: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Note archived to 90-archive/
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/DeleteNoteResponse'
+        '401': $ref: "#/components/schemas/ErrorResponse"
+        '404': $ref: "#/components/schemas/ErrorResponse"
+
+  /notes:
+    post:
+      tags: [Notes]
+      summary: Create a new note from a template
+      operationId: createNote
+      security: [{ AgentVaultToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+            $ref: '#/components/schemas/CreateNoteRequest'
+      responses:
+        '200':
+          description: Created note metadata
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/CreateNoteResponse'
+        '400': $ref: "#/components/schemas/ErrorResponse"
+        '401': $ref: "#/components/schemas/ErrorResponse"
+
+  /notes/{id}/annotate:
+    post:
+      tags: [Notes]
+      summary: Add agent annotations to a note
+      operationId: annotateNote
+      security: [{ AgentVaultToken: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+            $ref: '#/components/schemas/AnnotateRequest'
+      responses:
+        '200':
+          description: Annotation applied
+        '401': $ref: "#/components/schemas/ErrorResponse"
+        '404': $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Links
+  # ═══════════════════════════════════════════════════════════════════
+  /links/{id}:
+    get:
+      tags: [Links]
+      summary: Get backlinks and outgoing links for a note
+      operationId: getNoteLinks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Backlinks and outgoing links
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/NoteLinks'
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Capture
+  # ═══════════════════════════════════════════════════════════════════
+  /capture:
+    post:
+      tags: [Capture]
+      summary: Capture content to inbox
+      operationId: capture
+      security: [{ AgentVaultToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+            $ref: '#/components/schemas/CaptureRequest'
+      responses:
+        '200':
+          description: Capture saved
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/CaptureResponse'
+        '401': $ref: "#/components/schemas/ErrorResponse"
+        '409':
+          description: Too many captures today
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Ask
+  # ═══════════════════════════════════════════════════════════════════
+  /ask:
+    post:
+      tags: [Ask]
+      summary: Source-grounded Q&A over vault notes
+      operationId: ask
+      security: [{ AgentVaultToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+            $ref: '#/components/schemas/AskRequest'
+      responses:
+        '200':
+          description: Structured answer with sources
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/AskResponse'
+        '400': $ref: "#/components/schemas/ErrorResponse"
+        '401': $ref: "#/components/schemas/ErrorResponse"
+        '500': $ref: "#/components/schemas/ErrorResponse"
+        '502': $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Lists
+  # ═══════════════════════════════════════════════════════════════════
+  /projects:
+    get:
+      tags: [Lists]
+      summary: List all projects
+      operationId: getProjects
+      responses:
+        '200':
+          description: Project names (string array)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /recent:
+    get:
+      tags: [Lists]
+      summary: Recently updated notes
+      operationId: getRecent
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Recent notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+            $ref: "#/components/schemas/SearchResult"
+
+  /stale:
+    get:
+      tags: [Lists]
+      summary: Stale notes (not updated recently)
+      operationId: getStale
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Stale notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+            $ref: "#/components/schemas/SearchResult"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Daily
+  # ═══════════════════════════════════════════════════════════════════
+  /daily:
+    get:
+      tags: [Daily]
+      summary: Open or create today's daily note
+      operationId: getDaily
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Date in YYYY-MM-DD (default: today)
+      responses:
+        '200':
+          description: Daily note content
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/DailyResponse'
+        '400': $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Graph
+  # ═══════════════════════════════════════════════════════════════════
+  /graph:
+    get:
+      tags: [Graph]
+      summary: Knowledge graph subgraph centered on a note
+      operationId: getGraph
+      parameters:
+        - name: center
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Center note ID
+        - name: depth
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: Subgraph with nodes and edges
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/Graph'
+
+  /graph/neighbors:
+    get:
+      tags: [Graph]
+      summary: 1-hop neighborhood of a note
+      operationId: getGraphNeighbors
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Neighbor subgraph
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/Graph'
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Conversations
+  # ═══════════════════════════════════════════════════════════════════
+  /conversations:
+    get:
+      tags: [Conversations]
+      summary: List recent conversations
+      operationId: listConversations
+      responses:
+        '200':
+          description: Conversations (without messages)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+            $ref: "#/components/schemas/Conversation"
+    post:
+      tags: [Conversations]
+      summary: Create a new conversation
+      operationId: createConversation
+      security: [{ AgentVaultToken: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+            $ref: '#/components/schemas/CreateConversationRequest'
+      responses:
+        '201':
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/Conversation'
+        '401': $ref: "#/components/schemas/ErrorResponse"
+
+  /conversations/{id}:
+    get:
+      tags: [Conversations]
+      summary: Get a conversation with all messages
+      operationId: getConversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Conversation with messages
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/Conversation'
+        '404': $ref: "#/components/schemas/ErrorResponse"
+
+  /conversations/{id}/ask:
+    post:
+      tags: [Conversations]
+      summary: Ask a question within a conversation (history-aware)
+      operationId: conversationAsk
+      security: [{ AgentVaultToken: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+            $ref: '#/components/schemas/ConversationAskRequest'
+      responses:
+        '200':
+          description: Answer with sources
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/AskResponse'
+        '400': $ref: "#/components/schemas/ErrorResponse"
+        '401': $ref: "#/components/schemas/ErrorResponse"
+        '404': $ref: "#/components/schemas/ErrorResponse"
+        '502': $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Git
+  # ═══════════════════════════════════════════════════════════════════
+  /git/status:
+    get:
+      tags: [Git]
+      summary: Vault git status
+      operationId: getGitStatus
+      responses:
+        '200':
+          description: Git repository status
+          content:
+            application/json:
+              schema:
+            $ref: '#/components/schemas/GitStatus'
