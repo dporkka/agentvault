@@ -249,6 +249,31 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 		}
 	}
 
+	// Delete and re-insert links for this file
+	_, err = tx.Exec("DELETE FROM links WHERE from_note_id = ?", noteID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete old links: %w", err)
+	}
+	for _, wl := range doc.WikiLinks {
+		// Try to resolve the target note by title (fuzzy) or by path
+		var toNoteID *string
+		var targetRow = tx.QueryRow(
+			"SELECT id FROM notes WHERE title = ? OR id = ?",
+			wl.Target, wl.Target,
+		)
+		var resolved string
+		if err := targetRow.Scan(&resolved); err == nil {
+			toNoteID = &resolved
+		}
+		_, err = tx.Exec(
+			"INSERT INTO links (from_note_id, to_note_id, raw_target, link_type) VALUES (?, ?, ?, ?)",
+			noteID, toNoteID, wl.Target, "wiki",
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert link: %w", err)
+		}
+	}
+
 	// Update FTS index. notes_fts is an FTS5 virtual table, which does not
 	// support UPSERT/ON CONFLICT, so replace any existing row via delete+insert.
 	if _, err := tx.Exec("DELETE FROM notes_fts WHERE note_id = ?", noteID); err != nil {

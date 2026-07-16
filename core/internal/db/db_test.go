@@ -51,12 +51,12 @@ func TestRunMigrations(t *testing.T) {
 
 	// Verify migration was recorded
 	var version int
-	err = db.QueryRow("SELECT version FROM schema_migrations LIMIT 1").Scan(&version)
+	err = db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version)
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 1 {
-		t.Errorf("Expected migration version 1, got %d", version)
+	if version != 2 {
+		t.Errorf("Expected migration version 2, got %d", version)
 	}
 
 	// Verify tables exist
@@ -153,8 +153,8 @@ func TestRunMigrationsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 1 {
-		t.Errorf("Expected migration version 1, got %d", version)
+	if version != 2 {
+		t.Errorf("Expected migration version 2, got %d", version)
 	}
 }
 

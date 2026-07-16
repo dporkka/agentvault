@@ -11,10 +11,15 @@ import type {
   CaptureResponse,
   CreateNoteRequest,
   CreateNoteResponse,
+  UpdateNoteRequest,
+  UpdateNoteResponse,
+  DeleteNoteResponse,
   GitStatus,
+  Graph,
   HealthResponse,
   IndexOptions,
   IndexResult,
+  NoteLinks,
   NoteDetail,
   Projects,
   RecentParams,
@@ -24,7 +29,7 @@ import type {
   VaultStatus,
 } from './types';
 
-type Method = 'GET' | 'POST';
+type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 export interface EndpointDef<Req, Res> {
   method: Method;
@@ -38,7 +43,6 @@ export type NoRequest = never;
 
 // routes is the authoritative list. Anything not here is not a server
 // route. Keep this list in sync with `core/internal/api/server.go`'s
-// RegisterRoutes and with docs/API_CONTRACT.md.
 export const routes: {
   readonly health: EndpointDef<NoRequest, HealthResponse>;
   readonly authVerify: EndpointDef<NoRequest, AuthVerifyResponse>;
@@ -46,6 +50,9 @@ export const routes: {
   readonly vaultIndex: EndpointDef<IndexOptions | undefined, IndexResult>;
   readonly search: EndpointDef<SearchParams, SearchResult[]>;
   readonly noteById: EndpointDef<{ id: string }, NoteDetail>;
+  readonly noteLinks: EndpointDef<{ id: string }, NoteLinks>;
+  readonly updateNote: EndpointDef<UpdateNoteRequest, UpdateNoteResponse>;
+  readonly deleteNote: EndpointDef<{ id: string }, DeleteNoteResponse>;
   readonly createNote: EndpointDef<CreateNoteRequest, CreateNoteResponse>;
   readonly capture: EndpointDef<CaptureRequest, CaptureResponse>;
   readonly ask: EndpointDef<AskRequest, AskResponse>;
@@ -53,6 +60,8 @@ export const routes: {
   readonly recent: EndpointDef<RecentParams | undefined, SearchResult[]>;
   readonly stale: EndpointDef<StaleParams | undefined, SearchResult[]>;
   readonly gitStatus: EndpointDef<NoRequest, GitStatus>;
+  readonly graph: EndpointDef<{ center: string; depth?: number }, Graph>;
+  readonly graphNeighbors: EndpointDef<{ id: string }, Graph>;
 } = {
   health: {
     method: 'GET',
@@ -96,12 +105,33 @@ export const routes: {
     request: undefined as unknown as { id: string },
     response: undefined as unknown as NoteDetail,
   },
+  noteLinks: {
+    method: 'GET',
+    path: '/links/{id}',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as NoteLinks,
+  },
   createNote: {
     method: 'POST',
     path: '/notes',
     auth: true,
     request: undefined as unknown as CreateNoteRequest,
     response: undefined as unknown as CreateNoteResponse,
+  },
+  updateNote: {
+    method: 'PUT' as const,
+    path: '/notes/{id}',
+    auth: true,
+    request: undefined as unknown as UpdateNoteRequest,
+    response: undefined as unknown as UpdateNoteResponse,
+  },
+  deleteNote: {
+    method: 'DELETE' as const,
+    path: '/notes/{id}',
+    auth: true,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as DeleteNoteResponse,
   },
   capture: {
     method: 'POST',
@@ -144,6 +174,20 @@ export const routes: {
     auth: false,
     request: undefined as never,
     response: undefined as unknown as GitStatus,
+  },
+  graph: {
+    method: 'GET',
+    path: '/graph',
+    auth: false,
+    request: undefined as unknown as { center: string; depth?: number },
+    response: undefined as unknown as Graph,
+  },
+  graphNeighbors: {
+    method: 'GET',
+    path: '/graph/neighbors',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as Graph,
   },
 };
 

@@ -37,9 +37,8 @@ function isBackoffElapsed(capture: Capture): boolean {
  * Updates each capture's syncStatus through the lifecycle
  * (unsynced -> syncing -> synced | failed) and returns a summary.
  *
- * TODO: Pass the local capture `id` as an idempotency key once the server
- * `/capture` endpoint accepts an optional `externalId` field. Until then,
- * retries may create duplicate inbox files on the server.
+ * The local capture `id` is passed as an idempotency key so the
+ * server can skip duplicates on retry.
  */
 export async function syncCaptures(options: SyncOptions = {}): Promise<SyncResult> {
   const { continueOnError = true, captureId, force = false } = options;
@@ -63,9 +62,9 @@ export async function syncCaptures(options: SyncOptions = {}): Promise<SyncResul
         text: cap.text,
         project: cap.project,
         tags: cap.tags,
-      });
-      await markAsSynced(cap.id);
+      }, cap.id);
       result.sent++;
+      await markAsSynced(cap.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sync failed';
       await markAsFailed(cap.id, message);

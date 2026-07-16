@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import { EmptyState, TypeBadge } from '@agentvault/ui';
 import type { NoteDetail } from '@agentvault/contract';
+import { useApi } from '../hooks/useApi';
+import { api } from '../api/client';
 import { typeBadgeClass } from '@/utils/styles';
 
 interface NoteViewerProps {
@@ -70,9 +73,107 @@ const NoteViewer: React.FC<NoteViewerProps> = ({ note }) => {
             <ReactMarkdown>{note.content}</ReactMarkdown>
           </div>
         )}
+
+        {/* Linked References */}
+        <div className="mt-8 border-t border-vault-border pt-6">
+          <h3 className="text-sm font-semibold text-vault-text-secondary mb-4">Linked References</h3>
+          <LinkedReferences noteId={note.id} />
+        </div>
       </div>
     </div>
   );
 };
 
 export default NoteViewer;
+
+interface LinkedReferencesProps {
+  noteId: string;
+}
+
+const LinkedReferences: React.FC<LinkedReferencesProps> = ({ noteId }) => {
+  const navigate = useNavigate();
+  const { data: links, loading } = useApi(
+    () => api.getNoteLinks(noteId),
+    [noteId]
+  );
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-4">
+        <svg className="animate-spin h-5 w-5 text-vault-text-muted" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+      </div>
+    );
+  }
+
+  const hasBacklinks = links && links.backlinks.length > 0;
+  const hasOutgoing = links && links.outgoing.length > 0;
+
+  if (!hasBacklinks && !hasOutgoing) {
+    return (
+      <EmptyState
+        title="No linked references"
+        subtitle="Other notes that link to or from this note will appear here."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {hasBacklinks && (
+        <div>
+          <h4 className="text-xs font-semibold text-vault-text-muted uppercase tracking-wider mb-2">
+            Backlinks
+          </h4>
+          <div className="space-y-1.5">
+            {links!.backlinks.map((link) => (
+              <button
+                key={link.id}
+                onClick={() => navigate(`/note/${link.fromNoteId}`)}
+                className="w-full text-left p-3 rounded-lg border border-vault-border bg-vault-bg-secondary hover:bg-vault-bg-hover transition-colors"
+              >
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <span className="text-sm text-vault-text-primary truncate">
+                    {link.rawTarget || link.fromNoteId}
+                  </span>
+                  <TypeBadge type={link.linkType} />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {hasOutgoing && (
+        <div>
+          <h4 className="text-xs font-semibold text-vault-text-muted uppercase tracking-wider mb-2">
+            Outgoing Links
+          </h4>
+          <div className="space-y-1.5">
+            {links!.outgoing.map((link) => (
+              <button
+                key={link.id}
+                onClick={() => link.toNoteId && navigate(`/note/${link.toNoteId}`)}
+                disabled={!link.toNoteId}
+                className={`w-full text-left p-3 rounded-lg border border-vault-border bg-vault-bg-secondary transition-colors ${
+                  link.toNoteId
+                    ? 'hover:bg-vault-bg-hover cursor-pointer'
+                    : 'opacity-50 cursor-default'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <span className="text-sm text-vault-text-primary truncate">
+                    {link.rawTarget || link.toNoteId || 'Unresolved'}
+                  </span>
+                  <TypeBadge type={link.linkType} />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+

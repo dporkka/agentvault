@@ -32,6 +32,7 @@ The token is printed at startup.`,
 var servePort int
 var serveHost string
 var serveOpen bool
+var serveWatch bool
 
 // serveStopSignal returns a channel that is closed when the server should shut
 // down. It is overridable in tests so the serve loop can be stopped without
@@ -52,6 +53,7 @@ func init() {
 	serveCmd.Flags().IntVar(&servePort, "port", 47321, "Port to listen on")
 	serveCmd.Flags().StringVar(&serveHost, "host", "127.0.0.1", "Host to bind to (default: localhost only)")
 	serveCmd.Flags().BoolVar(&serveOpen, "open", false, "Open the web UI in the default browser")
+	serveCmd.Flags().BoolVar(&serveWatch, "watch", false, "Watch vault for .md file changes and auto-reindex")
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
@@ -68,6 +70,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 	// 3. Create server
 	srv := api.NewServer(vp, database)
 	srv.RegisterRoutes()
+
+	// 3b. Start file watcher if --watch flag is set
+	if serveWatch {
+		if err := srv.StartWatcher(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not start file watcher: %v\n", err)
+		}
+	}
 
 	addr := fmt.Sprintf("%s:%d", serveHost, servePort)
 

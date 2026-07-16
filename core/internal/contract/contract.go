@@ -85,6 +85,7 @@ type VaultStatus struct {
 	Path      string `json:"path"`
 	IsVault   bool   `json:"isVault"`
 	NoteCount int    `json:"noteCount"`
+	Watching  bool   `json:"watching"`
 	Version   string `json:"version"`
 }
 
@@ -106,4 +107,95 @@ type GitModifiedFile struct {
 	Path   string `json:"path"`
 	Status string `json:"status"`
 	Staged bool   `json:"staged"`
+}
+
+// Link represents a link between two notes. It is populated during indexing
+// from wiki links and markdown links in note bodies.
+type Link struct {
+	ID          int     `json:"id"`
+	FromNoteID  string  `json:"fromNoteId"`
+	ToNoteID    *string `json:"toNoteId"`
+	RawTarget   string  `json:"rawTarget"`
+	LinkType    string  `json:"linkType"`
+}
+
+// NoteLinks groups backlinks and outgoing links for a note.
+type NoteLinks struct {
+	Backlinks []Link `json:"backlinks"`
+	Outgoing  []Link `json:"outgoing"`
+}
+
+// UpdateNoteRequest is the body for PUT /notes/{id}. All fields are optional;
+// only supplied fields overwrite the existing note's frontmatter or body.
+type UpdateNoteRequest struct {
+	Title   *string  `json:"title,omitempty"`
+	Content *string  `json:"content,omitempty"`
+	Tags    []string `json:"tags,omitempty"`
+	Status  *string  `json:"status,omitempty"`
+	Project *string  `json:"project,omitempty"`
+}
+
+// UpdateNoteResponse is the body returned after a successful note update.
+type UpdateNoteResponse struct {
+	Path string `json:"path"`
+	ID   string `json:"id"`
+}
+
+// GraphNode is a vertex in the knowledge graph returned by GET /graph.
+type GraphNode struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Type    string `json:"type"`
+	Project string `json:"project"`
+}
+
+// GraphEdge is a directed edge between two notes returned by GET /graph.
+type GraphEdge struct {
+	FromID   string `json:"fromId"`
+	ToID     string `json:"toId"`
+	LinkType string `json:"linkType"`
+}
+
+// Graph is a subgraph returned by GET /graph and GET /graph/neighbors.
+type Graph struct {
+	Nodes []GraphNode `json:"nodes"`
+	Edges []GraphEdge `json:"edges"`
+}
+
+// Conversation represents a multi-turn AI conversation stored in the vault.
+type Conversation struct {
+	ID        string                `json:"id"`
+	Title     string                `json:"title"`
+	CreatedAt string                `json:"createdAt"`
+	UpdatedAt string                `json:"updatedAt"`
+	Messages  []ConversationMessage `json:"messages,omitempty"`
+}
+
+// ConversationMessage is a single message in a conversation.
+type ConversationMessage struct {
+	ID             int     `json:"id"`
+	Role           string  `json:"role"`
+	Content        string  `json:"content"`
+	SourcesJSON    *string `json:"sourcesJson,omitempty"`
+	CreatedAt      string  `json:"createdAt"`
+}
+
+// CreateConversationRequest is the body for POST /conversations.
+type CreateConversationRequest struct {
+	Title string `json:"title,omitempty"`
+}
+
+// ConversationAskRequest is the body for POST /conversations/{id}/ask.
+type ConversationAskRequest struct {
+	Question string `json:"question"`
+}
+
+// AnnotateRequest is the body for POST /notes/{id}/annotate.
+// Agents use this to add metadata without modifying note content.
+type AnnotateRequest struct {
+	AgentName string            `json:"agentName,omitempty"`
+	Notes     string            `json:"notes,omitempty"`
+	Status    string            `json:"status,omitempty"`
+	Priority  *int              `json:"priority,omitempty"`
+	Extra     map[string]string `json:"extra,omitempty"`
 }

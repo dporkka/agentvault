@@ -112,6 +112,7 @@ describe('sendCapture', () => {
       text: 'body',
       project: 'work',
       tags: ['idea'],
+      externalId: undefined,
     });
   });
 

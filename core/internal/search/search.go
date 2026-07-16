@@ -393,3 +393,46 @@ func (s *Searcher) scanSingle(row *sql.Row) (*Result, error) {
 	}
 	return &r, nil
 }
+
+// GetBacklinks returns all links pointing TO the given note.
+func (s *Searcher) GetBacklinks(noteID string) ([]contract.Link, error) {
+	rows, err := s.db.Query(`
+		SELECT id, from_note_id, to_note_id, raw_target, link_type
+		FROM links
+		WHERE to_note_id = ?
+		ORDER BY id
+	`, noteID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanLinks(rows)
+}
+
+// GetOutgoingLinks returns all links pointing FROM the given note.
+func (s *Searcher) GetOutgoingLinks(noteID string) ([]contract.Link, error) {
+	rows, err := s.db.Query(`
+		SELECT id, from_note_id, to_note_id, raw_target, link_type
+		FROM links
+		WHERE from_note_id = ?
+		ORDER BY id
+	`, noteID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanLinks(rows)
+}
+
+// scanLinks scans link rows into a slice.
+func scanLinks(rows *sql.Rows) ([]contract.Link, error) {
+	var links []contract.Link
+	for rows.Next() {
+		var l contract.Link
+		if err := rows.Scan(&l.ID, &l.FromNoteID, &l.ToNoteID, &l.RawTarget, &l.LinkType); err != nil {
+			return nil, err
+		}
+		links = append(links, l)
+	}
+	return links, rows.Err()
+}

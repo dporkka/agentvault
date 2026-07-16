@@ -79,6 +79,42 @@ export interface NoteDetail {
   content: string;
 }
 
+// GET /notes/{id}/links
+export interface Link {
+  id: number;
+  fromNoteId: string;
+  toNoteId: string | null;
+  rawTarget: string;
+  linkType: string;
+}
+
+export interface NoteLinks {
+  backlinks: Link[];
+  outgoing: Link[];
+}
+
+
+
+// PUT /notes/{id}
+export interface UpdateNoteRequest {
+  title?: string;
+  content?: string;
+  tags?: string[];
+  status?: string;
+  project?: string;
+}
+
+export interface UpdateNoteResponse {
+  path: string;
+  id: string;
+}
+
+// DELETE /notes/{id}
+export interface DeleteNoteResponse {
+  path: string;
+  id: string;
+}
+
 // POST /notes
 export interface CreateNoteRequest {
   type?: string;
@@ -92,6 +128,11 @@ export interface CreateNoteResponse {
   id: string;
 }
 
+export interface DeleteNoteResponse {
+  path: string;
+  id: string;
+}
+
 // POST /capture
 export interface CaptureRequest {
   type?: string;
@@ -100,6 +141,7 @@ export interface CaptureRequest {
   text?: string;
   project?: string;
   tags?: string[];
+  externalId?: string;
 }
 
 export interface CaptureResponse {
@@ -168,4 +210,48 @@ export interface RecentParams {
 export interface StaleParams {
   days?: number;
   limit?: number;
+}
+
+// GET /graph, GET /graph/neighbors
+export interface GraphNode {
+  id: string;
+  title: string;
+  type: string;
+  project: string;
+}
+
+export interface GraphEdge {
+  fromId: string;
+  toId: string;
+  linkType: string;
+}
+
+export interface Graph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+// Conversations
+export interface Conversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages?: ConversationMessage[];
+}
+
+export interface ConversationMessage {
+  id: number;
+  role: string;
+  content: string;
+  sourcesJson?: string | null;
+  createdAt: string;
+}
+
+export interface CreateConversationRequest {
+  title?: string;
+}
+
+export interface ConversationAskRequest {
+  question: string;
 }

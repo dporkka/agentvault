@@ -83,7 +83,7 @@ describe('syncCaptures', () => {
       text: 'body',
       project: 'inbox',
       tags: [],
-    });
+    }, 'cap-1');
     expect(markAsSynced).toHaveBeenCalledWith('cap-1');
     expect(result).toEqual({ sent: 1, failed: 0, skipped: 0, errors: [] });
   });
@@ -96,7 +96,7 @@ describe('syncCaptures', () => {
     const result = await syncCaptures({ captureId: 'cap-2' });
 
     expect(sendCapture).toHaveBeenCalledTimes(1);
-    expect(sendCapture).toHaveBeenCalledWith(expect.objectContaining({ title: 'Note' }));
+    expect(sendCapture).toHaveBeenCalledWith(expect.objectContaining({ title: 'Note' }), 'cap-2');
     expect(markAsSynced).toHaveBeenCalledWith('cap-2');
     expect(result.sent).toBe(1);
   });

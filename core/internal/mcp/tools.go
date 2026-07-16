@@ -8,16 +8,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/agentvault/core/internal/ai"
+	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
 	"github.com/agentvault/core/internal/rag"
 	"github.com/agentvault/core/internal/search"
 	"github.com/agentvault/core/internal/templates"
+	"gopkg.in/yaml.v3"
 )
 
 // --- JSON Schema helpers ---
@@ -182,6 +185,69 @@ func (s *Server) handleReadNote(args map[string]interface{}) (string, error) {
 	return sb.String(), nil
 }
 
+// --- Tool: agentvault.get_links ---
+
+func (s *Server) registerGetLinks() {
+	s.tools["agentvault.get_links"] = Tool{
+		Name:        "agentvault.get_links",
+		Description: "Get all backlinks and outgoing links for a note. Returns both wiki links and markdown links.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"note_id": schemaString("Note ID or file path to get links for"),
+		}, []string{"note_id"}),
+		Handler: s.handleGetLinks,
+	}
+}
+
+func (s *Server) handleGetLinks(args map[string]interface{}) (string, error) {
+	noteID := stringArg(args, "note_id")
+	if noteID == "" {
+		return "", fmt.Errorf("note_id is required")
+	}
+
+	backlinks, err := s.searcher.GetBacklinks(noteID)
+	if err != nil {
+		return "", fmt.Errorf("backlink lookup failed: %w", err)
+	}
+
+	outgoing, err := s.searcher.GetOutgoingLinks(noteID)
+	if err != nil {
+		return "", fmt.Errorf("outgoing link lookup failed: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Links for %s\n\n", noteID))
+
+	if len(backlinks) > 0 {
+		sb.WriteString("## Backlinks\n\n")
+		for _, l := range backlinks {
+			target := l.RawTarget
+			if l.ToNoteID != nil && *l.ToNoteID != "" {
+				target = *l.ToNoteID
+			}
+			sb.WriteString(fmt.Sprintf("- **%s** → `%s` (%s)\n", l.FromNoteID, target, l.LinkType))
+		}
+		sb.WriteString("\n")
+	}
+
+	if len(outgoing) > 0 {
+		sb.WriteString("## Outgoing Links\n\n")
+		for _, l := range outgoing {
+			target := l.RawTarget
+			if l.ToNoteID != nil && *l.ToNoteID != "" {
+				target = *l.ToNoteID
+			}
+			sb.WriteString(fmt.Sprintf("- **%s** → `%s` (%s)\n", l.FromNoteID, target, l.LinkType))
+		}
+		sb.WriteString("\n")
+	}
+
+	if len(backlinks) == 0 && len(outgoing) == 0 {
+		sb.WriteString("No links found for this note.\n")
+	}
+
+	return sb.String(), nil
+}
+
 // --- Tool: agentvault.create_note ---
 
 func (s *Server) registerCreateNote() {
@@ -322,11 +388,12 @@ func (s *Server) registerCapture() {
 		Name:        "agentvault.capture",
 		Description: "Add a capture to the inbox. Captures are quick notes, ideas, or links that can be processed later.",
 		InputSchema: makeSchema(map[string]interface{}{
-			"title":      schemaString("Capture title"),
-			"text":       schemaString("Capture body text"),
-			"source_url": schemaString("Source URL (optional)"),
-			"project":    schemaString("Project name (optional)"),
-			"tags":       schemaStringArray("Tags to apply"),
+			"title":       schemaString("Capture title"),
+			"text":        schemaString("Capture body text"),
+			"source_url":  schemaString("Source URL (optional)"),
+			"project":     schemaString("Project name (optional)"),
+			"tags":        schemaStringArray("Tags to apply"),
+			"external_id": schemaString("Client-generated idempotency key (optional)"),
 		}, []string{"title"}),
 		Handler: s.handleCapture,
 	}
@@ -338,9 +405,35 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 	sourceURL := stringArg(args, "source_url")
 	project := stringArg(args, "project")
 	tags := stringSliceArg(args, "tags")
+	externalID := stringArg(args, "external_id")
 
 	if title == "" {
 		return "", fmt.Errorf("title is required")
+	}
+
+	// Idempotency: if an external_id is provided, check for an existing
+	// capture with the same external_id to avoid duplicates on retry.
+	if externalID != "" {
+		inboxDir := filepath.Join(s.vaultPath, "00-inbox")
+		entries, readErr := os.ReadDir(inboxDir)
+		if readErr == nil {
+			for _, entry := range entries {
+				if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+					continue
+				}
+				fullPath := filepath.Join(inboxDir, entry.Name())
+				doc, parseErr := markdown.ParseFile(fullPath)
+				if parseErr != nil {
+					continue
+				}
+				if extID, ok := doc.Frontmatter.Extra["external_id"]; ok {
+					if extStr, isStr := extID.(string); isStr && extStr == externalID {
+						relPath, _ := filepath.Rel(s.vaultPath, fullPath)
+						return fmt.Sprintf("(idempotent) Captured to inbox: `%s`", relPath), nil
+					}
+				}
+			}
+		}
 	}
 
 	// Build capture content
@@ -375,6 +468,9 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 		sb.WriteString(fmt.Sprintf("source_url: %s\n", sourceURL))
 	}
 	sb.WriteString(fmt.Sprintf("created: %s\n", now))
+	if externalID != "" {
+		sb.WriteString(fmt.Sprintf("external_id: %s\n", externalID))
+	}
 	sb.WriteString("---\n\n")
 	if text != "" {
 		sb.WriteString(text)
@@ -595,6 +691,78 @@ func (s *Server) registerGitStatus() {
 	}
 }
 
+
+// --- Tool: agentvault.open_daily ---
+
+func (s *Server) registerOpenDaily() {
+	s.tools["agentvault.open_daily"] = Tool{
+		Name:        "agentvault.open_daily",
+		Description: "Open or create the daily note for today or a specific date. Daily notes are stored in 05-daily/YYYY/MM/YYYY-MM-DD.md.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"date": schemaString("Date for the daily note in YYYY-MM-DD format (default: today)"),
+		}, []string{}),
+		Handler: s.handleOpenDaily,
+	}
+}
+
+func (s *Server) handleOpenDaily(args map[string]interface{}) (string, error) {
+	dateStr := stringArg(args, "date")
+	if dateStr == "" {
+		dateStr = time.Now().UTC().Format("2006-01-02")
+	}
+
+	target, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid date %q: use YYYY-MM-DD format", dateStr)
+	}
+
+	title := target.Format("Monday, January 2, 2006")
+	dayOfWeek := target.Format("Monday")
+	year := target.Format("2006")
+	month := target.Format("01")
+	folder := filepath.Join("05-daily", year, month)
+	filename := dateStr + ".md"
+	relPath := filepath.Join(folder, filename)
+	fullPath := filepath.Join(s.vaultPath, relPath)
+
+	// Create if not exists
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		id := fmt.Sprintf("day_%s", dateStr)
+		now := time.Now().UTC().Format(time.RFC3339)
+
+		data := templates.TemplateData{
+			ID:        id,
+			Title:     title,
+			Created:   now,
+			DayOfWeek: dayOfWeek,
+		}
+
+		rendered, renderErr := templates.Render("daily", data)
+		if renderErr != nil {
+			return "", fmt.Errorf("failed to render daily template: %w", renderErr)
+		}
+
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			return "", fmt.Errorf("failed to create directory: %w", err)
+		}
+
+		if err := os.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
+			return "", fmt.Errorf("failed to write daily note: %w", err)
+		}
+
+		// Auto-index
+		go func() {
+			_, _ = s.indexer.Index(indexer.IndexOptions{Path: relPath})
+		}()
+	}
+
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read daily note: %w", err)
+	}
+
+	return fmt.Sprintf("# Daily Note: %s\n\nPath: `%s`\n\n```markdown\n%s\n```\n", title, relPath, string(content)), nil
+}
 func (s *Server) handleGitStatus(args map[string]interface{}) (string, error) {
 	gitDir := filepath.Join(s.vaultPath, ".git")
 	if _, err := os.Stat(gitDir); err != nil {
@@ -747,7 +915,11 @@ func (s *Server) registerAsk() {
 		Name:        "agentvault.ask",
 		Description: "Ask a question using the vault's indexed notes as source material. Returns a structured answer with sources, confidence, and suggested actions.",
 		InputSchema: makeSchema(map[string]interface{}{
-			"question": schemaString("The question to ask the AI about your vault's notes"),
+			"question":      schemaString("The question to ask the AI about your vault's notes"),
+			"vector":        schemaString("Enable hybrid search (true/false, default true when embeddings available)"),
+			"hybrid_weight": schemaString("Weight for hybrid search (0=FTS only, 1=vector only, default 0.5)"),
+			"topk":          schemaString("Number of vector candidates (default 30)"),
+			"max_sources":   schemaString("Maximum sources to include (default 10)"),
 		}, []string{"question"}),
 		Handler: s.handleAsk,
 	}
@@ -773,7 +945,32 @@ func (s *Server) handleAsk(args map[string]interface{}) (string, error) {
 	defer cancel()
 
 	pipeline := rag.New(s.searcher, provider)
-	answer, err := pipeline.Ask(ctx, question)
+
+	// Parse optional RAG options
+	var opts *rag.RAGOptions
+	vectorStr := stringArg(args, "vector")
+	weightStr := stringArg(args, "hybrid_weight")
+	topkStr := stringArg(args, "topk")
+	maxSourcesStr := stringArg(args, "max_sources")
+	if vectorStr != "" || weightStr != "" || topkStr != "" || maxSourcesStr != "" {
+		opts = &rag.RAGOptions{}
+		if vectorStr == "true" {
+			opts.UseVector = true
+		} else if vectorStr == "false" {
+			opts.UseVector = false
+		}
+		if w, err := strconv.ParseFloat(weightStr, 64); err == nil && w > 0 {
+			opts.HybridWeight = w
+		}
+		if k, err := strconv.Atoi(topkStr); err == nil && k > 0 {
+			opts.TopK = k
+		}
+		if m, err := strconv.Atoi(maxSourcesStr); err == nil && m > 0 {
+			opts.MaxSources = m
+		}
+	}
+
+	answer, err := pipeline.AskWithOptions(ctx, question, opts)
 	if err != nil {
 		return "", fmt.Errorf("query failed: %w", err)
 	}
@@ -801,4 +998,180 @@ func (s *Server) handleAsk(args map[string]interface{}) (string, error) {
 	}
 
 	return sb.String(), nil
+}
+
+// handleGraphResource handles the agentvault://graph/{note_id} resource.
+// It parses the note_id from the URI, builds a subgraph, and returns JSON.
+func (s *Server) handleGraphResource(uri string) (string, error) {
+	// URI format: agentvault://graph/{note_id}
+	parts := strings.Split(uri, "/")
+	if len(parts) < 3 {
+		return "", fmt.Errorf("invalid graph resource URI: %s", uri)
+	}
+	noteID := parts[len(parts)-1]
+	if noteID == "" {
+		return "", fmt.Errorf("missing note_id in graph resource URI: %s", uri)
+	}
+
+	g, err := graph.BuildSubgraph(s.db, noteID, 2)
+	if err != nil {
+		return "", fmt.Errorf("building subgraph for %q: %w", noteID, err)
+	}
+
+	b, err := json.Marshal(g)
+	if err != nil {
+		return "", fmt.Errorf("marshaling graph: %w", err)
+	}
+	return string(b), nil
+}
+
+// handleProjectsResource returns the list of projects as JSON.
+func (s *Server) handleProjectsResource(uri string) (string, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT project FROM notes WHERE project IS NOT NULL AND project != '' ORDER BY project`)
+	if err != nil {
+		return "", fmt.Errorf("querying projects: %w", err)
+	}
+	defer rows.Close()
+	var projects []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err == nil {
+			projects = append(projects, p)
+		}
+	}
+	b, _ := json.Marshal(projects)
+	return string(b), nil
+}
+
+// handleRecentResource returns recent notes as JSON.
+func (s *Server) handleRecentResource(uri string) (string, error) {
+	results, err := s.searcher.Recent(20)
+	if err != nil {
+		return "", fmt.Errorf("querying recent notes: %w", err)
+	}
+	b, _ := json.Marshal(results)
+	return string(b), nil
+}
+
+// handleTagsResource returns all tags as JSON.
+func (s *Server) handleTagsResource(uri string) (string, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT tag FROM tags ORDER BY tag`)
+	if err != nil {
+		return "", fmt.Errorf("querying tags: %w", err)
+	}
+	defer rows.Close()
+	var tags []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err == nil {
+			tags = append(tags, t)
+		}
+	}
+	b, _ := json.Marshal(tags)
+	return string(b), nil
+}
+
+// --- Tool: agentvault.annotate ---
+
+func (s *Server) registerAnnotate() {
+	s.tools["agentvault.annotate"] = Tool{
+		Name:        "agentvault.annotate",
+		Description: "Add agent annotations to a note without modifying its content. Stores notes in the note's frontmatter under agent_notes.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"note_id":    schemaString("Note ID to annotate"),
+			"agent_name": schemaString("Name of the agent adding the annotation"),
+			"notes":      schemaString("Annotation text to store"),
+		}, []string{"note_id"}),
+		Handler: s.handleAnnotateTool,
+	}
+}
+
+func (s *Server) handleAnnotateTool(args map[string]interface{}) (string, error) {
+	return s.annotateNote(args), nil
+}
+
+// annotateNote is the shared implementation for agent annotation.
+func (s *Server) annotateNote(args map[string]interface{}) string {
+	noteID := stringArg(args, "note_id")
+	agentName := stringArg(args, "agent_name")
+	notes := stringArg(args, "notes")
+
+	if noteID == "" {
+		return "Error: note_id is required"
+	}
+
+	// Look up the note path
+	result, err := s.searcher.GetByID(noteID)
+	if err != nil {
+		return fmt.Sprintf("Error: note not found: %v", err)
+	}
+
+	fullPath := filepath.Join(s.vaultPath, result.Path)
+	doc, err := markdown.ParseFile(fullPath)
+	if err != nil {
+		return fmt.Sprintf("Error: failed to parse note: %v", err)
+	}
+
+	extra := doc.Frontmatter.Extra
+	if extra == nil {
+		extra = make(map[string]interface{})
+	}
+
+	if agentName != "" && notes != "" {
+		var agentNotes map[string]interface{}
+		if existing, ok := extra["agent_notes"]; ok {
+			if m, ok := existing.(map[string]interface{}); ok {
+				agentNotes = m
+			}
+		}
+		if agentNotes == nil {
+			agentNotes = make(map[string]interface{})
+		}
+		agentNotes[agentName] = notes
+		extra["agent_notes"] = agentNotes
+	}
+
+	doc.Frontmatter.Extra = extra
+	doc.Frontmatter.Updated = time.Now().UTC().Format(time.RFC3339)
+
+	fm := doc.Frontmatter
+	fmMap := map[string]interface{}{
+		"id": fm.ID, "type": fm.Type, "title": fm.Title,
+		"status": fm.Status, "project": fm.Project,
+		"tags": fm.Tags, "created": fm.Created, "updated": fm.Updated,
+	}
+	for k, v := range fm.Extra {
+		fmMap[k] = v
+	}
+
+	yamlBytes, _ := yaml.Marshal(fmMap)
+	newContent := "---\n" + string(yamlBytes) + "---\n\n" + doc.Body
+	os.WriteFile(fullPath, []byte(newContent), 0644)
+
+	go func() { _, _ = s.indexer.Index(indexer.IndexOptions{Path: result.Path}) }()
+
+	return fmt.Sprintf("Annotated note %q with agent %q: %s", noteID, agentName, notes)
+}
+
+// --- Tool: agentvault.set_status ---
+
+func (s *Server) registerSetStatus() {
+	s.tools["agentvault.set_status"] = Tool{
+		Name:        "agentvault.set_status",
+		Description: "Set the agent_status on a note (claimed, reviewed, complete).",
+		InputSchema: makeSchema(map[string]interface{}{
+			"note_id": schemaString("Note ID"),
+			"status":  schemaStringEnum("Agent status", []string{"claimed", "reviewed", "complete"}),
+		}, []string{"note_id", "status"}),
+		Handler: s.handleSetStatus,
+	}
+}
+
+func (s *Server) handleSetStatus(args map[string]interface{}) (string, error) {
+	noteID := stringArg(args, "note_id")
+	status := stringArg(args, "status")
+	if noteID == "" || status == "" {
+		return "", fmt.Errorf("note_id and status are required")
+	}
+	return s.annotateNote(args), nil
 }

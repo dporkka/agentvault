@@ -2,6 +2,8 @@
 
 This document lists the GitHub secrets, accounts, and one-time setup required to produce signed desktop installers and publish the browser extension and mobile apps to their respective stores.
 
+For a quick-reference table of every secret and where to obtain it, see [KEYS.md](KEYS.md).
+
 All publishing workflows are **secret-gated**: they build and upload unsigned/test artifacts when credentials are absent, and only sign or publish when the required secrets are configured.
 
 Run `make check-secrets` from the repository root to see which secrets are already configured and which are still needed for macOS signing, Windows signing, the Chrome Web Store, and the mobile app stores.

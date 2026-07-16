@@ -49,6 +49,7 @@ export async function checkHealth(url?: string): Promise<boolean> {
 
 export async function sendCapture(
   payload: Omit<Capture, 'id' | 'synced' | 'createdAt'>,
+  externalId?: string,
 ): Promise<void> {
   const client = await createMobileClient();
   await client.capture({
@@ -57,6 +58,7 @@ export async function sendCapture(
     text: payload.text,
     project: payload.project,
     tags: payload.tags,
+    externalId,
   });
 }
 

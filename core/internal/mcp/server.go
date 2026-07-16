@@ -30,6 +30,7 @@ type Server struct {
 	searcher  *search.Searcher
 	indexer   *indexer.Indexer
 	tools     map[string]Tool
+	resources map[string]Resource
 	authToken string
 }
 
@@ -39,6 +40,15 @@ type Tool struct {
 	Description string
 	InputSchema map[string]interface{} // JSON Schema
 	Handler     func(args map[string]interface{}) (string, error)
+}
+
+// Resource represents an MCP resource.
+type Resource struct {
+	URI         string
+	Name        string
+	Description string
+	MimeType    string
+	Handler     func(uri string) (string, error)
 }
 
 // JSONRPCRequest is an incoming JSON-RPC 2.0 request.
@@ -88,6 +98,7 @@ func NewServer(vaultPath string, database *db.DB) *Server {
 		searcher:  search.New(database),
 		indexer:   indexer.New(database, vaultPath),
 		tools:     make(map[string]Tool),
+		resources: make(map[string]Resource),
 	}
 }
 
@@ -95,6 +106,7 @@ func NewServer(vaultPath string, database *db.DB) *Server {
 func (s *Server) RegisterTools() {
 	s.registerSearch()
 	s.registerReadNote()
+	s.registerGetLinks()
 	s.registerCreateNote()
 	s.registerCreateDecision()
 	s.registerCreateTask()
@@ -103,7 +115,10 @@ func (s *Server) RegisterTools() {
 	s.registerListProjects()
 	s.registerListRecent()
 	s.registerGitStatus()
+	s.registerOpenDaily()
 	s.registerLogAgentRun()
+	s.registerAnnotate()
+	s.registerSetStatus()
 	s.registerAsk()
 }
 
@@ -125,6 +140,10 @@ func (s *Server) Handle(ctx context.Context, req JSONRPCRequest) JSONRPCResponse
 		return s.handleToolsList(req)
 	case "tools/call":
 		return s.handleToolsCall(req)
+	case "resources/list":
+		return s.handleResourcesList(req)
+	case "resources/read":
+		return s.handleResourcesRead(req)
 	default:
 		return errorResponse(req.ID, -32601, fmt.Sprintf("Method not found: %s", req.Method))
 	}
@@ -135,7 +154,8 @@ func (s *Server) handleInitialize(req JSONRPCRequest) JSONRPCResponse {
 	result := map[string]interface{}{
 		"protocolVersion": protocolVersion,
 		"capabilities": map[string]interface{}{
-			"tools": map[string]interface{}{},
+			"tools":     map[string]interface{}{},
+			"resources": map[string]interface{}{},
 		},
 		"serverInfo": map[string]string{
 			"name":    serverName,
@@ -224,6 +244,142 @@ func (s *Server) handleToolsCall(req JSONRPCRequest) JSONRPCResponse {
 	}
 }
 
+
+// resourceDescription is the JSON representation of a resource for
+// the resources/list response.
+type resourceDescription struct {
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	MimeType    string `json:"mimeType,omitempty"`
+}
+
+// RegisterResources registers MCP resources.
+func (s *Server) RegisterResources() {
+	// Graph resource
+	s.resources["agentvault://graph/{note_id}"] = Resource{
+		URI:         "agentvault://graph/{note_id}",
+		Name:        "Note Graph",
+		Description: "Adjacency subgraph centered on a note",
+		MimeType:    "application/json",
+		Handler:     s.handleGraphResource,
+	}
+	// Projects list
+	s.resources["agentvault://projects"] = Resource{
+		URI:         "agentvault://projects",
+		Name:        "Projects",
+		Description: "List of all projects in the vault",
+		MimeType:    "application/json",
+		Handler:     s.handleProjectsResource,
+	}
+	// Recent notes
+	s.resources["agentvault://notes/recent"] = Resource{
+		URI:         "agentvault://notes/recent",
+		Name:        "Recent Notes",
+		Description: "Most recently updated notes",
+		MimeType:    "application/json",
+		Handler:     s.handleRecentResource,
+	}
+	// Tags
+	s.resources["agentvault://tags"] = Resource{
+		URI:         "agentvault://tags",
+		Name:        "Tags",
+		Description: "All tags used in the vault",
+		MimeType:    "application/json",
+		Handler:     s.handleTagsResource,
+	}
+}
+
+// handleResourcesList handles the resources/list method.
+func (s *Server) handleResourcesList(req JSONRPCRequest) JSONRPCResponse {
+	descriptions := make([]resourceDescription, 0, len(s.resources))
+	for _, r := range s.resources {
+		descriptions = append(descriptions, resourceDescription{
+			URI:         r.URI,
+			Name:        r.Name,
+			Description: r.Description,
+			MimeType:    r.MimeType,
+		})
+	}
+	result := map[string]interface{}{
+		"resources": descriptions,
+	}
+	return JSONRPCResponse{
+		JSONRPC: "2.0",
+		ID:      req.ID,
+		Result:  result,
+	}
+}
+
+// handleResourcesRead handles the resources/read method.
+func (s *Server) handleResourcesRead(req JSONRPCRequest) JSONRPCResponse {
+	params := req.Params
+	if params == nil {
+		return errorResponse(req.ID, -32602, "Missing params")
+	}
+
+	uri, ok := params["uri"].(string)
+	if !ok || uri == "" {
+		return errorResponse(req.ID, -32602, "Missing or invalid uri parameter")
+	}
+
+	// Try exact match first, then template match.
+	resource, found := s.resources[uri]
+	if !found {
+		// Check template resources like agentvault://graph/{note_id}.
+		for tmpl, r := range s.resources {
+			if matchResourceTemplate(tmpl, uri) {
+				resource = r
+				found = true
+				break
+			}
+		}
+	}
+
+	if !found {
+		return errorResponse(req.ID, -32602, fmt.Sprintf("Unknown resource: %s", uri))
+	}
+
+	text, err := resource.Handler(uri)
+	if err != nil {
+		return errorResponse(req.ID, -32603, fmt.Sprintf("Resource read error: %v", err))
+	}
+
+	result := map[string]interface{}{
+		"contents": []map[string]interface{}{
+			{
+				"uri":      uri,
+				"mimeType": resource.MimeType,
+				"text":     text,
+			},
+		},
+	}
+	return JSONRPCResponse{
+		JSONRPC: "2.0",
+		ID:      req.ID,
+		Result:  result,
+	}
+}
+
+// matchResourceTemplate checks if a URI matches a template pattern like
+// "agentvault://graph/{note_id}". Returns true if the URI matches the
+// template structure (same scheme, host, path segments count).
+func matchResourceTemplate(tmpl, uri string) bool {
+	tmplParts := strings.Split(tmpl, "/")
+	uriParts := strings.Split(uri, "/")
+	if len(tmplParts) != len(uriParts) {
+		return false
+	}
+	for i := range tmplParts {
+		if strings.HasPrefix(tmplParts[i], "{") && strings.HasSuffix(tmplParts[i], "}") {
+			continue // template variable — matches anything.
+		}
+		if tmplParts[i] != uriParts[i] {
+			return false
+		}
+	}
+	return true
+}
 // ServeStdio runs the MCP server over stdin/stdout.
 func (s *Server) ServeStdio() {
 	ctx, cancel := context.WithCancel(context.Background())

@@ -13,6 +13,7 @@ import (
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/search"
+	"github.com/agentvault/core/internal/watcher"
 )
 
 // simpleRateLimiter implements a basic token bucket rate limiter.
@@ -68,6 +69,7 @@ type Server struct {
 	aiProvider   ai.AIProvider
 	aiProviderMu sync.Mutex
 	rateLimiter  *simpleRateLimiter
+	watcher      *watcher.Watcher
 }
 
 // NewServer creates a new API server.
@@ -89,6 +91,19 @@ func NewServer(vaultPath string, database *db.DB) *Server {
 // AuthToken returns the server's auth token (for clients to use).
 func (s *Server) AuthToken() string {
 	return s.authToken
+}
+
+// StartWatcher creates and starts a file watcher on the vault directory. When
+// active, the vault status endpoint reports watching=true. The watcher is
+// automatically stopped when the server shuts down.
+func (s *Server) StartWatcher() error {
+	w, err := watcher.New(s.vaultPath, s.indexer)
+	if err != nil {
+		return err
+	}
+	s.watcher = w
+	w.Start()
+	return nil
 }
 
 // getAIProvider returns a cached AI provider, loading it on first use.
@@ -144,8 +159,10 @@ func (s *Server) RegisterRoutes() {
 	// Notes CRUD
 	s.mux.HandleFunc("GET /notes/", s.handleNoteByPath) // handles /notes/{id}
 	s.mux.HandleFunc("POST /notes", s.handleCreateNote)
-
-	// Capture (inbox)
+	s.mux.HandleFunc("PUT /notes/{id}", s.handleUpdateNote)
+	s.mux.HandleFunc("POST /notes/{id}/annotate", s.handleAnnotate)
+	// Links
+	s.mux.HandleFunc("GET /links/{id}", s.handleNoteLinks)
 	s.mux.HandleFunc("POST /capture", s.handleCapture)
 
 	// AI Ask
@@ -155,6 +172,17 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /projects", s.handleProjects)
 	s.mux.HandleFunc("GET /recent", s.handleRecent)
 	s.mux.HandleFunc("GET /stale", s.handleStale)
+	s.mux.HandleFunc("GET /daily", s.handleDaily)
+
+	// Graph
+	s.mux.HandleFunc("GET /graph", s.handleGraph)
+	s.mux.HandleFunc("GET /graph/neighbors", s.handleGraphNeighbors)
+
+	// Conversations
+	s.mux.HandleFunc("POST /conversations", s.handleCreateConversation)
+	s.mux.HandleFunc("GET /conversations", s.handleListConversations)
+	s.mux.HandleFunc("GET /conversations/{id}", s.handleGetConversation)
+	s.mux.HandleFunc("POST /conversations/{id}/ask", s.handleConversationAsk)
 
 	// Git status
 	s.mux.HandleFunc("GET /git/status", s.handleGitStatus)
@@ -183,6 +211,9 @@ func (s *Server) Start(addr string) error {
 
 // Shutdown gracefully shuts down the server.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.watcher != nil {
+		s.watcher.Stop()
+	}
 	if s.server != nil {
 		return s.server.Shutdown(ctx)
 	}

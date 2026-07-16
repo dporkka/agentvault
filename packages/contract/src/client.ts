@@ -13,16 +13,21 @@ import type {
   CaptureResponse,
   CreateNoteRequest,
   CreateNoteResponse,
+  DeleteNoteResponse,
+  Graph,
   GitStatus,
   HealthResponse,
   IndexOptions,
   IndexResult,
   NoteDetail,
+  NoteLinks,
   Projects,
   RecentParams,
   SearchParams,
   SearchResult,
   StaleParams,
+  UpdateNoteRequest,
+  UpdateNoteResponse,
   VaultStatus,
 } from './types';
 
@@ -76,6 +81,9 @@ export interface ApiClient {
   triggerIndex(opts?: IndexOptions): Promise<IndexResult>;
   search(params: SearchParams, signal?: AbortSignal): Promise<SearchResult[]>;
   getNote(id: string): Promise<NoteDetail>;
+  getNoteLinks(id: string): Promise<NoteLinks>;
+  updateNote(id: string, req: UpdateNoteRequest): Promise<UpdateNoteResponse>;
+  deleteNote(id: string): Promise<DeleteNoteResponse>;
   createNote(req: CreateNoteRequest): Promise<CreateNoteResponse>;
   capture(req: CaptureRequest): Promise<CaptureResponse>;
   ask(req: AskRequest): Promise<AskResponse>;
@@ -83,6 +91,8 @@ export interface ApiClient {
   getRecent(params?: RecentParams): Promise<SearchResult[]>;
   getStale(params?: StaleParams): Promise<SearchResult[]>;
   getGitStatus(): Promise<GitStatus>;
+  getGraph(center: string, depth?: number): Promise<Graph>;
+  getGraphNeighbors(id: string): Promise<Graph>;
 }
 
 function buildSearch(params: SearchParams | RecentParams | StaleParams | undefined): string {
@@ -112,7 +122,7 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
   let baseUrl = (opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
   const tokenStore = opts.tokenStore ?? inMemoryTokenStore(opts.token ?? '');
 
-  async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, auth = true, signal?: AbortSignal): Promise<T> {
+  async function call<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown, auth = true, signal?: AbortSignal): Promise<T> {
     const url = path.startsWith('http') ? path : `${baseUrl}${path}`;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (auth) {
@@ -191,8 +201,17 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     getNote(id) {
       return call<NoteDetail>('GET', `/notes/${encodeURIComponent(id)}`, undefined, false);
     },
+    getNoteLinks(id) {
+      return call<NoteLinks>('GET', `/links/${encodeURIComponent(id)}`, undefined, false);
+    },
     createNote(req) {
       return call<CreateNoteResponse>('POST', '/notes', req);
+    },
+    updateNote(id, req) {
+      return call<UpdateNoteResponse>('PUT', `/notes/${encodeURIComponent(id)}`, req);
+    },
+    deleteNote(id) {
+      return call<DeleteNoteResponse>('DELETE', `/notes/${encodeURIComponent(id)}`, undefined, true);
     },
     capture(req) {
       return call<CaptureResponse>('POST', '/capture', req);
@@ -213,6 +232,13 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     },
     getGitStatus() {
       return call<GitStatus>('GET', '/git/status', undefined, false);
+    },
+    getGraph(center, depth) {
+      const qs = depth !== undefined ? `?center=${encodeURIComponent(center)}&depth=${depth}` : `?center=${encodeURIComponent(center)}`;
+      return call<Graph>('GET', `/graph${qs}`, undefined, false);
+    },
+    getGraphNeighbors(id) {
+      return call<Graph>('GET', `/graph/neighbors?id=${encodeURIComponent(id)}`, undefined, false);
     },
   };
 }

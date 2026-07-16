@@ -13,11 +13,18 @@ import (
 	"github.com/agentvault/core/internal/search"
 )
 
-
 // Pipeline orchestrates search + AI generation for source-grounded answers.
 type Pipeline struct {
 	searcher *search.Searcher
 	provider ai.AIProvider
+}
+
+// RAGOptions controls retrieval behavior for the Ask pipeline.
+type RAGOptions struct {
+	UseVector    bool    // enable vector/hybrid search (default true when embeddings available)
+	HybridWeight float64 // 0=FTS only, 1=vector only, default 0.5
+	TopK         int     // vector candidates, default max(limit*3, 10)
+	MaxSources   int     // max sources to include, default 10
 }
 
 // Answer is a structured, source-grounded AI response. It is an alias of
@@ -38,26 +45,58 @@ func New(searcher *search.Searcher, provider ai.AIProvider) *Pipeline {
 }
 
 // Ask answers a question using the vault's indexed notes as sources.
+// It uses hybrid search when embeddings are available, falling back to FTS.
 func (p *Pipeline) Ask(ctx context.Context, question string) (*Answer, error) {
+	return p.AskWithOptions(ctx, question, nil)
+}
+
+// AskWithOptions answers a question with configurable retrieval behavior.
+// When opts is nil, defaults are used (hybrid search when embeddings available,
+// hybrid weight 0.5, max 10 sources).
+func (p *Pipeline) AskWithOptions(ctx context.Context, question string, opts *RAGOptions) (*Answer, error) {
+	// Apply defaults
+	useVector := p.searcher.HasEmbeddings()
+	hybridWeight := 0.5
+	topK := 30
+	maxSources := 10
+	if opts != nil {
+		if !opts.UseVector {
+			useVector = false
+		}
+		if opts.HybridWeight > 0 {
+			hybridWeight = opts.HybridWeight
+		}
+		if opts.TopK > 0 {
+			topK = opts.TopK
+		}
+		if opts.MaxSources > 0 {
+			maxSources = opts.MaxSources
+		}
+	}
+
 	// 1. Search the vault for relevant notes
-	// Sanitize question: strip trailing punctuation that confuses FTS5
 	searchQuery := strings.TrimRight(question, "?!")
 
 	var results []search.Result
 	var err error
 
-	// Use vector search if embeddings are available, with FTS fallback
-	if p.searcher.HasEmbeddings() {
-		results, err = p.searcher.SearchWithVector(ctx, searchQuery, 10)
+	if useVector {
+		results, err = p.searcher.HybridSearch(ctx, search.VectorQuery{
+			Query:        search.Query{Q: searchQuery, Limit: maxSources},
+			VectorSearch: true,
+			QueryText:    searchQuery,
+			TopK:         topK,
+			HybridWeight: hybridWeight,
+		})
 		if err != nil || len(results) == 0 {
 			// Fallback to FTS
-			results, err = p.searcher.Search(search.Query{Q: searchQuery, Limit: 10})
+			results, err = p.searcher.Search(search.Query{Q: searchQuery, Limit: maxSources})
 			if err != nil {
 				return nil, fmt.Errorf("search failed: %w", err)
 			}
 		}
 	} else {
-		results, err = p.searcher.Search(search.Query{Q: searchQuery, Limit: 10})
+		results, err = p.searcher.Search(search.Query{Q: searchQuery, Limit: maxSources})
 		if err != nil {
 			return nil, fmt.Errorf("search failed: %w", err)
 		}
@@ -92,13 +131,12 @@ func (p *Pipeline) Ask(ctx context.Context, question string) (*Answer, error) {
 	// 4. Build prompt with sources
 	messages := BuildPrompt(sources, question)
 
-	// 5. Call AI provider with timeout, preferring structured JSON output
+	// 5. Call AI provider with timeout
 	aiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	var answer *Answer
 	if err := p.provider.ChatJSON(aiCtx, messages, answer); err != nil {
-		// Fall back to text-based parsing when structured output fails
 		rawAnswer, chatErr := p.provider.Chat(aiCtx, messages)
 		if chatErr != nil {
 			return nil, fmt.Errorf("AI provider failed: %w", chatErr)
@@ -106,12 +144,9 @@ func (p *Pipeline) Ask(ctx context.Context, question string) (*Answer, error) {
 		answer = ParseAnswer(rawAnswer, sources)
 	}
 
-	// 6. If ChatJSON failed to produce an answer, ParseAnswer returned one
 	if answer == nil {
 		answer = &Answer{Answer: "Unable to generate answer.", Confidence: "low"}
 	}
-
-	// 7. Always include sources
 	answer.Sources = sources
 
 	return answer, nil

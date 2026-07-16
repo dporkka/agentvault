@@ -153,8 +153,8 @@ func TestGenerateIDUnknownType(t *testing.T) {
 
 func TestAvailableReturnsAllTemplates(t *testing.T) {
 	names := Available()
-	if len(names) != 6 {
-		t.Errorf("Available() returned %d names, want 6", len(names))
+	if len(names) != 7 {
+		t.Errorf("Available() returned %d names, want 7", len(names))
 	}
 
 	expected := map[string]bool{
@@ -164,6 +164,7 @@ func TestAvailableReturnsAllTemplates(t *testing.T) {
 		"meeting":  false,
 		"source":   false,
 		"project":  false,
+		"daily":    false,
 	}
 
 	for _, name := range names {

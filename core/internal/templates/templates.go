@@ -11,12 +11,13 @@ import (
 
 // TemplateData holds the data used to render a template.
 type TemplateData struct {
-	ID      string
-	Title   string
-	Project string
-	Tags    []string
-	Created string
-	URL     string
+	ID        string
+	Title     string
+	Project   string
+	Tags      []string
+	Created   string
+	URL       string
+	DayOfWeek string
 }
 
 //go:embed note.md
@@ -37,6 +38,9 @@ var sourceTemplate string
 //go:embed project.md
 var projectTemplate string
 
+//go:embed daily.md
+var dailyTemplate string
+
 // templateRegistry maps template names to their embedded content.
 var templateRegistry = map[string]string{
 	"note":     noteTemplate,
@@ -45,9 +49,11 @@ var templateRegistry = map[string]string{
 	"meeting":  meetingTemplate,
 	"source":   sourceTemplate,
 	"project":  projectTemplate,
+	"daily":    dailyTemplate,
 }
 
 // typeAbbrev maps note types to their ID abbreviation.
+
 var typeAbbrev = map[string]string{
 	"note":     "note",
 	"decision": "dec",
@@ -57,6 +63,7 @@ var typeAbbrev = map[string]string{
 	"project":  "prj",
 	"prompt":   "prm",
 	"capture":  "cap",
+	"daily":    "day",
 }
 
 // join is a template function that joins strings with a separator.

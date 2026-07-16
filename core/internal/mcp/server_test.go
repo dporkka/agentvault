@@ -66,6 +66,7 @@ func setupTestServer(t *testing.T) (*Server, *db.DB) {
 
 	s := NewServer(tmpDir, database)
 	s.RegisterTools()
+	s.RegisterResources()
 	return s, database
 }
 
@@ -196,11 +197,15 @@ func TestHandleToolsList(t *testing.T) {
 		"agentvault.list_recent",
 		"agentvault.git_status",
 		"agentvault.log_agent_run",
+		"agentvault.get_links",
+		"agentvault.open_daily",
+		"agentvault.annotate",
+		"agentvault.set_status",
 		"agentvault.ask",
 	}
 
-	if len(tools) != len(expectedTools) {
-		t.Errorf("expected %d tools, got %d", len(expectedTools), len(tools))
+	if len(tools) != 16 {
+		t.Errorf("expected 16 tools, got %d", len(tools))
 	}
 
 	toolNames := make(map[string]bool)
@@ -505,8 +510,8 @@ func TestNewServer(t *testing.T) {
 	}
 
 	srv.RegisterTools()
-	if len(srv.tools) != 12 {
-		t.Errorf("expected 12 tools after RegisterTools, got %d", len(srv.tools))
+	if len(srv.tools) != 16 {
+		t.Errorf("expected 16 tools after RegisterTools, got %d", len(srv.tools))
 	}
 }
 

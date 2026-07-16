@@ -244,11 +244,16 @@ Request:
 
 Auth required. Appends a capture to `00-inbox`.
 
+Clients may supply an `external_id` as an idempotency key. When provided, the
+server scans existing inbox captures for a matching `external_id` in the
+frontmatter and returns the existing path instead of creating a duplicate.
+Idempotent responses include `"idempotent": true`.
+
 Request (all optional; `title` defaults to "Untitled Capture"):
 
 ```json
 { "type": "webpage", "title": "…", "url": "https://…", "text": "…",
-  "project": "…", "tags": ["…"] }
+  "project": "…", "tags": ["…"], "external_id": "cap-abc123" }
 ```
 
 Response (path always under `00-inbox/`):
@@ -259,7 +264,6 @@ Response (path always under `00-inbox/`):
 
 If more than 999 captures are created for the same day, the endpoint returns
 `409 Conflict` with `{"error":"too many captures for today"}`.
-
 ## POST /ask
 
 Auth required. Source-grounded RAG answer over the vault. Returns `400` if

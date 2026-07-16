@@ -84,6 +84,7 @@ func runMcpServe(cmd *cobra.Command, args []string) {
 	// Create and configure server
 	server := mcp.NewServer(vp, database)
 	server.RegisterTools()
+	server.RegisterResources()
 
 	if mcpHTTP {
 		addr := fmt.Sprintf("127.0.0.1:%d", mcpPort)
