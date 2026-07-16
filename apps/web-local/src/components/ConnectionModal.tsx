@@ -15,6 +15,7 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ open, onClose }) => {
   const [success, setSuccess] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const autoSubmittedRef = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -29,6 +30,44 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ open, onClose }) => {
       });
     }
   }, [open]);
+
+  // Auto-fill token from query parameter (e.g. ?token=... from --open flag or QR scan)
+  useEffect(() => {
+    if (autoSubmittedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const queryToken = params.get('token');
+    if (!queryToken) return;
+
+    // Pre-fill the token field
+    setToken(queryToken);
+    api.setToken(queryToken);
+
+    // Clean the URL to avoid re-triggering on refresh
+    const url = new URL(window.location.href);
+    url.searchParams.delete('token');
+    window.history.replaceState({}, '', url.toString());
+
+    // Auto-submit connection test
+    autoSubmittedRef.current = true;
+    setTesting(true);
+    setError(null);
+    setSuccess(false);
+
+    api.verifyAuth()
+      .then((verify) => {
+        setTesting(false);
+        if (verify && !verify.tokenValid && queryToken) {
+          setError('Token is invalid. Please check and try again.');
+          return;
+        }
+        setSuccess(true);
+        setTimeout(onClose, 600);
+      })
+      .catch((err) => {
+        setTesting(false);
+        setError(err instanceof Error ? err.message : 'Connection failed. Is the server running?');
+      });
+  }, []); // Run once on mount
 
   // Return focus to the element that opened the modal on close
   useEffect(() => {

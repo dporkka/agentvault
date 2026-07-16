@@ -48,7 +48,7 @@ function StatusIcon({
 }
 
 export default function Layout({ vaultStatus, onVaultChanged }: Props) {
-  const [activeView, setActiveView] = useState<ViewName>('search');
+  const [activeView, setActiveView] = useState<ViewName>('dashboard');
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [selectedNotePath, setSelectedNotePath] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -132,6 +132,7 @@ export default function Layout({ vaultStatus, onVaultChanged }: Props) {
           aiPanelOpen={aiPanelOpen}
           onToggleAIPanel={() => setAiPanelOpen(!aiPanelOpen)}
           vaultPath={vaultStatus.path}
+          vaultStatus={vaultStatus}
         />
 
         {/* Global status bar */}

@@ -5,18 +5,64 @@ import { useApi } from '@/hooks/useApi';
 import EmptyState from '@/components/EmptyState';
 import type { SearchResult } from '@agentvault/contract';
 import { typeBadgeClass } from '@/utils/styles';
+
+interface ProjectWithCount {
+  name: string;
+  noteCount: number | null; // null = loading
+}
+
 const ProjectDashboard: React.FC = () => {
-  const { data: projects, loading: projectsLoading, error: projectsError } = useApi(
+  const { data: projectNames, loading: projectsLoading, error: projectsError } = useApi(
     () => api.getProjects(),
     [],
-    true
+    true,
   );
 
+  const [projects, setProjects] = useState<ProjectWithCount[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [notes, setNotes] = useState<SearchResult[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // When project names load, fetch counts
+  useEffect(() => {
+    if (!projectNames || projectNames.length === 0) {
+      setProjects([]);
+      return;
+    }
+
+    // Initialize with null counts
+    setProjects(projectNames.map((name) => ({ name, noteCount: null })));
+
+    let cancelled = false;
+
+    async function loadCounts() {
+      const counts = await Promise.all(
+        projectNames!.map(async (name) => {
+          try {
+            const results = await api.search({ project: name, limit: 100 });
+            return { name, count: results.length };
+          } catch {
+            return { name, count: 0 };
+          }
+        }),
+      );
+
+      if (cancelled) return;
+
+      setProjects(
+        projectNames!.map((name) => ({
+          name,
+          noteCount: counts.find((c) => c.name === name)?.count ?? 0,
+        })),
+      );
+    }
+
+    loadCounts();
+    return () => { cancelled = true; };
+  }, [projectNames]);
+
   // Load notes when project is selected
   useEffect(() => {
     if (!selectedProject) {
@@ -30,7 +76,6 @@ const ProjectDashboard: React.FC = () => {
 
     async function loadNotes() {
       try {
-        // We search with empty query but project filter to get all notes in the project
         const results = await api.search({ q: '', project: selectedProject!, limit: 100 });
         if (!cancelled) {
           setNotes(results);
@@ -91,27 +136,40 @@ const ProjectDashboard: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
             {projects.map((project) => (
               <button
-                key={project}
-                onClick={() => setSelectedProject(selectedProject === project ? null : project)}
+                key={project.name}
+                onClick={() => setSelectedProject(selectedProject === project.name ? null : project.name)}
                 className={`text-left p-4 rounded-lg border transition-all ${
-                  selectedProject === project
+                  selectedProject === project.name
                     ? 'border-vault-accent bg-vault-accent-muted ring-1 ring-vault-accent/30'
                     : 'border-vault-border bg-vault-bg-secondary hover:bg-vault-bg-hover hover:border-vault-border/80'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    selectedProject === project ? 'bg-vault-accent/20' : 'bg-vault-bg-tertiary'
+                    selectedProject === project.name ? 'bg-vault-accent/20' : 'bg-vault-bg-tertiary'
                   }`}>
-                    <svg className={`w-5 h-5 ${selectedProject === project ? 'text-vault-accent' : 'text-vault-text-muted'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <svg className={`w-5 h-5 ${selectedProject === project.name ? 'text-vault-accent' : 'text-vault-text-muted'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
                     </svg>
                   </div>
-                  <div className="min-w-0">
-                    <h3 className={`text-sm font-medium truncate ${selectedProject === project ? 'text-vault-accent' : 'text-vault-text-primary'}`}>
-                      {project}
-                    </h3>
-                    <p className="text-xs text-vault-text-muted">Click to view notes</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <h3 className={`text-sm font-medium truncate ${selectedProject === project.name ? 'text-vault-accent' : 'text-vault-text-primary'}`}>
+                        {project.name}
+                      </h3>
+                      <span className="text-xs text-vault-text-muted ml-2 flex-shrink-0">
+                        {project.noteCount !== null ? `${project.noteCount} note${project.noteCount !== 1 ? 's' : ''}` : '...'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/search?project=${encodeURIComponent(project.name)}`);
+                      }}
+                      className="text-xs text-vault-accent hover:text-vault-accent-hover mt-1 transition-colors"
+                    >
+                      Browse
+                    </button>
                   </div>
                 </div>
               </button>

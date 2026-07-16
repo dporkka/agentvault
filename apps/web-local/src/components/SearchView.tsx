@@ -182,16 +182,23 @@ const SearchView: React.FC = () => {
       {/* Results */}
       <div id="search-results" className="flex-1 overflow-y-auto px-6 py-3" ref={resultsRef} role="listbox" aria-label="Search results">
         {query.trim().length === 0 && !loading && (
-          <EmptyState
-            className="h-full"
-            icon={
-              <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-              </svg>
-            }
-            title="Type to search your vault"
-            subtitle="Press / to focus search"
-          />
+          <div className="flex flex-col items-center justify-center h-full gap-4">
+            <EmptyState
+              icon={
+                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                </svg>
+              }
+              title="Type to search your vault"
+              subtitle="Press / to focus search"
+            />
+            <a
+              href="/new"
+              className="px-4 py-2 bg-vault-accent text-white text-sm font-medium rounded-md hover:bg-vault-accent-hover transition-colors"
+            >
+              Create your first note
+            </a>
+          </div>
         )}
 
         {query.trim().length > 0 && results.length === 0 && !loading && !error && (

@@ -1,8 +1,7 @@
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors } from '../theme';
-import type { AppSettings } from '../types';
-
+import type { AppSettings, AutoSyncInterval } from '../types';
 interface Props {
   draft: AppSettings;
   syncing: boolean;
@@ -10,6 +9,14 @@ interface Props {
   onSyncAll: () => void;
   onClear: () => void;
 }
+
+const INTERVAL_OPTIONS: { value: AutoSyncInterval; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: '5min', label: '5 min' },
+  { value: '15min', label: '15 min' },
+  { value: '30min', label: '30 min' },
+  { value: '1hour', label: '1 hour' },
+];
 
 export default function ActionsSection({ draft, syncing, onUpdate, onSyncAll, onClear }: Props) {
   return (
@@ -25,6 +32,33 @@ export default function ActionsSection({ draft, syncing, onUpdate, onSyncAll, on
           placeholderTextColor={colors.textMuted}
           autoCapitalize="none"
         />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Auto-sync</Text>
+        <Text style={styles.label}>Sync interval</Text>
+        <View style={styles.intervalRow}>
+          {INTERVAL_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              style={[
+                styles.intervalBtn,
+                draft.autoSyncInterval === opt.value && styles.intervalBtnActive,
+              ]}
+              onPress={() => onUpdate({ autoSyncInterval: opt.value })}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.intervalBtnText,
+                  draft.autoSyncInterval === opt.value && styles.intervalBtnTextActive,
+                ]}
+              >
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -105,4 +139,30 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: 13, color: colors.textSecondary },
   infoValue: { fontSize: 13, color: colors.textPrimary },
   aboutText: { fontSize: 12, color: colors.textMuted, marginTop: 12, lineHeight: 18 },
+  intervalRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  intervalBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: colors.bgTertiary,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  intervalBtnActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  intervalBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  intervalBtnTextActive: {
+    color: colors.textInverse,
+  },
 });

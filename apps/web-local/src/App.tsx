@@ -1,11 +1,26 @@
-import React, { Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense, useCallback } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import DashboardView from './components/DashboardView';
 import SearchView from './components/SearchView';
 import NotePage from './components/NotePage';
 import AskPanel from './components/AskPanel';
 import ProjectDashboard from './components/ProjectDashboard';
 import SettingsPanel from './components/SettingsPanel';
+import NoteEditor from './components/NoteEditor';
+import CaptureView from './components/CaptureView';
+import TagBrowser from './components/TagBrowser';
+
+function NoteEditorRoute() {
+  const navigate = useNavigate();
+  const handleCreated = useCallback((id: string) => {
+    navigate(`/note/${id}`, { replace: true });
+  }, [navigate]);
+  const handleCancel = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+  return <NoteEditor onCreated={handleCreated} onCancel={handleCancel} />;
+}
 
 const App: React.FC = () => {
   return (
@@ -17,8 +32,12 @@ const App: React.FC = () => {
       }>
         <Routes>
           <Route element={<Layout />}>
-            <Route path="/" element={<SearchView />} />
+            <Route path="/" element={<DashboardView />} />
+            <Route path="/search" element={<SearchView />} />
             <Route path="/note/:id" element={<NotePage />} />
+            <Route path="/new" element={<NoteEditorRoute />} />
+            <Route path="/capture" element={<CaptureView />} />
+            <Route path="/tags" element={<TagBrowser />} />
             <Route path="/ask" element={<AskPanel />} />
             <Route path="/projects" element={<ProjectDashboard />} />
             <Route path="/settings" element={<SettingsPanel />} />

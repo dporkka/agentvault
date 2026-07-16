@@ -33,9 +33,21 @@ export default function HomeScreen(_props: RootTabScreenProps<'Home'>) {
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState('');
 
+  const unsyncedCount = captures.filter((c) => !c.synced).length;
+
   const handleRefresh = useCallback(async () => {
     await refresh();
-  }, [refresh]);
+    if (!syncing) {
+      setSyncing(true);
+      try {
+        await syncCaptures({ continueOnError: true });
+      } catch {
+        // silently ignore sync errors during pull-to-refresh
+      }
+      setSyncing(false);
+      refresh();
+    }
+  }, [refresh, syncing]);
 
   const showMessage = (msg: string) => {
     setMessage(msg);
@@ -106,6 +118,21 @@ export default function HomeScreen(_props: RootTabScreenProps<'Home'>) {
         </View>
       ) : null}
 
+      {unsyncedCount > 0 && (
+        <TouchableOpacity
+          style={styles.syncSummaryRow}
+          onPress={handleSync}
+          disabled={syncing}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.syncSummaryText}>
+            {syncing
+              ? 'Syncing...'
+              : `${unsyncedCount} unsynced capture${unsyncedCount !== 1 ? 's' : ''} · Tap to sync`}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       <View style={styles.listHeader}>
         <Text style={styles.listTitle}>Recent Captures</Text>
         <TouchableOpacity
@@ -119,7 +146,6 @@ export default function HomeScreen(_props: RootTabScreenProps<'Home'>) {
           <Text style={styles.syncBtnText}>{syncing ? 'Syncing...' : 'Sync All'}</Text>
         </TouchableOpacity>
       </View>
-
       <FlatList
         data={captures}
         keyExtractor={(item) => item.id}
@@ -216,6 +242,21 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.medium,
+  },
+  syncSummaryRow: {
+    backgroundColor: colors.accentMuted,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    marginBottom: spacing.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  syncSummaryText: {
+    color: colors.accent,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
   },
   listHeader: {
     flexDirection: 'row',

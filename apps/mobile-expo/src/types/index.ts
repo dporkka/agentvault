@@ -21,8 +21,11 @@ export interface Capture {
   lastRetryAt?: string;
 }
 
+export type AutoSyncInterval = 'off' | '5min' | '15min' | '30min' | '1hour';
+
 export interface AppSettings {
   serverUrl: string;
   defaultProject: string;
   token: string;
+  autoSyncInterval: AutoSyncInterval;
 }

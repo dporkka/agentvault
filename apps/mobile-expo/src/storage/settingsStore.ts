@@ -10,6 +10,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   serverUrl: DEFAULT_BASE_URL,
   defaultProject: '',
   token: '',
+  autoSyncInterval: '15min',
 };
 
 /**

@@ -6,7 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -29,6 +31,7 @@ The token is printed at startup.`,
 
 var servePort int
 var serveHost string
+var serveOpen bool
 
 // serveStopSignal returns a channel that is closed when the server should shut
 // down. It is overridable in tests so the serve loop can be stopped without
@@ -48,6 +51,7 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.Flags().IntVar(&servePort, "port", 47321, "Port to listen on")
 	serveCmd.Flags().StringVar(&serveHost, "host", "127.0.0.1", "Host to bind to (default: localhost only)")
+	serveCmd.Flags().BoolVar(&serveOpen, "open", false, "Open the web UI in the default browser")
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
@@ -70,11 +74,30 @@ func runServe(cmd *cobra.Command, args []string) error {
 	// 4. Print startup info
 	fmt.Printf("\n  AgentVault API server starting on http://%s\n\n", addr)
 	fmt.Printf("  Vault:    %s\n", vp)
-	fmt.Printf("  Auth token: %s\n\n", srv.AuthToken())
+	authToken := srv.AuthToken()
+	fmt.Printf("  Auth token: %s\n\n", authToken)
+
+	// Render QR code for mobile onboarding
+	qrStr := fmt.Sprintf("http://%s?token=%s", addr, authToken)
+	if qr, err := renderTerminalQR(qrStr); err == nil {
+		fmt.Println(qr)
+		fmt.Println("  Scan this QR code from the mobile app to connect instantly.")
+	} else {
+		fmt.Printf("  Connect URL: %s\n", qrStr)
+	}
+
 	fmt.Println("  Use this token in the X-AgentVault-Token header for write operations.")
 	fmt.Println("  Press Ctrl+C to stop.")
 	fmt.Println()
 
+	// Open browser if --open flag is set
+	if serveOpen {
+		browserURL := fmt.Sprintf("http://%s?token=%s", addr, authToken)
+		if err := openBrowser(browserURL); err != nil {
+			fmt.Printf("  Could not open browser: %v\n", err)
+			fmt.Printf("  Open this URL manually: %s\n", browserURL)
+		}
+	}
 	// 5. Start server in a goroutine
 	go func() {
 		if err := srv.Start(addr); err != nil && err != http.ErrServerClosed {
@@ -96,3 +119,18 @@ func runServe(cmd *cobra.Command, args []string) error {
 	fmt.Println("Server stopped.")
 	return nil
 }
+
+// openBrowser opens url in the system default browser.
+func openBrowser(url string) error {
+	switch runtime.GOOS {
+	case "linux":
+		return exec.Command("xdg-open", url).Start()
+	case "darwin":
+		return exec.Command("open", url).Start()
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+}
+

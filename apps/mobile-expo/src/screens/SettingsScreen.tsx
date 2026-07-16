@@ -11,6 +11,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { DEFAULT_BASE_URL } from '@agentvault/contract';
 import { clearInbox } from '../storage/localInbox';
 import { useSettings } from '../context/SettingsContext';
@@ -22,6 +23,7 @@ import ServerConfigSection from '../components/ServerConfigSection';
 import ActionsSection from '../components/ActionsSection';
 
 export default function SettingsScreen() {
+  const navigation = useNavigation<any>();
   const { settings, saveSettings, loaded } = useSettings();
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [health, setHealth] = useState<boolean | null>(null);
@@ -138,6 +140,16 @@ export default function SettingsScreen() {
       >
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
           <Text style={styles.header}>Settings</Text>
+
+          <TouchableOpacity
+            style={styles.qrScanBtn}
+            onPress={() => navigation.navigate('QRScanner')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.qrScanBtnText}>Scan QR Code</Text>
+            <Text style={styles.qrScanBtnHint}>Connect instantly from the CLI</Text>
+          </TouchableOpacity>
+
           <ServerConfigSection
             draft={draft}
             health={health}
@@ -179,8 +191,27 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.extrabold,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.sm,
     marginTop: spacing.sm,
+  },
+  qrScanBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: radii.lg,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  qrScanBtnText: {
+    color: colors.textInverse,
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+  },
+  qrScanBtnHint: {
+    color: colors.textInverse,
+    fontSize: typography.sizes.sm,
+    opacity: 0.8,
+    marginTop: 4,
   },
   section: {
     marginBottom: spacing.xxl,

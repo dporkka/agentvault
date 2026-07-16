@@ -8,6 +8,7 @@ export type RootStackParamList = {
     id: string;
     title: string;
   };
+  QRScanner: undefined;
 };
 
 export type RootTabParamList = {

@@ -49,8 +49,10 @@ export interface ServerStatus {
 }
 
 export type ViewName =
+  | 'dashboard'
   | 'editor'
   | 'search'
   | 'projects'
   | 'decisions'
+  | 'tags'
   | 'settings';

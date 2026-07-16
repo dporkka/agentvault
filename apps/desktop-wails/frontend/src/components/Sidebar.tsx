@@ -37,10 +37,12 @@ interface TreeItem {
 }
 
 const navItems: { id: ViewName; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: Activity },
   { id: 'search', label: 'Search', icon: SearchIcon },
   { id: 'editor', label: 'Editor', icon: FileText },
   { id: 'projects', label: 'Projects', icon: LayoutDashboard },
   { id: 'decisions', label: 'Decisions', icon: FolderTree },
+  { id: 'tags', label: 'Tags', icon: GitBranch },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
 

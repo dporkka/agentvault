@@ -23,6 +23,7 @@ import InboxScreen from './src/screens/InboxScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import NoteDetailScreen from './src/screens/NoteDetailScreen';
+import QRScannerScreen from './src/screens/QRScannerScreen';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createStackNavigator<RootStackParamList>();
@@ -114,6 +115,14 @@ export default function App() {
                 name="NoteDetail"
                 component={NoteDetailScreen}
                 options={{
+                  cardStyle: { backgroundColor: colors.bgPrimary },
+                }}
+              />
+              <Stack.Screen
+                name="QRScanner"
+                component={QRScannerScreen}
+                options={{
+                  presentation: 'modal',
                   cardStyle: { backgroundColor: colors.bgPrimary },
                 }}
               />
