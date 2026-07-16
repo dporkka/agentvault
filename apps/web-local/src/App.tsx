@@ -1,5 +1,7 @@
 import React, { Suspense, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { useApi } from './hooks/useApi';
+import { api } from './api/client';
 import Layout from './components/Layout';
 import DashboardView from './components/DashboardView';
 import SearchView from './components/SearchView';
@@ -22,6 +24,33 @@ function NoteEditorRoute() {
   return <NoteEditor onCreated={handleCreated} onCancel={handleCancel} />;
 }
 
+function NoteEditRoute() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const noteId = id ?? '';
+  const { data: note } = useApi(() => api.getNote(noteId), [noteId]);
+
+  const handleCreated = useCallback(() => {
+    navigate(`/note/${noteId}`, { replace: true });
+  }, [navigate, noteId]);
+  const handleCancel = useCallback(() => {
+    navigate(`/note/${noteId}`);
+  }, [navigate, noteId]);
+
+  if (!note) return null;
+
+  return (
+    <NoteEditor
+      onCreated={handleCreated}
+      onCancel={handleCancel}
+      editNoteId={note.id}
+      editNoteTitle={note.title}
+      editNoteType={note.type}
+      editNoteContent={note.content}
+    />
+  );
+}
+
 const App: React.FC = () => {
   return (
     <BrowserRouter>
@@ -35,6 +64,7 @@ const App: React.FC = () => {
             <Route path="/" element={<DashboardView />} />
             <Route path="/search" element={<SearchView />} />
             <Route path="/note/:id" element={<NotePage />} />
+            <Route path="/note/:id/edit" element={<NoteEditRoute />} />
             <Route path="/new" element={<NoteEditorRoute />} />
             <Route path="/capture" element={<CaptureView />} />
             <Route path="/tags" element={<TagBrowser />} />

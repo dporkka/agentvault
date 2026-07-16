@@ -1,146 +1,143 @@
 import React, { useState } from 'react';
 import { api } from '@/api/client';
+import { MarkdownEditor } from '@agentvault/ui';
 
 interface NoteEditorProps {
   onCreated?: (id: string, path: string) => void;
   onCancel?: () => void;
+  /** If provided, edit existing note instead of creating */
+  editNoteId?: string;
+  editNoteTitle?: string;
+  editNoteType?: string;
+  editNoteContent?: string;
 }
 
 const NOTE_TYPES = ['note', 'decision', 'task', 'meeting', 'source'] as const;
 
-const NoteEditor: React.FC<NoteEditorProps> = ({ onCreated, onCancel }) => {
-  const [title, setTitle] = useState('');
-  const [type, setType] = useState<(typeof NOTE_TYPES)[number]>('note');
+const NoteEditor: React.FC<NoteEditorProps> = ({
+  onCreated, onCancel, editNoteId, editNoteTitle, editNoteType, editNoteContent,
+}) => {
+  const isEdit = !!editNoteId;
+  const [title, setTitle] = useState(editNoteTitle || '');
+  const [type, setType] = useState<string>(editNoteType || 'note');
   const [project, setProject] = useState('');
   const [tags, setTags] = useState('');
+  const [content, setContent] = useState(editNoteContent || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     if (!title.trim()) return;
-
     setLoading(true);
     setError(null);
 
     try {
-      const result = await api.createNote({
-        type,
-        title: title.trim(),
-        project: project.trim() || undefined,
-        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-      });
-      onCreated?.(result.id, result.path);
+      if (isEdit) {
+        const result = await api.updateNote(editNoteId!, {
+          title: title,
+          content: content || undefined,
+          tags: tags ? tags.split(',').map(t => t.trim()) : undefined,
+        });
+        onCreated?.(result.id, result.path);
+      } else {
+        // Create: first create the note, then update with content
+        const result = await api.createNote({
+          type: type,
+          title: title,
+          project: project || undefined,
+          tags: tags ? tags.split(',').map(t => t.trim()) : undefined,
+        });
+        if (content) {
+          await api.updateNote(result.id, { content });
+        }
+        onCreated?.(result.id, result.path);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create note');
+      setError(err instanceof Error ? err.message : 'Failed to save note');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="p-6 animate-fade-in">
-      <h2 className="text-lg font-semibold text-vault-text-primary mb-4">Create Note</h2>
-
-      <form onSubmit={handleSubmit} className="space-y-4 max-w-lg">
-        {/* Title */}
-        <div>
-          <label className="block text-sm font-medium text-vault-text-secondary mb-1">Title *</label>
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-3 border-b border-vault-border flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <h2 className="text-lg font-semibold text-vault-text-primary">
+            {isEdit ? 'Edit Note' : 'New Note'}
+          </h2>
           <input
             type="text"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Note title"
-            required
-            className="w-full bg-vault-bg-tertiary border border-vault-border rounded-lg px-3 py-2 text-sm text-vault-text-primary placeholder-vault-text-muted focus:border-vault-accent focus:ring-1 focus:ring-vault-accent transition-colors outline-none"
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Note title..."
+            className="bg-transparent text-lg text-vault-text-primary outline-none placeholder-vault-text-muted"
+            style={{ minWidth: '200px' }}
           />
+          {!isEdit && (
+            <div className="flex items-center gap-1">
+              {NOTE_TYPES.map(t => (
+                <button
+                  key={t}
+                  onClick={() => setType(t)}
+                  className={`px-2 py-0.5 text-xs rounded-full transition-colors ${
+                    type === t ? 'bg-vault-accent/20 text-vault-accent' : 'text-vault-text-muted hover:text-vault-text-secondary'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-
-        {/* Type */}
-        <fieldset>
-          <legend className="block text-sm font-medium text-vault-text-secondary mb-1">Type</legend>
-          <div className="flex flex-wrap gap-1.5">
-            {NOTE_TYPES.map((t) => (
-              <label
-                key={t}
-                htmlFor={`note-type-${t}`}
-                className={`px-3 py-1 text-xs font-medium rounded-full capitalize transition-colors cursor-pointer select-none ${
-                  type === t
-                    ? 'bg-vault-accent text-white'
-                    : 'bg-vault-bg-tertiary text-vault-text-secondary hover:bg-vault-bg-hover'
-                }`}
-              >
-                <input
-                  type="radio"
-                  id={`note-type-${t}`}
-                  name="note-type"
-                  value={t}
-                  checked={type === t}
-                  onChange={() => setType(t)}
-                  className="sr-only"
-                />
-                {t}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        {/* Project */}
-        <div>
-          <label className="block text-sm font-medium text-vault-text-secondary mb-1">Project</label>
-          <input
-            type="text"
-            value={project}
-            onChange={(e) => setProject(e.target.value)}
-            placeholder="Project name (optional)"
-            className="w-full bg-vault-bg-tertiary border border-vault-border rounded-lg px-3 py-2 text-sm text-vault-text-primary placeholder-vault-text-muted focus:border-vault-accent focus:ring-1 focus:ring-vault-accent transition-colors outline-none"
-          />
-        </div>
-
-        {/* Tags */}
-        <div>
-          <label className="block text-sm font-medium text-vault-text-secondary mb-1">Tags</label>
-          <input
-            type="text"
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            placeholder="tag1, tag2, tag3"
-            className="w-full bg-vault-bg-tertiary border border-vault-border rounded-lg px-3 py-2 text-sm text-vault-text-primary placeholder-vault-text-muted focus:border-vault-accent focus:ring-1 focus:ring-vault-accent transition-colors outline-none"
-          />
-          <p className="text-xs text-vault-text-muted mt-1">Comma-separated list of tags</p>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="flex items-center gap-2 text-sm text-vault-error">
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-            </svg>
-            {error}
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={loading || !title.trim()}
-            className="flex items-center gap-2 px-4 py-2 bg-vault-accent hover:bg-vault-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            {loading && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-            Create Note
-          </button>
+        <div className="flex items-center gap-3">
+          {error && <span className="text-sm text-vault-error">{error}</span>}
           {onCancel && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-4 py-2 text-sm text-vault-text-secondary hover:text-vault-text-primary transition-colors"
-            >
+            <button onClick={onCancel} className="text-sm text-vault-text-muted hover:text-vault-text-secondary">
               Cancel
             </button>
           )}
+          <button
+            onClick={handleSubmit}
+            disabled={loading || !title.trim()}
+            className="px-4 py-1.5 text-sm rounded-md bg-vault-accent text-white disabled:opacity-50 hover:bg-vault-accent-hover transition-colors"
+          >
+            {loading ? 'Saving...' : isEdit ? 'Save' : 'Create'}
+          </button>
         </div>
-      </form>
+      </div>
+
+      {/* Project + Tags row (create only) */}
+      {!isEdit && (
+        <div className="flex items-center gap-4 px-6 py-2 border-b border-vault-border flex-shrink-0 bg-vault-bg-tertiary/50">
+          <input
+            type="text"
+            value={project}
+            onChange={e => setProject(e.target.value)}
+            placeholder="Project (optional)"
+            className="bg-transparent text-sm text-vault-text-secondary outline-none placeholder-vault-text-muted w-40"
+          />
+          <input
+            type="text"
+            value={tags}
+            onChange={e => setTags(e.target.value)}
+            placeholder="Tags (comma-separated)"
+            className="bg-transparent text-sm text-vault-text-secondary outline-none placeholder-vault-text-muted flex-1"
+          />
+        </div>
+      )}
+
+      {/* Editor */}
+      <div className="flex-1 min-h-0">
+        <MarkdownEditor
+          value={content}
+          onChange={setContent}
+          onSave={handleSubmit}
+          placeholder={isEdit ? 'Edit your note...' : '# Start writing...\n\nYour note content goes here.'}
+          isDirty={content !== (editNoteContent || '')}
+        />
+      </div>
     </div>
   );
 };

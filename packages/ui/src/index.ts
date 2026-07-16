@@ -9,3 +9,6 @@ export type { CommandPaletteProps, SearchResult } from './components/CommandPale
 
 export { Toast } from './components/Toast';
 export type { ToastProps } from './components/Toast';
+
+export { MarkdownEditor } from './components/MarkdownEditor';
+export type { MarkdownEditorProps } from './components/MarkdownEditor';
