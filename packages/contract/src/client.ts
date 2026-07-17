@@ -93,6 +93,8 @@ export interface ApiClient {
   getGitStatus(): Promise<GitStatus>;
   getGraph(center: string, depth?: number): Promise<Graph>;
   getGraphNeighbors(id: string): Promise<Graph>;
+  pinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
+  unpinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
 }
 
 function buildSearch(params: SearchParams | RecentParams | StaleParams | undefined): string {
@@ -239,6 +241,12 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     },
     getGraphNeighbors(id) {
       return call<Graph>('GET', `/graph/neighbors?id=${encodeURIComponent(id)}`, undefined, false);
+    },
+    pinNote(id) {
+      return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/pin`, undefined, true);
+    },
+    unpinNote(id) {
+      return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/unpin`, undefined, true);
     },
   };
 }

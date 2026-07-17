@@ -1175,3 +1175,69 @@ func (s *Server) handleSetStatus(args map[string]interface{}) (string, error) {
 	}
 	return s.annotateNote(args), nil
 }
+
+// --- Tool: agentvault.toggle_pin ---
+
+func (s *Server) registerTogglePin() {
+	s.tools["agentvault.toggle_pin"] = Tool{
+		Name:        "agentvault.toggle_pin",
+		Description: "Pin or unpin a note. Pinned notes appear in filtered searches and can be surfaced separately.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"note_id": schemaString("Note ID to pin or unpin"),
+			"action":  schemaStringEnum("Whether to pin or unpin", []string{"pin", "unpin"}),
+		}, []string{"note_id", "action"}),
+		Handler: s.handleTogglePinTool,
+	}
+}
+
+func (s *Server) handleTogglePinTool(args map[string]interface{}) (string, error) {
+	noteID := stringArg(args, "note_id")
+	action := stringArg(args, "action")
+
+	if noteID == "" {
+		return "", fmt.Errorf("note_id is required")
+	}
+	if action != "pin" && action != "unpin" {
+		return "", fmt.Errorf("action must be 'pin' or 'unpin'")
+	}
+
+	result, err := s.searcher.GetByID(noteID)
+	if err != nil {
+		return "", fmt.Errorf("note not found: %w", err)
+	}
+
+	fullPath := filepath.Join(s.vaultPath, result.Path)
+	doc, err := markdown.ParseFile(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse note: %w", err)
+	}
+
+	extra := doc.Frontmatter.Extra
+	if extra == nil {
+		extra = make(map[string]interface{})
+	}
+
+	if action == "pin" {
+		extra["pinned"] = true
+	} else {
+		delete(extra, "pinned")
+	}
+	doc.Frontmatter.Extra = extra
+	doc.Frontmatter.Updated = time.Now().UTC().Format(time.RFC3339)
+
+	fm := doc.Frontmatter
+	fmMap := map[string]interface{}{
+		"id": fm.ID, "type": fm.Type, "title": fm.Title,
+		"status": fm.Status, "project": fm.Project,
+		"tags": fm.Tags, "created": fm.Created, "updated": fm.Updated,
+	}
+	for k, v := range fm.Extra {
+		fmMap[k] = v
+	}
+	yamlBytes, _ := yaml.Marshal(fmMap)
+	os.WriteFile(fullPath, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644)
+
+	go func() { _, _ = s.indexer.Index(indexer.IndexOptions{Path: result.Path}) }()
+
+	return fmt.Sprintf("Note %q %sned", noteID, action), nil
+}

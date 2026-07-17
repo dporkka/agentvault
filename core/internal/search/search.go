@@ -123,24 +123,40 @@ func (s *Searcher) Search(q Query) ([]Result, error) {
 
 	// Apply filters
 	if q.Type != "" {
-		query += " AND notes.type = ?"
-		args = append(args, q.Type)
+		types := splitCSV(q.Type)
+		placeholders := make([]string, len(types))
+		for i, t := range types {
+			placeholders[i] = "?"
+			args = append(args, t)
+		}
+		query += fmt.Sprintf(" AND notes.type IN (%s)", strings.Join(placeholders, ","))
 	}
 	if q.Project != "" {
-		query += " AND notes.project = ?"
-		args = append(args, q.Project)
+		projects := splitCSV(q.Project)
+		placeholders := make([]string, len(projects))
+		for i, p := range projects {
+			placeholders[i] = "?"
+			args = append(args, p)
+		}
+		query += fmt.Sprintf(" AND notes.project IN (%s)", strings.Join(placeholders, ","))
 	}
 	if q.Status != "" {
-		query += " AND notes.status = ?"
-		args = append(args, q.Status)
+		statuses := splitCSV(q.Status)
+		placeholders := make([]string, len(statuses))
+		for i, s := range statuses {
+			placeholders[i] = "?"
+			args = append(args, s)
+		}
+		query += fmt.Sprintf(" AND notes.status IN (%s)", strings.Join(placeholders, ","))
 	}
 	if q.Tag != "" {
-		// Use an EXISTS subquery instead of joining tags. A JOIN changes the
-		// query shape in ways that break the FTS5 snippet() function when a
-		// text query is also present, and it requires GROUP BY to avoid
-		// duplicates. EXISTS avoids both issues.
-		query += " AND EXISTS (SELECT 1 FROM tags WHERE tags.note_id = notes.id AND tags.tag = ?)"
-		args = append(args, q.Tag)
+		tags := splitCSV(q.Tag)
+		placeholders := make([]string, len(tags))
+		for i, t := range tags {
+			placeholders[i] = "?"
+			args = append(args, t)
+		}
+		query += fmt.Sprintf(" AND EXISTS (SELECT 1 FROM tags WHERE tags.note_id = notes.id AND tags.tag IN (%s))", strings.Join(placeholders, ","))
 	}
 	if q.Pinned {
 		query += ` AND notes.frontmatter_json LIKE '%"pinned":true%'`
@@ -439,4 +455,20 @@ func scanLinks(rows *sql.Rows) ([]contract.Link, error) {
 		links = append(links, l)
 	}
 	return links, rows.Err()
+}
+
+// splitCSV splits a comma-separated string, trimming whitespace and filtering empties.
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	if len(result) == 0 {
+		return []string{s} // return original if all empty (never match)
+	}
+	return result
 }

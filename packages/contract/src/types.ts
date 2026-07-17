@@ -196,6 +196,7 @@ export interface SearchParams {
   project?: string;
   tag?: string;
   status?: string;
+  pinned?: boolean;
   limit?: number;
   offset?: number;
   vector?: boolean;
