@@ -18,6 +18,26 @@ const SearchView: React.FC = () => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('av-search-history');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [inputFocused, setInputFocused] = useState(false);
+  const historyRef = useRef<HTMLDivElement>(null);
+
+  const saveToHistory = useCallback((q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setSearchHistory(prev => {
+      const next = [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 10);
+      localStorage.setItem('av-search-history', JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   const debouncedQuery = useDebounce(query, 200);
 
@@ -57,6 +77,13 @@ const SearchView: React.FC = () => {
     return () => controller.abort();
   }, [debouncedQuery, typeFilter, vectorEnabled, hybridWeight]);
 
+  // Persist search queries to history when results arrive
+  useEffect(() => {
+    if (results.length > 0 && debouncedQuery.trim().length > 0) {
+      saveToHistory(debouncedQuery);
+    }
+  }, [results]);
+
   // Keyboard shortcuts
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -67,6 +94,7 @@ const SearchView: React.FC = () => {
       setSelectedIndex((prev) => Math.max(prev - 1, -1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
+      saveToHistory(query);
       if (selectedIndex >= 0 && results[selectedIndex]) {
         navigate(`/note/${encodeURIComponent(results[selectedIndex].id)}`);
       }
@@ -95,6 +123,23 @@ const SearchView: React.FC = () => {
     }
   }, [selectedIndex]);
 
+  // Close history dropdown on outside click
+  useEffect(() => {
+    if (!inputFocused) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        historyRef.current &&
+        !historyRef.current.contains(e.target as Node) &&
+        searchInputRef.current &&
+        !searchInputRef.current.contains(e.target as Node)
+      ) {
+        setInputFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [inputFocused]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -118,6 +163,8 @@ const SearchView: React.FC = () => {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setTimeout(() => setInputFocused(false), 150)}
             placeholder="Search notes... (press / to focus)"
             className="w-full bg-vault-bg-tertiary border border-vault-border rounded-lg pl-10 pr-4 py-2.5 text-sm text-vault-text-primary placeholder-vault-text-muted focus:border-vault-accent focus:ring-1 focus:ring-vault-accent transition-colors outline-none"
             autoComplete="off"
@@ -132,6 +179,52 @@ const SearchView: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Search history dropdown */}
+        {inputFocused && query.trim().length === 0 && searchHistory.length > 0 && (
+          <div
+            ref={historyRef}
+            className="absolute left-6 right-6 z-10 mt-1 bg-vault-bg-secondary border border-vault-border rounded-lg shadow-lg overflow-hidden"
+            style={{ top: '100%' }}
+          >
+            <div className="max-h-60 overflow-y-auto">
+              {searchHistory.map((item, i) => (
+                <button
+                  key={`${item}-${i}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setQuery(item);
+                    setInputFocused(false);
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm text-vault-text-primary hover:bg-vault-bg-hover transition-colors flex items-center gap-2"
+                >
+                  <svg
+                    className="w-3.5 h-3.5 text-vault-text-muted shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  <span className="truncate">{item}</span>
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-vault-border">
+              <button
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  setSearchHistory([]);
+                  localStorage.removeItem('av-search-history');
+                }}
+                className="w-full text-center px-4 py-2 text-xs text-vault-text-muted hover:text-vault-text-secondary hover:bg-vault-bg-hover transition-colors"
+              >
+                Clear history
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Type filters */}
         <div className="flex flex-wrap gap-1.5">

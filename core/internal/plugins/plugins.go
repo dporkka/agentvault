@@ -25,6 +25,8 @@ type Manifest struct {
 	Prompts     []string `json:"prompts,omitempty"`
 	Resources   []string `json:"resources,omitempty"`
 	Enabled     bool     `json:"enabled"`
+	Schedule    string   `json:"schedule,omitempty"`    // cron expression, e.g. "0 9 * * *"
+	Permissions []string `json:"permissions,omitempty"` // read, write, annotate
 }
 
 // Plugin represents a discovered plugin with its manifest.
@@ -88,7 +90,32 @@ func Enabled(vaultPath string) ([]Plugin, error) {
 	return enabled, nil
 }
 
-// Enable sets the enabled flag to true in the plugin manifest.
+
+// Scheduled returns enabled plugins that have a cron schedule.
+func Scheduled(vaultPath string) ([]Plugin, error) {
+	enabled, err := Enabled(vaultPath)
+	if err != nil {
+		return nil, err
+	}
+	var scheduled []Plugin
+	for _, p := range enabled {
+		if p.Manifest.Schedule != "" {
+			scheduled = append(scheduled, p)
+		}
+	}
+	return scheduled, nil
+}
+
+// HasPermission checks if a plugin has a specific permission.
+func HasPermission(p Plugin, perm string) bool {
+	for _, have := range p.Manifest.Permissions {
+		if have == perm || have == "write" && perm == "annotate" {
+			return true
+		}
+	}
+	// No permissions listed = full access (backward compat)
+	return len(p.Manifest.Permissions) == 0
+}
 func Enable(vaultPath, name string) error {
 	return setEnabled(vaultPath, name, true)
 }

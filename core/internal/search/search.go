@@ -25,6 +25,7 @@ type Query struct {
 	Project string
 	Tag     string
 	Status  string
+	Pinned  bool
 	Limit   int
 	Offset  int
 }
@@ -140,6 +141,9 @@ func (s *Searcher) Search(q Query) ([]Result, error) {
 		// duplicates. EXISTS avoids both issues.
 		query += " AND EXISTS (SELECT 1 FROM tags WHERE tags.note_id = notes.id AND tags.tag = ?)"
 		args = append(args, q.Tag)
+	}
+	if q.Pinned {
+		query += ` AND notes.frontmatter_json LIKE '%"pinned":true%'`
 	}
 
 	// Order by rank for FTS, updated_at otherwise

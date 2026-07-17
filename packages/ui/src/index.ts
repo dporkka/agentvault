@@ -12,3 +12,6 @@ export type { ToastProps } from './components/Toast';
 
 export { MarkdownEditor } from './components/MarkdownEditor';
 export type { MarkdownEditorProps } from './components/MarkdownEditor';
+
+export { ShortcutModal } from './components/ShortcutModal';
+export type { ShortcutModalProps } from './components/ShortcutModal';

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/agentvault/core/internal/plugins"
 	"github.com/spf13/cobra"
@@ -78,7 +79,14 @@ func runPluginList(cmd *cobra.Command, args []string) error {
 		if p.Manifest.Enabled {
 			status = "enabled"
 		}
-		fmt.Printf("  %-20s %-8s v%s — %s\n", p.Manifest.Name, status, p.Manifest.Version, p.Manifest.Description)
+		extra := ""
+		if p.Manifest.Schedule != "" {
+			extra += fmt.Sprintf(" [schedule: %s]", p.Manifest.Schedule)
+		}
+		if len(p.Manifest.Permissions) > 0 {
+			extra += fmt.Sprintf(" [perms: %s]", strings.Join(p.Manifest.Permissions, ","))
+		}
+		fmt.Printf("  %-20s %-8s v%s — %s%s\n", p.Manifest.Name, status, p.Manifest.Version, p.Manifest.Description, extra)
 	}
 	return nil
 }

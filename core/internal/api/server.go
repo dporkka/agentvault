@@ -161,6 +161,8 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("POST /notes", s.handleCreateNote)
 	s.mux.HandleFunc("PUT /notes/{id}", s.handleUpdateNote)
 	s.mux.HandleFunc("POST /notes/{id}/annotate", s.handleAnnotate)
+	s.mux.HandleFunc("POST /notes/{id}/pin", s.handleTogglePin)
+	s.mux.HandleFunc("POST /notes/{id}/unpin", s.handleTogglePin)
 	// Links
 	s.mux.HandleFunc("GET /links/{id}", s.handleNoteLinks)
 	s.mux.HandleFunc("POST /capture", s.handleCapture)

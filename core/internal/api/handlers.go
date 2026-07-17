@@ -100,6 +100,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		Project: r.URL.Query().Get("project"),
 		Tag:     r.URL.Query().Get("tag"),
 		Status:  r.URL.Query().Get("status"),
+		Pinned:  r.URL.Query().Get("pinned") == "true",
 	}
 
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
@@ -1164,6 +1165,71 @@ func (s *Server) handleAnnotate(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"path": result.Path, "id": id,
+	})
+}
+
+// ── Pin / Unpin ──────────────────────────────────────────────────────
+
+func (s *Server) handleTogglePin(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"error": "missing note id", "detail": "URL path must be /notes/{id}/pin or /notes/{id}/unpin",
+		})
+		return
+	}
+
+	result, err := s.searcher.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]interface{}{"error": "not found", "detail": err.Error()})
+		return
+	}
+
+	fullPath := filepath.Join(s.vaultPath, result.Path)
+	absFull, _ := filepath.Abs(fullPath)
+	absVault, _ := filepath.Abs(s.vaultPath)
+	clean := filepath.Clean(absFull)
+	vaultClean := filepath.Clean(absVault)
+	if !strings.HasPrefix(clean, vaultClean+string(filepath.Separator)) && clean != vaultClean {
+		writeJSON(w, http.StatusForbidden, map[string]interface{}{"error": "path traversal detected"})
+		return
+	}
+
+	doc, err := markdown.ParseFile(clean)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "parse failed", "detail": err.Error()})
+		return
+	}
+
+	// Toggle pinned in extra fields
+	extra := doc.Frontmatter.Extra
+	if extra == nil {
+		extra = make(map[string]interface{})
+	}
+	isPin := strings.HasSuffix(r.URL.Path, "/pin")
+	if isPin {
+		extra["pinned"] = true
+	} else {
+		delete(extra, "pinned")
+	}
+	doc.Frontmatter.Extra = extra
+	doc.Frontmatter.Updated = time.Now().UTC().Format(time.RFC3339)
+
+	fm := doc.Frontmatter
+	fmMap := map[string]interface{}{
+		"id": fm.ID, "type": fm.Type, "title": fm.Title,
+		"status": fm.Status, "project": fm.Project,
+		"tags": fm.Tags, "created": fm.Created, "updated": fm.Updated,
+	}
+	for k, v := range fm.Extra {
+		fmMap[k] = v
+	}
+	yamlBytes, _ := yaml.Marshal(fmMap)
+	os.WriteFile(clean, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644)
+	go func() { _, _ = s.indexer.Index(indexer.IndexOptions{Path: result.Path}) }()
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"path": result.Path, "id": id, "pinned": isPin,
 	})
 }
 
