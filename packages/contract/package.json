@@ -9,6 +9,9 @@
     ".": "./src/index.ts",
     "./types": "./src/types.ts",
     "./endpoints": "./src/endpoints.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./knowledge": "./src/knowledge.ts",
+    "./context": "./src/context.ts",
+    "./knowledge-client": "./src/knowledge-client.ts"
   }
 }
