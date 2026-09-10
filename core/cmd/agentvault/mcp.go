@@ -47,7 +47,7 @@ Supports stdio (default) and authenticated HTTP transports.
 User-authored file writes are proposal-only by default. A persistent capability
 token can bind the MCP process to a scoped agent identity and selectively expose
 approve, commit, reject, or undo tools. Legacy direct-write MCP commands remain
-an explicit compatibility opt-in.
+an explicit compatibility opt-in and cannot be combined with a scoped identity.
 
 Example:
   agentvault mcp serve
@@ -67,6 +67,8 @@ proposal/read mutation subset. Supplying a capability token binds the process to
 that identity and its mutation scopes. HTTP transport requires a capability token
 and uses the same token as Bearer/X-AgentVault-Token transport authentication.
 
+--allow-direct-writes is mutually exclusive with a capability token so a scoped
+identity can never regain the legacy unreviewed file-writing tools by accident.
 Prefer AGENTVAULT_CAPABILITY_TOKEN over a command-line token when process-list
 visibility is a concern.`,
 	Run: runMcpServe,
@@ -98,6 +100,10 @@ func runMcpServe(cmd *cobra.Command, args []string) {
 	}
 	if mcpHTTP && capabilityToken == "" {
 		fmt.Fprintln(os.Stderr, "Error: HTTP MCP requires --capability-token or AGENTVAULT_CAPABILITY_TOKEN")
+		os.Exit(1)
+	}
+	if mcpAllowDirectWrites && capabilityToken != "" {
+		fmt.Fprintln(os.Stderr, "Error: --allow-direct-writes cannot be combined with a scoped capability token")
 		os.Exit(1)
 	}
 
