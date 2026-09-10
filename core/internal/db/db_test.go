@@ -9,7 +9,7 @@ import (
 	"github.com/agentvault/core/migrations"
 )
 
-const latestEmbeddedMigrationVersion = 3
+const latestEmbeddedMigrationVersion = 4
 
 func TestOpen(t *testing.T) {
 	t.Run("new database", func(t *testing.T) {
@@ -61,7 +61,7 @@ func TestRunMigrations(t *testing.T) {
 		t.Errorf("Expected migration version %d, got %d", latestEmbeddedMigrationVersion, version)
 	}
 
-	// Verify legacy and universal-knowledge projection tables exist.
+	// Verify legacy and agent-native projection tables exist.
 	tables := []string{
 		"files",
 		"notes",
@@ -74,6 +74,7 @@ func TestRunMigrations(t *testing.T) {
 		"memory_records",
 		"agent_sessions",
 		"session_events",
+		"mutation_proposals",
 		"schema_migrations",
 	}
 	for _, table := range tables {

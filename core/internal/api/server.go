@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/knowledge"
+	"github.com/agentvault/core/internal/mutations"
 	"github.com/agentvault/core/internal/search"
 	"github.com/agentvault/core/internal/watcher"
 )
@@ -64,6 +66,7 @@ type Server struct {
 	searcher         *search.Searcher
 	indexer          *indexer.Indexer
 	knowledge        *knowledge.Store
+	mutations        *mutations.Engine
 	knowledgeInitErr error
 	mux              *http.ServeMux
 	server           *http.Server
@@ -77,18 +80,28 @@ type Server struct {
 
 // NewServer creates a new API server. Structured agent state is recovered from
 // the canonical vault journal before knowledge endpoints become available.
+// Interrupted filesystem mutations are then reconciled against their durable
+// before/after hashes; ambiguous third-party edits are never overwritten.
 func NewServer(vaultPath string, database *db.DB) *Server {
 	mux := http.NewServeMux()
 	searcher := search.New(database)
 	searcher.ConfigureEmbeddings(vaultPath)
+	idx := indexer.New(database, vaultPath)
 	knowledgeStore := knowledge.New(database, vaultPath)
 	knowledgeInitErr := knowledgeStore.ReplayJournal()
+	mutationEngine := mutations.New(vaultPath, knowledgeStore, idx)
+	if knowledgeInitErr == nil {
+		if recoveryErrors := mutationEngine.Recover(); len(recoveryErrors) > 0 {
+			knowledgeInitErr = fmt.Errorf("mutation recovery failed: %w", errors.Join(recoveryErrors...))
+		}
+	}
 	return &Server{
 		vaultPath:        vaultPath,
 		db:               database,
 		searcher:         searcher,
-		indexer:          indexer.New(database, vaultPath),
+		indexer:          idx,
 		knowledge:        knowledgeStore,
+		mutations:        mutationEngine,
 		knowledgeInitErr: knowledgeInitErr,
 		mux:              mux,
 		authToken:        generateAuthToken(),
@@ -229,6 +242,16 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /sessions/{id}", s.withKnowledgeReady(s.handleGetAgentSession))
 	s.mux.HandleFunc("POST /sessions/{id}/events", s.withKnowledgeReady(s.handleAppendSessionEvent))
 	s.mux.HandleFunc("POST /sessions/{id}/close", s.withKnowledgeReady(s.handleCloseAgentSession))
+
+	// Transactional agent mutations. Proposal, approval, commit, and undo remain
+	// separate operations so an agent cannot silently collapse the review gate.
+	s.mux.HandleFunc("GET /mutations", s.withKnowledgeReady(s.handleListMutations))
+	s.mux.HandleFunc("POST /mutations", s.withKnowledgeReady(s.handleProposeMutation))
+	s.mux.HandleFunc("GET /mutations/{id}", s.withKnowledgeReady(s.handleGetMutation))
+	s.mux.HandleFunc("POST /mutations/{id}/approve", s.withKnowledgeReady(s.handleApproveMutation))
+	s.mux.HandleFunc("POST /mutations/{id}/commit", s.withKnowledgeReady(s.handleCommitMutation))
+	s.mux.HandleFunc("POST /mutations/{id}/undo", s.withKnowledgeReady(s.handleUndoMutation))
+	s.mux.HandleFunc("POST /mutations/{id}/reject", s.withKnowledgeReady(s.handleRejectMutation))
 
 	// Git status
 	s.mux.HandleFunc("GET /git/status", s.handleGitStatus)

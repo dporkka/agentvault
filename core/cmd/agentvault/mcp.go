@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	mcpHTTP bool
-	mcpPort int
+	mcpHTTP              bool
+	mcpPort              int
+	mcpAllowDirectWrites bool
 )
 
 // mcpStopSignal returns a channel that is closed when the MCP server should
@@ -41,10 +42,13 @@ var mcpCmd = &cobra.Command{
 Exposes AgentVault tools to AI agents via the Model Context Protocol.
 Supports stdio (default) and HTTP transports.
 
+User-authored file writes are proposal-only by default. Legacy direct-write MCP
+commands can be enabled explicitly for compatibility with trusted clients.
+
 Example:
-  agentvault mcp serve              # stdio mode (default)
-  agentvault mcp serve --http       # HTTP mode on default port 7777
-  agentvault mcp serve --http --port 8888`,
+  agentvault mcp serve                         # stdio, reviewed mutations
+  agentvault mcp serve --http                  # HTTP on default port 7777
+  agentvault mcp serve --allow-direct-writes   # opt in to legacy file writers`,
 }
 
 // mcpServeCmd is the actual serve subcommand.
@@ -53,11 +57,14 @@ var mcpServeCmd = &cobra.Command{
 	Short: "Start MCP server for AI agent integration",
 	Long: `Starts an MCP server that exposes AgentVault tools to AI agents.
 
-Supports stdio (default) and HTTP transports.
+Supports stdio (default) and HTTP transports. Direct mutation of user-authored
+vault files is disabled by default; agents can create reviewable transactional
+mutation proposals instead.
 
 Example:
-  agentvault mcp serve              # stdio mode
-  agentvault mcp serve --http --port 7777`,
+  agentvault mcp serve
+  agentvault mcp serve --http --port 7777
+  agentvault mcp serve --allow-direct-writes`,
 	Run: runMcpServe,
 }
 
@@ -67,6 +74,7 @@ func init() {
 
 	mcpServeCmd.Flags().BoolVar(&mcpHTTP, "http", false, "Use HTTP transport instead of stdio")
 	mcpServeCmd.Flags().IntVar(&mcpPort, "port", 7777, "Port for HTTP transport")
+	mcpServeCmd.Flags().BoolVar(&mcpAllowDirectWrites, "allow-direct-writes", false, "Enable legacy MCP tools that write vault files without transactional review")
 }
 
 func runMcpServe(cmd *cobra.Command, args []string) {
@@ -81,11 +89,20 @@ func runMcpServe(cmd *cobra.Command, args []string) {
 	}
 	defer database.Close()
 
-	// Create and configure server
+	// Create and configure server. The default registry prevents direct edits to
+	// user-authored files from bypassing the mutation review protocol.
 	server := mcp.NewServer(vp, database)
-	server.RegisterTools()
+	if mcpAllowDirectWrites {
+		server.RegisterTools()
+	} else {
+		server.RegisterSafeTools()
+	}
 	server.RegisterKnowledgeTools()
 	server.RegisterContextTool()
+	// Mutation MCP intentionally exposes proposal/read tools only. Approval,
+	// commit, reject, and undo remain trusted control-plane operations until MCP
+	// identities are capability-scoped.
+	server.RegisterMutationTools()
 	server.RegisterResources()
 
 	if mcpHTTP {
