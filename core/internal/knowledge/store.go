@@ -1,7 +1,7 @@
-// Package knowledge provides durable, structured knowledge primitives on top
-// of AgentVault's rebuildable SQLite index. Markdown/YAML files remain the
-// canonical representation for user-authored documents; this package stores
-// machine-derived objects, relations, provenance, memories, and agent state.
+// Package knowledge provides durable, structured knowledge primitives for
+// AgentVault. Machine-authored state is persisted to a user-owned JSONL journal
+// and projected into SQLite for fast querying; Markdown/YAML remains canonical
+// for user-authored documents.
 package knowledge
 
 import (
@@ -19,14 +19,30 @@ import (
 
 const defaultLimit = 100
 
-// Store persists universal knowledge primitives.
+// Store persists universal knowledge primitives. When journal is configured,
+// write operations are journal-first so SQLite can be treated as a projection.
 type Store struct {
-	db *db.DB
+	db      *db.DB
+	journal *Journal
 }
 
-// New returns a knowledge store backed by database.
-func New(database *db.DB) *Store {
-	return &Store{db: database}
+// New returns a knowledge store backed by database. Supplying vaultPath enables
+// the canonical append-only journal used for durable machine-authored state.
+func New(database *db.DB, vaultPath ...string) *Store {
+	store := &Store{db: database}
+	if len(vaultPath) > 0 && strings.TrimSpace(vaultPath[0]) != "" {
+		store.journal = NewJournal(vaultPath[0])
+	}
+	return store
+}
+
+// JournalPath returns the canonical journal path, or an empty string when this
+// store was created without durable journaling (primarily useful in tests).
+func (s *Store) JournalPath() string {
+	if s.journal == nil {
+		return ""
+	}
+	return s.journal.Path()
 }
 
 // CreateProvenance appends a provenance record. Provenance is intentionally
@@ -49,27 +65,16 @@ func (s *Store) CreateProvenance(record contract.ProvenanceRecord) (contract.Pro
 	if record.CreatedAt == "" {
 		record.CreatedAt = now
 	}
+	record.Evidence = orEmptySlice(record.Evidence)
+	record.Metadata = orEmptyMap(record.Metadata)
 
-	evidence, err := json.Marshal(orEmptySlice(record.Evidence))
-	if err != nil {
-		return contract.ProvenanceRecord{}, fmt.Errorf("marshal provenance evidence: %w", err)
+	if err := s.ensureIDAbsent("provenance_records", record.ID); err != nil {
+		return contract.ProvenanceRecord{}, err
 	}
-	metadata, err := json.Marshal(orEmptyMap(record.Metadata))
-	if err != nil {
-		return contract.ProvenanceRecord{}, fmt.Errorf("marshal provenance metadata: %w", err)
-	}
-
-	_, err = s.db.Exec(`
-		INSERT INTO provenance_records (
-			id, source_type, source_id, agent_id, session_id, model, confidence,
-			observed_at, evidence_json, metadata_json, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		record.ID, record.SourceType, nullIfEmpty(record.SourceID), nullIfEmpty(record.AgentID),
-		nullIfEmpty(record.SessionID), nullIfEmpty(record.Model), record.Confidence,
-		record.ObservedAt, string(evidence), string(metadata), record.CreatedAt,
-	)
-	if err != nil {
-		return contract.ProvenanceRecord{}, fmt.Errorf("create provenance: %w", err)
+	if err := s.persist(eventProvenanceCreated, record, func() error {
+		return s.projectProvenance(record)
+	}); err != nil {
+		return contract.ProvenanceRecord{}, err
 	}
 	return record, nil
 }
@@ -113,35 +118,40 @@ func (s *Store) UpsertObject(req contract.UpsertKnowledgeObjectRequest) (contrac
 	if id == "" {
 		id = newID("obj")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	data, err := json.Marshal(orEmptyMap(req.Data))
-	if err != nil {
-		return contract.KnowledgeObject{}, fmt.Errorf("marshal object data: %w", err)
+	if err := s.validateCanonicalPath(id, req.CanonicalPath); err != nil {
+		return contract.KnowledgeObject{}, err
+	}
+	if err := s.validateOptionalProvenance(req.ProvenanceID); err != nil {
+		return contract.KnowledgeObject{}, err
 	}
 
-	_, err = s.db.Exec(`
-		INSERT INTO objects (
-			id, type, title, status, organization, project, canonical_path,
-			data_json, provenance_id, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
-			type = excluded.type,
-			title = excluded.title,
-			status = excluded.status,
-			organization = excluded.organization,
-			project = excluded.project,
-			canonical_path = excluded.canonical_path,
-			data_json = excluded.data_json,
-			provenance_id = excluded.provenance_id,
-			updated_at = excluded.updated_at`,
-		id, req.Type, req.Title, nullIfEmpty(req.Status), nullIfEmpty(req.Organization),
-		nullIfEmpty(req.Project), nullIfEmpty(req.CanonicalPath), string(data),
-		nullIfEmpty(req.ProvenanceID), now, now,
-	)
-	if err != nil {
-		return contract.KnowledgeObject{}, fmt.Errorf("upsert object: %w", err)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	createdAt := now
+	if existing, err := s.GetObject(id); err == nil {
+		createdAt = existing.CreatedAt
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return contract.KnowledgeObject{}, err
 	}
-	return s.GetObject(id)
+
+	object := contract.KnowledgeObject{
+		ID:            id,
+		Type:          req.Type,
+		Title:         req.Title,
+		Status:        req.Status,
+		Organization:  req.Organization,
+		Project:       req.Project,
+		CanonicalPath: req.CanonicalPath,
+		Data:          orEmptyMap(req.Data),
+		ProvenanceID:  req.ProvenanceID,
+		CreatedAt:     createdAt,
+		UpdatedAt:     now,
+	}
+	if err := s.persist(eventObjectUpserted, object, func() error {
+		return s.projectObject(object)
+	}); err != nil {
+		return contract.KnowledgeObject{}, err
+	}
+	return object, nil
 }
 
 // GetObject returns a typed knowledge object by stable ID.
@@ -237,35 +247,43 @@ func (s *Store) CreateRelation(req contract.CreateObjectRelationRequest) (contra
 	if confidence < 0 || confidence > 1 {
 		return contract.ObjectRelation{}, errors.New("confidence must be between 0 and 1")
 	}
+	if _, err := s.GetObject(req.FromObjectID); err != nil {
+		return contract.ObjectRelation{}, fmt.Errorf("from object: %w", err)
+	}
+	if _, err := s.GetObject(req.ToObjectID); err != nil {
+		return contract.ObjectRelation{}, fmt.Errorf("to object: %w", err)
+	}
+	if err := s.validateOptionalProvenance(req.ProvenanceID); err != nil {
+		return contract.ObjectRelation{}, err
+	}
 
 	id := req.ID
 	if id == "" {
 		id = newID("rel")
 	}
+	if err := s.ensureIDAbsent("object_relations", id); err != nil {
+		return contract.ObjectRelation{}, err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	metadata, err := json.Marshal(orEmptyMap(req.Metadata))
-	if err != nil {
-		return contract.ObjectRelation{}, fmt.Errorf("marshal relation metadata: %w", err)
+	relation := contract.ObjectRelation{
+		ID:           id,
+		FromObjectID: req.FromObjectID,
+		ToObjectID:   req.ToObjectID,
+		RelationType: req.RelationType,
+		ValidFrom:    req.ValidFrom,
+		ValidTo:      req.ValidTo,
+		Confidence:   confidence,
+		ProvenanceID: req.ProvenanceID,
+		Metadata:     orEmptyMap(req.Metadata),
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
-
-	_, err = s.db.Exec(`
-		INSERT INTO object_relations (
-			id, from_object_id, to_object_id, relation_type, valid_from, valid_to,
-			confidence, provenance_id, metadata_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, req.FromObjectID, req.ToObjectID, req.RelationType, nullIfEmpty(req.ValidFrom),
-		nullIfEmpty(req.ValidTo), confidence, nullIfEmpty(req.ProvenanceID), string(metadata), now, now,
-	)
-	if err != nil {
-		return contract.ObjectRelation{}, fmt.Errorf("create relation: %w", err)
+	if err := s.persist(eventRelationCreated, relation, func() error {
+		return s.projectRelation(relation)
+	}); err != nil {
+		return contract.ObjectRelation{}, err
 	}
-
-	return contract.ObjectRelation{
-		ID: id, FromObjectID: req.FromObjectID, ToObjectID: req.ToObjectID,
-		RelationType: req.RelationType, ValidFrom: req.ValidFrom, ValidTo: req.ValidTo,
-		Confidence: confidence, ProvenanceID: req.ProvenanceID, Metadata: orEmptyMap(req.Metadata),
-		CreatedAt: now, UpdatedAt: now,
-	}, nil
+	return relation, nil
 }
 
 // RelationsForObject returns incoming and outgoing relations for objectID.
@@ -320,36 +338,71 @@ func (s *Store) RecordMemory(req contract.CreateMemoryRequest) (contract.MemoryR
 	if confidence < 0 || confidence > 1 {
 		return contract.MemoryRecord{}, errors.New("confidence must be between 0 and 1")
 	}
+	if err := s.validateOptionalObject(req.ObjectID); err != nil {
+		return contract.MemoryRecord{}, err
+	}
+	if err := s.validateOptionalProvenance(req.ProvenanceID); err != nil {
+		return contract.MemoryRecord{}, err
+	}
+	if req.SupersedesID != "" {
+		if _, err := s.GetMemory(req.SupersedesID); err != nil {
+			return contract.MemoryRecord{}, fmt.Errorf("superseded memory: %w", err)
+		}
+	}
 
 	id := req.ID
 	if id == "" {
 		id = newID("mem")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	metadata, err := json.Marshal(orEmptyMap(req.Metadata))
-	if err != nil {
-		return contract.MemoryRecord{}, fmt.Errorf("marshal memory metadata: %w", err)
+	if err := s.ensureIDAbsent("memory_records", id); err != nil {
+		return contract.MemoryRecord{}, err
 	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	memory := contract.MemoryRecord{
+		ID:           id,
+		MemoryType:   req.MemoryType,
+		ScopeType:    req.ScopeType,
+		ScopeID:      req.ScopeID,
+		Content:      req.Content,
+		ObjectID:     req.ObjectID,
+		ProvenanceID: req.ProvenanceID,
+		Confidence:   confidence,
+		ValidFrom:    req.ValidFrom,
+		ValidTo:      req.ValidTo,
+		SupersedesID: req.SupersedesID,
+		Metadata:     orEmptyMap(req.Metadata),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := s.persist(eventMemoryRecorded, memory, func() error {
+		return s.projectMemory(memory)
+	}); err != nil {
+		return contract.MemoryRecord{}, err
+	}
+	return memory, nil
+}
 
-	_, err = s.db.Exec(`
-		INSERT INTO memory_records (
-			id, memory_type, scope_type, scope_id, content, object_id, provenance_id,
-			confidence, valid_from, valid_to, supersedes_id, metadata_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, req.MemoryType, req.ScopeType, req.ScopeID, req.Content, nullIfEmpty(req.ObjectID),
-		nullIfEmpty(req.ProvenanceID), confidence, nullIfEmpty(req.ValidFrom), nullIfEmpty(req.ValidTo),
-		nullIfEmpty(req.SupersedesID), string(metadata), now, now,
+// GetMemory returns one durable memory record by ID.
+func (s *Store) GetMemory(id string) (contract.MemoryRecord, error) {
+	var memory contract.MemoryRecord
+	var metadataJSON string
+	err := s.db.QueryRow(`
+		SELECT id, memory_type, scope_type, scope_id, content,
+		       COALESCE(object_id, ''), COALESCE(provenance_id, ''), confidence,
+		       COALESCE(valid_from, ''), COALESCE(valid_to, ''), COALESCE(supersedes_id, ''),
+		       metadata_json, created_at, updated_at
+		FROM memory_records WHERE id = ?`, id).Scan(
+		&memory.ID, &memory.MemoryType, &memory.ScopeType, &memory.ScopeID, &memory.Content,
+		&memory.ObjectID, &memory.ProvenanceID, &memory.Confidence, &memory.ValidFrom,
+		&memory.ValidTo, &memory.SupersedesID, &metadataJSON, &memory.CreatedAt, &memory.UpdatedAt,
 	)
 	if err != nil {
-		return contract.MemoryRecord{}, fmt.Errorf("record memory: %w", err)
+		return contract.MemoryRecord{}, err
 	}
-
-	return contract.MemoryRecord{
-		ID: id, MemoryType: req.MemoryType, ScopeType: req.ScopeType, ScopeID: req.ScopeID,
-		Content: req.Content, ObjectID: req.ObjectID, ProvenanceID: req.ProvenanceID,
-		Confidence: confidence, ValidFrom: req.ValidFrom, ValidTo: req.ValidTo,
-		SupersedesID: req.SupersedesID, Metadata: orEmptyMap(req.Metadata), CreatedAt: now, UpdatedAt: now,
-	}, nil
+	if err := json.Unmarshal([]byte(metadataJSON), &memory.Metadata); err != nil {
+		return contract.MemoryRecord{}, fmt.Errorf("decode memory metadata: %w", err)
+	}
+	return memory, nil
 }
 
 // ListMemories returns memories for a scope, optionally filtered by memoryType.
@@ -415,24 +468,29 @@ func (s *Store) StartSession(req contract.StartAgentSessionRequest) (contract.Ag
 	if id == "" {
 		id = newID("session")
 	}
+	if err := s.ensureIDAbsent("agent_sessions", id); err != nil {
+		return contract.AgentSession{}, err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	contextJSON, err := json.Marshal(orEmptyMap(req.Context))
-	if err != nil {
-		return contract.AgentSession{}, fmt.Errorf("marshal session context: %w", err)
+	session := contract.AgentSession{
+		ID:        id,
+		AgentID:   req.AgentID,
+		Project:   req.Project,
+		Objective: req.Objective,
+		Status:    "active",
+		Branch:    req.Branch,
+		Worktree:  req.Worktree,
+		Context:   orEmptyMap(req.Context),
+		StartedAt: now,
+		UpdatedAt: now,
+		Events:    []contract.SessionEvent{},
 	}
-
-	_, err = s.db.Exec(`
-		INSERT INTO agent_sessions (
-			id, agent_id, project, objective, status, branch, worktree, context_json,
-			started_at, updated_at
-		) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
-		id, req.AgentID, nullIfEmpty(req.Project), req.Objective, nullIfEmpty(req.Branch),
-		nullIfEmpty(req.Worktree), string(contextJSON), now, now,
-	)
-	if err != nil {
-		return contract.AgentSession{}, fmt.Errorf("start session: %w", err)
+	if err := s.persist(eventSessionStarted, session, func() error {
+		return s.projectSessionStart(session)
+	}); err != nil {
+		return contract.AgentSession{}, err
 	}
-	return s.GetSession(id)
+	return session, nil
 }
 
 // AppendSessionEvent appends a durable event and advances the session's
@@ -444,52 +502,42 @@ func (s *Store) AppendSessionEvent(sessionID string, req contract.AppendSessionE
 	if strings.TrimSpace(req.EventType) == "" {
 		return contract.SessionEvent{}, errors.New("eventType is required")
 	}
+	session, err := s.GetSession(sessionID)
+	if err != nil {
+		return contract.SessionEvent{}, err
+	}
+	if session.Status != "active" {
+		return contract.SessionEvent{}, fmt.Errorf("session %s is %s", sessionID, session.Status)
+	}
+	if err := s.validateOptionalProvenance(req.ProvenanceID); err != nil {
+		return contract.SessionEvent{}, err
+	}
+
 	id := req.ID
 	if id == "" {
 		id = newID("event")
 	}
+	if err := s.ensureIDAbsent("session_events", id); err != nil {
+		return contract.SessionEvent{}, err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	payload, err := json.Marshal(orEmptyMap(req.Payload))
-	if err != nil {
-		return contract.SessionEvent{}, fmt.Errorf("marshal session event payload: %w", err)
+	event := contract.SessionEvent{
+		ID:           id,
+		SessionID:    sessionID,
+		EventType:    req.EventType,
+		Payload:      orEmptyMap(req.Payload),
+		ProvenanceID: req.ProvenanceID,
+		CreatedAt:    now,
 	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
+	if err := s.persist(eventSessionEvent, event, func() error {
+		return s.projectSessionEvent(event)
+	}); err != nil {
 		return contract.SessionEvent{}, err
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	result, err := tx.Exec(`UPDATE agent_sessions SET updated_at = ? WHERE id = ?`, now, sessionID)
-	if err != nil {
-		return contract.SessionEvent{}, fmt.Errorf("touch session: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return contract.SessionEvent{}, err
-	}
-	if rows == 0 {
-		return contract.SessionEvent{}, sql.ErrNoRows
-	}
-	_, err = tx.Exec(`
-		INSERT INTO session_events (id, session_id, event_type, payload_json, provenance_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		id, sessionID, req.EventType, string(payload), nullIfEmpty(req.ProvenanceID), now,
-	)
-	if err != nil {
-		return contract.SessionEvent{}, fmt.Errorf("append session event: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return contract.SessionEvent{}, err
-	}
-
-	return contract.SessionEvent{
-		ID: id, SessionID: sessionID, EventType: req.EventType, Payload: orEmptyMap(req.Payload),
-		ProvenanceID: req.ProvenanceID, CreatedAt: now,
-	}, nil
+	return event, nil
 }
 
-// CloseSession marks a session terminal. The default terminal status is completed.
+// CloseSession marks an active session terminal while preserving its history.
 func (s *Store) CloseSession(id, status string) (contract.AgentSession, error) {
 	if status == "" {
 		status = "completed"
@@ -497,20 +545,25 @@ func (s *Store) CloseSession(id, status string) (contract.AgentSession, error) {
 	if status == "active" {
 		return contract.AgentSession{}, errors.New("close status cannot be active")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	result, err := s.db.Exec(`
-		UPDATE agent_sessions SET status = ?, updated_at = ?, ended_at = ? WHERE id = ?`,
-		status, now, now, id,
-	)
-	if err != nil {
-		return contract.AgentSession{}, fmt.Errorf("close session: %w", err)
-	}
-	rows, err := result.RowsAffected()
+	session, err := s.GetSession(id)
 	if err != nil {
 		return contract.AgentSession{}, err
 	}
-	if rows == 0 {
-		return contract.AgentSession{}, sql.ErrNoRows
+	if session.Status != "active" {
+		return contract.AgentSession{}, fmt.Errorf("session %s is already %s", id, session.Status)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	closeEvent := sessionCloseProjection{
+		ID:        id,
+		Status:    status,
+		UpdatedAt: now,
+		EndedAt:   now,
+	}
+	if err := s.persist(eventSessionClosed, closeEvent, func() error {
+		return s.projectSessionClose(closeEvent)
+	}); err != nil {
+		return contract.AgentSession{}, err
 	}
 	return s.GetSession(id)
 }
@@ -556,6 +609,66 @@ func (s *Store) GetSession(id string) (contract.AgentSession, error) {
 		session.Events = append(session.Events, event)
 	}
 	return session, rows.Err()
+}
+
+func (s *Store) persist(eventType string, payload interface{}, project func() error) error {
+	if s.journal != nil {
+		if _, err := s.journal.Append(eventType, payload); err != nil {
+			return fmt.Errorf("persist canonical knowledge event: %w", err)
+		}
+	}
+	if err := project(); err != nil {
+		return fmt.Errorf("project canonical knowledge event: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) ensureIDAbsent(table, id string) error {
+	var existing string
+	query := "SELECT id FROM " + table + " WHERE id = ?"
+	err := s.db.QueryRow(query, id).Scan(&existing)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("%s id %s already exists", table, id)
+}
+
+func (s *Store) validateCanonicalPath(id, canonicalPath string) error {
+	if canonicalPath == "" {
+		return nil
+	}
+	var existing string
+	err := s.db.QueryRow(`SELECT id FROM objects WHERE canonical_path = ? AND id <> ?`, canonicalPath, id).Scan(&existing)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("canonicalPath %q is already owned by object %s", canonicalPath, existing)
+}
+
+func (s *Store) validateOptionalProvenance(id string) error {
+	if id == "" {
+		return nil
+	}
+	if _, err := s.GetProvenance(id); err != nil {
+		return fmt.Errorf("provenance: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) validateOptionalObject(id string) error {
+	if id == "" {
+		return nil
+	}
+	if _, err := s.GetObject(id); err != nil {
+		return fmt.Errorf("object: %w", err)
+	}
+	return nil
 }
 
 func validMemoryType(value string) bool {
