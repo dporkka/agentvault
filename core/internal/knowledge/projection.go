@@ -79,6 +79,10 @@ func (s *Store) projectJournalEvent(event JournalEvent) error {
 		}
 		return s.projectSessionClose(closeEvent)
 	default:
+		handled, err := s.projectMutationJournalEvent(event)
+		if handled {
+			return err
+		}
 		return fmt.Errorf("unknown knowledge journal event type %q", event.Type)
 	}
 }
