@@ -30,7 +30,7 @@ type DB struct {
 // Open opens the SQLite database at <vaultPath>/.agentvault/agentvault.db.
 func Open(vaultPath string) (*DB, error) {
 	dbPath := filepath.Join(vaultPath, ".agentvault", "agentvault.db")
-	conn, err := sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)")
+	conn, err := sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database at %s: %w", dbPath, err)
 	}
@@ -40,6 +40,8 @@ func Open(vaultPath string) (*DB, error) {
 
 	// Configure connection pool for better performance.
 	// WAL mode allows concurrent readers; writes are serialized by SQLite.
+	// busy_timeout gives short-lived concurrent writes time to complete instead
+	// of immediately failing with SQLITE_BUSY.
 	conn.SetMaxOpenConns(16)
 	conn.SetMaxIdleConns(4)
 	conn.SetConnMaxLifetime(time.Hour)
@@ -148,17 +150,42 @@ func (d *DB) runEmbeddedMigrations(entries []fs.DirEntry) error {
 		if m.version <= currentVersion {
 			continue
 		}
-		if _, err := d.conn.Exec(m.sql); err != nil {
-			return fmt.Errorf("failed to run migration %s: %w", m.name, err)
-		}
-		if _, err := d.conn.Exec(
-			`INSERT OR REPLACE INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))`,
-			m.version,
-		); err != nil {
-			return fmt.Errorf("failed to record migration %s: %w", m.name, err)
+		if err := d.applyMigration(m); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+// applyMigration applies the schema change and records its version in the same
+// transaction. A failed migration therefore cannot leave the schema advanced
+// while schema_migrations still reports an older version (or vice versa).
+func (d *DB) applyMigration(m migration) error {
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin migration %s: %w", m.name, err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err := tx.Exec(m.sql); err != nil {
+		return fmt.Errorf("failed to run migration %s: %w", m.name, err)
+	}
+	if _, err := tx.Exec(
+		`INSERT OR REPLACE INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))`,
+		m.version,
+	); err != nil {
+		return fmt.Errorf("failed to record migration %s: %w", m.name, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit migration %s: %w", m.name, err)
+	}
+	committed = true
 	return nil
 }
 
