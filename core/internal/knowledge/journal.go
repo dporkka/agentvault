@@ -103,7 +103,9 @@ func (j *Journal) Append(eventType string, payload interface{}) (JournalEvent, e
 }
 
 // Replay reads canonical events in order and applies each through handler.
-// A missing journal is equivalent to an empty journal.
+// A missing journal is equivalent to an empty journal. Canonical payloads are
+// revalidated during replay so malformed or manually corrupted temporal state
+// cannot silently enter the SQLite projection.
 func (j *Journal) Replay(handler func(JournalEvent) error) error {
 	if j == nil {
 		return nil
@@ -135,6 +137,9 @@ func (j *Journal) Replay(handler func(JournalEvent) error) error {
 		}
 		if event.ID == "" || event.Type == "" || event.Timestamp == "" {
 			return fmt.Errorf("invalid knowledge journal event at line %d", lineNumber)
+		}
+		if err := validateReplayedJournalEvent(event); err != nil {
+			return fmt.Errorf("validate knowledge journal line %d (%s): %w", lineNumber, event.ID, err)
 		}
 		if err := handler(event); err != nil {
 			return fmt.Errorf("replay knowledge journal line %d (%s): %w", lineNumber, event.ID, err)
