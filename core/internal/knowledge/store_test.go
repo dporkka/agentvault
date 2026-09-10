@@ -9,7 +9,7 @@ import (
 	"github.com/agentvault/core/internal/db"
 )
 
-func setupStore(t *testing.T) (*Store, *db.DB) {
+func setupStore(t *testing.T) (*Store, *db.DB, string) {
 	t.Helper()
 	vault := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(vault, ".agentvault"), 0o755); err != nil {
@@ -23,11 +23,11 @@ func setupStore(t *testing.T) (*Store, *db.DB) {
 		database.Close()
 		t.Fatal(err)
 	}
-	return New(database), database
+	return New(database, vault), database, vault
 }
 
 func TestObjectRelationMemoryLifecycle(t *testing.T) {
-	store, database := setupStore(t)
+	store, database, _ := setupStore(t)
 	defer database.Close()
 
 	confidence := 0.93
@@ -130,7 +130,7 @@ func TestObjectRelationMemoryLifecycle(t *testing.T) {
 }
 
 func TestAgentSessionLifecycle(t *testing.T) {
-	store, database := setupStore(t)
+	store, database, _ := setupStore(t)
 	defer database.Close()
 
 	session, err := store.StartSession(contract.StartAgentSessionRequest{
@@ -175,10 +175,178 @@ func TestAgentSessionLifecycle(t *testing.T) {
 	if closed.Status != "completed" || closed.EndedAt == "" {
 		t.Fatalf("unexpected closed session: %+v", closed)
 	}
+	if _, err := store.AppendSessionEvent(session.ID, contract.AppendSessionEventRequest{EventType: "late"}); err == nil {
+		t.Fatal("expected append to closed session to fail")
+	}
+}
+
+func TestJournalReplayRestoresRebuiltProjection(t *testing.T) {
+	store, database, vault := setupStore(t)
+
+	confidence := 0.91
+	provenance, err := store.CreateProvenance(contract.ProvenanceRecord{
+		ID:         "prov_restore",
+		SourceType: "agent-session",
+		SourceID:   "session-source",
+		AgentID:    "architect",
+		Confidence: confidence,
+		Evidence: []contract.ProvenanceEvidence{{
+			Source: "file",
+			Path:   "30-decisions/storage.md",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateProvenance: %v", err)
+	}
+
+	project, err := store.UpsertObject(contract.UpsertKnowledgeObjectRequest{
+		ID:           "obj_restore_project",
+		Type:         "project",
+		Title:        "AgentVault",
+		Project:      "agentvault",
+		ProvenanceID: provenance.ID,
+	})
+	if err != nil {
+		t.Fatalf("UpsertObject(project): %v", err)
+	}
+	decision, err := store.UpsertObject(contract.UpsertKnowledgeObjectRequest{
+		ID:            "obj_restore_decision",
+		Type:          "decision",
+		Title:         "Keep machine state in the vault journal",
+		Project:       "agentvault",
+		CanonicalPath: "30-decisions/knowledge-journal.md",
+		ProvenanceID:  provenance.ID,
+	})
+	if err != nil {
+		t.Fatalf("UpsertObject(decision): %v", err)
+	}
+	relation, err := store.CreateRelation(contract.CreateObjectRelationRequest{
+		ID:           "rel_restore",
+		FromObjectID: decision.ID,
+		ToObjectID:   project.ID,
+		RelationType: "affects",
+		Confidence:   &confidence,
+		ProvenanceID: provenance.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateRelation: %v", err)
+	}
+	memory, err := store.RecordMemory(contract.CreateMemoryRequest{
+		ID:           "mem_restore",
+		MemoryType:   "semantic",
+		ScopeType:    "project",
+		ScopeID:      "agentvault",
+		Content:      "SQLite is a projection, not the canonical machine-state store.",
+		ObjectID:     decision.ID,
+		ProvenanceID: provenance.ID,
+		Confidence:   &confidence,
+	})
+	if err != nil {
+		t.Fatalf("RecordMemory: %v", err)
+	}
+	session, err := store.StartSession(contract.StartAgentSessionRequest{
+		ID:        "session_restore",
+		AgentID:   "backend-engineer",
+		Project:   "agentvault",
+		Objective: "Verify durable knowledge recovery",
+	})
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+	event, err := store.AppendSessionEvent(session.ID, contract.AppendSessionEventRequest{
+		ID:        "event_restore",
+		EventType: "verified",
+		Payload:   map[string]interface{}{"databaseCanBeDeleted": true},
+	})
+	if err != nil {
+		t.Fatalf("AppendSessionEvent: %v", err)
+	}
+	closed, err := store.CloseSession(session.ID, "completed")
+	if err != nil {
+		t.Fatalf("CloseSession: %v", err)
+	}
+
+	journalPath := store.JournalPath()
+	if journalPath == "" {
+		t.Fatal("expected journal-backed store")
+	}
+	if _, err := os.Stat(journalPath); err != nil {
+		t.Fatalf("expected canonical journal at %s: %v", journalPath, err)
+	}
+
+	if err := database.Close(); err != nil {
+		t.Fatalf("close original database: %v", err)
+	}
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		path := filepath.Join(vault, ".agentvault", "agentvault.db") + suffix
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			t.Fatalf("remove SQLite projection %s: %v", path, err)
+		}
+	}
+
+	rebuiltDB, err := db.Open(vault)
+	if err != nil {
+		t.Fatalf("open rebuilt database: %v", err)
+	}
+	defer rebuiltDB.Close()
+	if err := rebuiltDB.RunMigrations(); err != nil {
+		t.Fatalf("run migrations on rebuilt database: %v", err)
+	}
+	rebuilt := New(rebuiltDB, vault)
+	if err := rebuilt.ReplayJournal(); err != nil {
+		t.Fatalf("ReplayJournal: %v", err)
+	}
+	// Replay is idempotent; a second pass must not duplicate append-only records.
+	if err := rebuilt.ReplayJournal(); err != nil {
+		t.Fatalf("second ReplayJournal: %v", err)
+	}
+
+	restoredProvenance, err := rebuilt.GetProvenance(provenance.ID)
+	if err != nil {
+		t.Fatalf("GetProvenance after rebuild: %v", err)
+	}
+	if restoredProvenance.CreatedAt != provenance.CreatedAt || restoredProvenance.ObservedAt != provenance.ObservedAt {
+		t.Fatalf("provenance timestamps changed during replay: before=%+v after=%+v", provenance, restoredProvenance)
+	}
+
+	restoredDecision, err := rebuilt.GetObject(decision.ID)
+	if err != nil {
+		t.Fatalf("GetObject after rebuild: %v", err)
+	}
+	if restoredDecision.Title != decision.Title || restoredDecision.CreatedAt != decision.CreatedAt {
+		t.Fatalf("object changed during replay: before=%+v after=%+v", decision, restoredDecision)
+	}
+
+	restoredRelations, err := rebuilt.RelationsForObject(project.ID)
+	if err != nil {
+		t.Fatalf("RelationsForObject after rebuild: %v", err)
+	}
+	if len(restoredRelations) != 1 || restoredRelations[0].ID != relation.ID {
+		t.Fatalf("relation was not restored exactly once: %+v", restoredRelations)
+	}
+
+	restoredMemories, err := rebuilt.ListMemories("project", "agentvault", "semantic", 10)
+	if err != nil {
+		t.Fatalf("ListMemories after rebuild: %v", err)
+	}
+	if len(restoredMemories) != 1 || restoredMemories[0].ID != memory.ID || restoredMemories[0].CreatedAt != memory.CreatedAt {
+		t.Fatalf("memory was not restored exactly: %+v", restoredMemories)
+	}
+
+	restoredSession, err := rebuilt.GetSession(session.ID)
+	if err != nil {
+		t.Fatalf("GetSession after rebuild: %v", err)
+	}
+	if restoredSession.Status != "completed" || restoredSession.EndedAt != closed.EndedAt {
+		t.Fatalf("session terminal state changed during replay: %+v", restoredSession)
+	}
+	if len(restoredSession.Events) != 1 || restoredSession.Events[0].ID != event.ID {
+		t.Fatalf("session events were not restored exactly once: %+v", restoredSession.Events)
+	}
 }
 
 func TestRecordMemoryRejectsUnknownType(t *testing.T) {
-	store, database := setupStore(t)
+	store, database, _ := setupStore(t)
 	defer database.Close()
 
 	_, err := store.RecordMemory(contract.CreateMemoryRequest{
