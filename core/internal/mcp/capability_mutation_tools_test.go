@@ -34,10 +34,10 @@ func TestScopedMCPIdentityControlsMutationToolsAndResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	issued, err := registry.Mint(authz.MintRequest{
-		ID: "mcp-builder",
-		AgentID: "builder",
+		ID:           "mcp-builder",
+		AgentID:      "builder",
 		Capabilities: []authz.Capability{authz.MutationRead, authz.MutationPropose, authz.MutationApprove, authz.MutationCommit},
-		Scope: authz.Scope{PathPrefixes: []string{"30-projects/alpha"}, Projects: []string{"alpha"}, Sessions: []string{session.ID}},
+		Scope:        authz.Scope{PathPrefixes: []string{"30-projects/alpha"}, Projects: []string{"alpha"}, Sessions: []string{session.ID}},
 	})
 	if err != nil {
 		t.Fatal(err)
