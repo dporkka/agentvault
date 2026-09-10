@@ -189,7 +189,9 @@ func (d *DB) applyMigration(m migration) error {
 	return nil
 }
 
-// runInlineMigrations creates the schema directly when migration files aren't found.
+// runInlineMigrations creates the latest schema directly when migration files
+// are unavailable. This fallback is primarily for fresh/test vaults; normal
+// upgrades use the embedded versioned migrations above.
 func (d *DB) runInlineMigrations() error {
 	schema := `
 CREATE TABLE IF NOT EXISTS files (
@@ -213,6 +215,15 @@ CREATE TABLE IF NOT EXISTS notes (
   source_quality TEXT,
   frontmatter_json TEXT,
   body TEXT,
+  workspace_id TEXT NOT NULL DEFAULT '',
+  agent_id TEXT NOT NULL DEFAULT '',
+  session_id TEXT NOT NULL DEFAULT '',
+  memory_kind TEXT NOT NULL DEFAULT '',
+  confidence REAL CHECK(confidence IS NULL OR (confidence >= 0.0 AND confidence <= 1.0)),
+  provenance_json TEXT,
+  observed_at TEXT,
+  valid_from TEXT,
+  valid_to TEXT,
   FOREIGN KEY(file_id) REFERENCES files(id)
 );
 
@@ -288,6 +299,30 @@ CREATE TABLE IF NOT EXISTS captures (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS conversations (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT 'New conversation',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  sources_json TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_supersessions (
+  superseding_note_id TEXT NOT NULL,
+  superseded_note_id TEXT NOT NULL,
+  reason TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (superseding_note_id, superseded_note_id)
+);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL
@@ -301,13 +336,25 @@ CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
 CREATE INDEX IF NOT EXISTS idx_links_from ON links(from_note_id);
 CREATE INDEX IF NOT EXISTS idx_links_to ON links(to_note_id);
 CREATE INDEX IF NOT EXISTS idx_captures_project ON captures(project);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation
+  ON conversation_messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_notes_memory_scope
+  ON notes(workspace_id, agent_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_notes_memory_kind
+  ON notes(memory_kind);
+CREATE INDEX IF NOT EXISTS idx_notes_memory_confidence
+  ON notes(confidence);
+CREATE INDEX IF NOT EXISTS idx_notes_memory_validity
+  ON notes(valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS idx_memory_supersessions_superseded
+  ON memory_supersessions(superseded_note_id);
 `
 	_, err := d.conn.Exec(schema)
 	if err != nil {
 		return fmt.Errorf("failed to run inline migrations: %w", err)
 	}
 	_, err = d.conn.Exec(
-		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, datetime('now'))`,
+		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, datetime('now'))`,
 	)
 	return err
 }
