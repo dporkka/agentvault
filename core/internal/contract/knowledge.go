@@ -17,6 +17,21 @@ type ProvenanceRecord struct {
 	CreatedAt  string                 `json:"createdAt"`
 }
 
+// CreateProvenanceRequest creates immutable provenance. Confidence defaults to
+// 1 when omitted while still allowing an explicit confidence of 0.
+type CreateProvenanceRequest struct {
+	ID         string                 `json:"id,omitempty"`
+	SourceType string                 `json:"sourceType"`
+	SourceID   string                 `json:"sourceId,omitempty"`
+	AgentID    string                 `json:"agentId,omitempty"`
+	SessionID  string                 `json:"sessionId,omitempty"`
+	Model      string                 `json:"model,omitempty"`
+	Confidence *float64               `json:"confidence,omitempty"`
+	ObservedAt string                 `json:"observedAt,omitempty"`
+	Evidence   []ProvenanceEvidence   `json:"evidence,omitempty"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+}
+
 // ProvenanceEvidence points at concrete evidence supporting a record.
 type ProvenanceEvidence struct {
 	Source string `json:"source"`
