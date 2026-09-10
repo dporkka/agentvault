@@ -191,6 +191,9 @@ func (s *Server) RegisterRoutes() {
 	// AI Ask
 	s.mux.HandleFunc("POST /ask", s.handleAsk)
 
+	// Deterministic agent context compilation.
+	s.mux.HandleFunc("POST /context/compile", s.withKnowledgeReady(s.handleCompileContext))
+
 	// Lists
 	s.mux.HandleFunc("GET /projects", s.handleProjects)
 	s.mux.HandleFunc("GET /recent", s.handleRecent)
