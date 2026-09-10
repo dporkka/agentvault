@@ -23,8 +23,9 @@ export interface ProvenanceRecord {
   createdAt: string;
 }
 
-export type CreateProvenanceRequest = Omit<ProvenanceRecord, 'id' | 'createdAt' | 'observedAt'> & {
+export type CreateProvenanceRequest = Omit<ProvenanceRecord, 'id' | 'createdAt' | 'observedAt' | 'confidence'> & {
   id?: string;
+  confidence?: number;
   observedAt?: string;
   createdAt?: string;
 };
