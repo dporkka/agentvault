@@ -7,8 +7,9 @@ import (
 )
 
 // SetCapabilityToken binds this MCP server process to one persistent capability
-// identity. Stdio uses the fixed identity directly; HTTP callers must also send
-// the same token as transport authentication when configured by the CLI.
+// identity. The raw token remains only in process memory and is revalidated
+// against the persisted registry on each MCP dispatch so expiry/revocation takes
+// effect without restarting the server.
 func (s *Server) SetCapabilityToken(token string) error {
 	registry, err := authz.NewRegistry(s.vaultPath)
 	if err != nil {
@@ -19,12 +20,24 @@ func (s *Server) SetCapabilityToken(token string) error {
 		return err
 	}
 	s.capabilityPrincipal = &principal
+	// A bound capability token is also the HTTP transport credential. This is
+	// harmless for stdio and prevents separate identity/transport secrets from
+	// drifting when HTTP transport is used.
+	s.authToken = token
 	return nil
 }
 
 func (s *Server) capabilityIdentity() (authz.Principal, bool) {
-	if s.capabilityPrincipal == nil {
+	if s.capabilityPrincipal == nil || s.authToken == "" {
 		return authz.Principal{}, false
 	}
-	return *s.capabilityPrincipal, true
+	registry, err := authz.NewRegistry(s.vaultPath)
+	if err != nil {
+		return authz.Principal{}, false
+	}
+	principal, err := registry.Authenticate(s.authToken)
+	if err != nil {
+		return authz.Principal{}, false
+	}
+	return principal, true
 }
