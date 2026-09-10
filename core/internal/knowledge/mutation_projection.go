@@ -17,6 +17,9 @@ func (s *Store) projectMutationJournalEvent(event JournalEvent) (bool, error) {
 		if err := validateMutationProposal(proposal); err != nil {
 			return true, fmt.Errorf("validate mutation proposal: %w", err)
 		}
+		if proposal.Status != contract.MutationProposed {
+			return true, fmt.Errorf("mutation.proposed payload has status %q, want proposed", proposal.Status)
+		}
 		return true, s.projectMutationProposal(proposal)
 	case eventMutationApproved,
 		eventMutationCommitStarted,
@@ -34,9 +37,37 @@ func (s *Store) projectMutationJournalEvent(event JournalEvent) (bool, error) {
 		if transition.ID == "" || transition.Status == "" || transition.OccurredAt == "" {
 			return true, fmt.Errorf("invalid mutation transition")
 		}
+		expected, ok := expectedMutationStatusForEvent(event.Type)
+		if !ok {
+			return true, fmt.Errorf("unknown mutation transition event %q", event.Type)
+		}
+		if transition.Status != expected {
+			return true, fmt.Errorf("%s payload has status %q, want %q", event.Type, transition.Status, expected)
+		}
 		return true, s.projectMutationTransition(event.Type, transition)
 	default:
 		return false, nil
+	}
+}
+
+func expectedMutationStatusForEvent(eventType string) (contract.MutationStatus, bool) {
+	switch eventType {
+	case eventMutationApproved, eventMutationCommitAborted:
+		return contract.MutationApproved, true
+	case eventMutationCommitStarted:
+		return contract.MutationCommitting, true
+	case eventMutationCommitted, eventMutationUndoAborted:
+		return contract.MutationCommitted, true
+	case eventMutationUndoStarted:
+		return contract.MutationUndoing, true
+	case eventMutationUndone:
+		return contract.MutationUndone, true
+	case eventMutationConflicted:
+		return contract.MutationConflicted, true
+	case eventMutationRejected:
+		return contract.MutationRejected, true
+	default:
+		return "", false
 	}
 }
 
