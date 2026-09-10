@@ -50,15 +50,18 @@ func (j *Journal) Path() string {
 	return j.path
 }
 
-// Append durably appends one event. The event is fsynced before the caller
-// updates its SQLite projection, so a projection failure cannot destroy the
-// canonical mutation.
+// Append durably appends one event. Validation runs before any canonical bytes
+// are written. The event is fsynced before the caller updates its SQLite
+// projection, so a projection failure cannot destroy the canonical mutation.
 func (j *Journal) Append(eventType string, payload interface{}) (JournalEvent, error) {
 	if j == nil {
 		return JournalEvent{}, errors.New("knowledge journal is not configured")
 	}
 	if eventType == "" {
 		return JournalEvent{}, errors.New("journal event type is required")
+	}
+	if err := validateJournalPayload(eventType, payload); err != nil {
+		return JournalEvent{}, fmt.Errorf("validate journal payload: %w", err)
 	}
 
 	payloadJSON, err := json.Marshal(payload)
