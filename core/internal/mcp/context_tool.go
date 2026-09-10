@@ -51,24 +51,3 @@ func (s *Server) RegisterContextTool() {
 		},
 	}
 }
-
-func stringSliceArg(args map[string]interface{}, key string) []string {
-	raw, ok := args[key]
-	if !ok || raw == nil {
-		return nil
-	}
-	values, ok := raw.([]interface{})
-	if !ok {
-		if typed, ok := raw.([]string); ok {
-			return typed
-		}
-		return nil
-	}
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		if text, ok := value.(string); ok && text != "" {
-			result = append(result, text)
-		}
-	}
-	return result
-}
