@@ -171,7 +171,9 @@ func (d *Doctor) CheckDatabase() CheckResult {
 	}
 }
 
-// CheckMigrations verifies that schema migrations have been applied.
+// CheckMigrations verifies that schema migrations have been applied and that
+// the recorded migration history is contiguous. Looking only at MAX(version)
+// can report a partially applied or manually corrupted database as healthy.
 func (d *Doctor) CheckMigrations() CheckResult {
 	if d.db == nil {
 		return CheckResult{
@@ -181,36 +183,61 @@ func (d *Doctor) CheckMigrations() CheckResult {
 		}
 	}
 
-	var version int
-	err := d.db.QueryRow("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1").Scan(&version)
+	rows, err := d.db.Query("SELECT version FROM schema_migrations ORDER BY version")
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return CheckResult{
-				Name:    "Migrations",
-				Status:  "error",
-				Message: "No migrations have been applied",
-				Details: []string{"Run 'agentvault init' to apply migrations."},
-			}
-		}
 		return CheckResult{
 			Name:    "Migrations",
 			Status:  "error",
 			Message: fmt.Sprintf("Failed to query migrations: %v", err),
 		}
 	}
+	defer rows.Close()
 
-	if version < 1 {
+	versions := make([]int, 0)
+	for rows.Next() {
+		var version int
+		if err := rows.Scan(&version); err != nil {
+			return CheckResult{
+				Name:    "Migrations",
+				Status:  "error",
+				Message: fmt.Sprintf("Failed to read migration history: %v", err),
+			}
+		}
+		versions = append(versions, version)
+	}
+	if err := rows.Err(); err != nil {
 		return CheckResult{
 			Name:    "Migrations",
-			Status:  "warn",
-			Message: fmt.Sprintf("Migration version %d may be incomplete", version),
+			Status:  "error",
+			Message: fmt.Sprintf("Failed to read migration history: %v", err),
+		}
+	}
+	if len(versions) == 0 {
+		return CheckResult{
+			Name:    "Migrations",
+			Status:  "error",
+			Message: "No migrations have been applied",
+			Details: []string{"Run 'agentvault init' to apply migrations."},
 		}
 	}
 
+	for index, version := range versions {
+		expected := index + 1
+		if version != expected {
+			return CheckResult{
+				Name:    "Migrations",
+				Status:  "warn",
+				Message: fmt.Sprintf("Migration history is incomplete at version %d", version),
+				Details: []string{fmt.Sprintf("Expected contiguous migration version %d but found %d.", expected, version)},
+			}
+		}
+	}
+
+	latest := versions[len(versions)-1]
 	return CheckResult{
 		Name:    "Migrations",
 		Status:  "ok",
-		Message: fmt.Sprintf("Migration version %d is applied", version),
+		Message: fmt.Sprintf("Migration version %d is applied", latest),
 	}
 }
 
