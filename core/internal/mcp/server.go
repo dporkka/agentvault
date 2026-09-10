@@ -135,6 +135,11 @@ func (s *Server) Handle(ctx context.Context, req JSONRPCRequest) JSONRPCResponse
 	if req.JSONRPC != "2.0" && req.JSONRPC != "" {
 		return errorResponse(req.ID, -32600, "Invalid JSON-RPC version")
 	}
+	if s.capabilityPrincipal != nil {
+		if _, ok := s.capabilityIdentity(); !ok {
+			return errorResponse(req.ID, -32001, "Capability identity is invalid, expired, or revoked")
+		}
+	}
 
 	switch req.Method {
 	case "initialize":
@@ -492,6 +497,11 @@ func errorResponse(id interface{}, code int, message string) JSONRPCResponse {
 			Message: message,
 		},
 	}
+}
+
+// currentTimestamp returns the current time in RFC3339 format.
+func currentTimestamp() string {
+	return time.Now().UTC().Format(time.RFC3339)
 }
 
 // stringArg extracts a string argument from args map.
