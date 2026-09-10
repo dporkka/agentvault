@@ -9,6 +9,8 @@ import (
 	"github.com/agentvault/core/migrations"
 )
 
+const latestEmbeddedMigrationVersion = 3
+
 func TestOpen(t *testing.T) {
 	t.Run("new database", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -55,12 +57,25 @@ func TestRunMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 2 {
-		t.Errorf("Expected migration version 2, got %d", version)
+	if version != latestEmbeddedMigrationVersion {
+		t.Errorf("Expected migration version %d, got %d", latestEmbeddedMigrationVersion, version)
 	}
 
-	// Verify tables exist
-	tables := []string{"files", "notes", "tags", "entities", "links", "schema_migrations"}
+	// Verify legacy and universal-knowledge projection tables exist.
+	tables := []string{
+		"files",
+		"notes",
+		"tags",
+		"entities",
+		"links",
+		"provenance_records",
+		"objects",
+		"object_relations",
+		"memory_records",
+		"agent_sessions",
+		"session_events",
+		"schema_migrations",
+	}
 	for _, table := range tables {
 		var name string
 		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
@@ -153,8 +168,8 @@ func TestRunMigrationsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 2 {
-		t.Errorf("Expected migration version 2, got %d", version)
+	if version != latestEmbeddedMigrationVersion {
+		t.Errorf("Expected migration version %d, got %d", latestEmbeddedMigrationVersion, version)
 	}
 }
 
