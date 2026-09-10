@@ -45,6 +45,7 @@ func TestMutationHTTPAPIRequiresExplicitApprovalAndSupportsUndo(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		req.Header.Set("X-AgentVault-Token", server.AuthToken())
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
