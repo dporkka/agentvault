@@ -40,7 +40,7 @@ type Frontmatter struct {
 	AgentID            string                 `yaml:"agent_id"`
 	SessionID          string                 `yaml:"session_id"`
 	MemoryKind         string                 `yaml:"memory_kind"`
-	Confidence         *float64               `yaml:"confidence"`
+	MemoryConfidence   *float64               `yaml:"memory_confidence"`
 	Provenance         Provenance             `yaml:"provenance"`
 	ObservedAt         string                 `yaml:"observed_at"`
 	ValidFrom          string                 `yaml:"valid_from"`
