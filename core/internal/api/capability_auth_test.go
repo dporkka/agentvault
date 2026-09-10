@@ -80,6 +80,7 @@ func TestCapabilityScopedMutationLifecycle(t *testing.T) {
 			if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
 				t.Fatal(err)
 			}
+		}
 		return resp.StatusCode
 	}
 
