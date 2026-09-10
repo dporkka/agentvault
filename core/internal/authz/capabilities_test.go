@@ -2,6 +2,9 @@ package authz
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -67,6 +70,16 @@ func TestRegistryPersistsOnlyTokenHash(t *testing.T) {
 	issued, err := registry.Mint(MintRequest{AgentID: "agent", Capabilities: []Capability{MutationRead}})
 	if err != nil {
 		t.Fatal(err)
+	}
+	persisted, err := os.ReadFile(filepath.Join(vault, ".agentvault", "capabilities.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(persisted), issued.Token) {
+		t.Fatal("raw capability token must never be persisted")
+	}
+	if !strings.Contains(string(persisted), hashToken(issued.Token)) {
+		t.Fatal("expected persisted token hash")
 	}
 	reloaded, err := NewRegistry(vault)
 	if err != nil {
