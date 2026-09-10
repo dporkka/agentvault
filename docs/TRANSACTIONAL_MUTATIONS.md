@@ -22,7 +22,7 @@ A proposal captures:
 
 Lifecycle events are appended to `80-agent-runs/knowledge.journal.jsonl` and fsynced before the corresponding SQLite projection is updated. `mutation_proposals` is therefore a rebuildable projection, not the authority.
 
-Snapshots are currently limited to 1 MiB per side and diffs to 256 KiB. Binary files are outside this initial protocol.
+Snapshots are currently limited to 1 MiB per side and diffs to 256 KiB. Binary files are outside this initial protocol. Because rollback snapshots contain the complete before/after text, the journal can contain sensitive content from mutated files and must be protected with the same care as the vault itself.
 
 ## Lifecycle
 
@@ -30,9 +30,9 @@ New proposals start as `proposed`. Proposal creation never mutates a target file
 
 Approval is a separate transition to `approved`. `approvedBy` is an audit label supplied by the authenticated control-plane caller; with the current shared local HTTP token it is **not** a cryptographic user identity assertion.
 
-A commit transitions to `committing` in the durable journal before filesystem mutation. If the target no longer matches the captured before state, commit fails rather than overwriting the current file. Successful application transitions to `committed`.
+A commit transitions to `committing` in the durable journal before filesystem mutation. AgentVault checks the captured before state before recording commit intent and checks it again after the intent event has been fsynced. If the target no longer matches, commit fails rather than overwriting the current file. Successful application transitions to `committed`.
 
-Undo performs the inverse check. It is allowed only from `committed`, records `undoing` before filesystem mutation, and restores the exact before snapshot only while the target still matches the committed after state. A later edit is never deliberately overwritten by undo.
+Undo performs the inverse check. It is allowed only from `committed`, records `undoing` before filesystem mutation, re-checks the committed after state after the durable intent event, and restores the exact before snapshot only while the target still matches. A later edit is never deliberately overwritten by undo.
 
 A proposal can also become `rejected` or `conflicted`.
 
@@ -59,9 +59,11 @@ Creates use an atomic installation step that refuses to overwrite a destination 
 
 ## Concurrency boundary
 
-The SHA-256 check is optimistic concurrency control, not a portable operating-system compare-and-swap primitive. AgentVault verifies the current target before starting a mutation, but an unrelated process can theoretically write in the interval between the last observation and a replacement/delete syscall. Other programs do not honor an AgentVault advisory lock automatically.
+All AgentVault mutation engines in the same process share a per-target lock keyed by normalized canonical path. This serializes competing AgentVault proposals/commits/undo operations for the same file. Commit and undo also re-check the expected hash after their durable intent event has been fsynced and immediately before applying the filesystem operation.
 
-Therefore this version guarantees that known stale proposals are rejected and that AgentVault crash recovery does not overwrite an ambiguous third state. It does **not** claim atomic exclusion against arbitrary concurrent external writers. A future multi-process writer coordinator or platform-specific file-lock/CAS layer should be added before advertising that stronger property.
+The SHA-256 check is still optimistic concurrency control, not a portable operating-system compare-and-swap primitive. An unrelated process can theoretically write in the interval between the final observation and a replacement/delete syscall, and a second AgentVault process does not share the in-memory lock.
+
+Therefore this version guarantees that known stale proposals are rejected, same-process AgentVault writers are serialized per path, and crash recovery does not overwrite an ambiguous third state. It does **not** claim atomic exclusion against arbitrary concurrent external or multi-process writers. A future inter-process writer coordinator or platform-specific file-lock/CAS layer should be added before advertising that stronger property.
 
 Within normal AgentVault usage, callers should route authoritative agent writes through this mutation protocol rather than mixing direct writes and transactional commits to the same path.
 
@@ -69,13 +71,15 @@ Within normal AgentVault usage, callers should route authoritative agent writes 
 
 The HTTP/TypeScript API is currently a trusted local control plane. Possession of the server token authorizes mutation lifecycle calls, so applications must protect that token.
 
-The default MCP surface intentionally exposes only:
+The default MCP registry keeps legacy direct user-file writers disabled. It still exposes read/search/AI tools, structured knowledge and session tools, the Context Compiler, and the mutation proposal/read capability. The mutation-specific MCP tools are:
 
 - `agentvault.propose_mutation`
 - `agentvault.get_mutation`
 - `agentvault.list_mutations`
 
-It does **not** expose approve, commit, reject, or undo. Giving an unscoped agent both proposal and approval tools under the same credential would turn the approval state machine into ceremony rather than a security boundary.
+Mutation MCP does **not** expose approve, commit, reject, or undo. Giving an unscoped agent both proposal and approval tools under the same credential would turn the approval state machine into ceremony rather than a security boundary.
+
+Legacy direct user-file MCP writers can be re-enabled explicitly with `agentvault mcp serve --allow-direct-writes` for compatibility with trusted clients. That flag bypasses the reviewed mutation path for those legacy tools and should not be enabled for untrusted/autonomous agents.
 
 Once AgentVault supports capability-scoped MCP identities, separate capabilities should be introduced for `mutation:propose`, `mutation:approve`, `mutation:commit`, and `mutation:undo`, with policy able to constrain vault paths, projects, agents, and sessions.
 
