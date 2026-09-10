@@ -186,6 +186,26 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /conversations/{id}", s.handleGetConversation)
 	s.mux.HandleFunc("POST /conversations/{id}/ask", s.handleConversationAsk)
 
+	// Universal knowledge objects and temporal relationships.
+	s.mux.HandleFunc("GET /objects", s.handleListObjects)
+	s.mux.HandleFunc("POST /objects", s.handleUpsertObject)
+	s.mux.HandleFunc("GET /objects/{id}", s.handleGetObject)
+	s.mux.HandleFunc("PUT /objects/{id}", s.handleUpsertObject)
+	s.mux.HandleFunc("GET /objects/{id}/relations", s.handleObjectRelations)
+	s.mux.HandleFunc("POST /relations", s.handleCreateRelation)
+
+	// Provenance and scoped agent memory.
+	s.mux.HandleFunc("POST /provenance", s.handleCreateProvenance)
+	s.mux.HandleFunc("GET /provenance/{id}", s.handleGetProvenance)
+	s.mux.HandleFunc("GET /memory", s.handleListMemories)
+	s.mux.HandleFunc("POST /memory", s.handleCreateMemory)
+
+	// Durable agent sessions and append-only session events.
+	s.mux.HandleFunc("POST /sessions", s.handleStartAgentSession)
+	s.mux.HandleFunc("GET /sessions/{id}", s.handleGetAgentSession)
+	s.mux.HandleFunc("POST /sessions/{id}/events", s.handleAppendSessionEvent)
+	s.mux.HandleFunc("POST /sessions/{id}/close", s.handleCloseAgentSession)
+
 	// Git status
 	s.mux.HandleFunc("GET /git/status", s.handleGitStatus)
 }
