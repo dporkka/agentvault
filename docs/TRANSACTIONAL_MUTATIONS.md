@@ -28,7 +28,7 @@ Snapshots are currently limited to 1 MiB per side and diffs to 256 KiB. Binary f
 
 New proposals start as `proposed`. Proposal creation never mutates a target file and never implies approval.
 
-Approval is a separate transition to `approved`. `approvedBy` is an audit label supplied by the authenticated control-plane caller; with the current shared local HTTP token it is **not** a cryptographic user identity assertion.
+Approval is a separate transition to `approved`. Under a scoped capability credential, the approving identity is bound to the persisted capability principal ID rather than accepted from request input. Root-token callers may still provide an audit label explicitly.
 
 A commit transitions to `committing` in the durable journal before filesystem mutation. AgentVault checks the captured before state before recording commit intent and checks it again after the intent event has been fsynced. If the target no longer matches, commit fails rather than overwriting the current file. Successful application transitions to `committed`.
 
@@ -67,34 +67,94 @@ Therefore this version guarantees that known stale proposals are rejected, same-
 
 Within normal AgentVault usage, callers should route authoritative agent writes through this mutation protocol rather than mixing direct writes and transactional commits to the same path.
 
-## Security boundary
+## Capability identities
 
-The HTTP/TypeScript API is currently a trusted local control plane. Possession of the server token authorizes mutation lifecycle calls, so applications must protect that token.
+The local API has two credential classes:
 
-The default MCP registry keeps legacy direct user-file writers disabled. It still exposes read/search/AI tools, structured knowledge and session tools, the Context Compiler, and the mutation proposal/read capability. The mutation-specific MCP tools are:
+1. The existing per-process **root token** remains the credential for generic AgentVault writes and capability administration.
+2. Persistent **capability tokens** are deliberately narrow credentials accepted only by transactional mutation routes.
 
-- `agentvault.propose_mutation`
-- `agentvault.get_mutation`
-- `agentvault.list_mutations`
+Supported mutation capabilities are:
 
-Mutation MCP does **not** expose approve, commit, reject, or undo. Giving an unscoped agent both proposal and approval tools under the same credential would turn the approval state machine into ceremony rather than a security boundary.
+- `mutation:read`
+- `mutation:propose`
+- `mutation:approve`
+- `mutation:commit`
+- `mutation:undo`
+- `mutation:reject`
 
-Legacy direct user-file MCP writers can be re-enabled explicitly with `agentvault mcp serve --allow-direct-writes` for compatibility with trusted clients. That flag bypasses the reviewed mutation path for those legacy tools and should not be enabled for untrusted/autonomous agents.
+A capability identity contains a stable principal ID, an agent ID, a set of capabilities, optional scope restrictions, creation/expiry/revocation timestamps, and a token hash. Tokens use cryptographically random opaque `avc_...` values. The raw token is returned only when minted; AgentVault persists only its SHA-256 hash in `.agentvault/capabilities.json`. The registry file is written with owner-only permissions.
 
-Once AgentVault supports capability-scoped MCP identities, separate capabilities should be introduced for `mutation:propose`, `mutation:approve`, `mutation:commit`, and `mutation:undo`, with policy able to constrain vault paths, projects, agents, and sessions.
+Capability scopes may restrict:
 
-## HTTP control-plane endpoints
+- vault-relative path prefixes
+- projects
+- durable session IDs
 
-- `GET /mutations`
-- `POST /mutations`
-- `GET /mutations/{id}`
-- `POST /mutations/{id}/approve`
-- `POST /mutations/{id}/commit`
-- `POST /mutations/{id}/undo`
-- `POST /mutations/{id}/reject`
+Restrictions are **intersected**. For example, a token scoped to path `30-projects/acme`, project `acme`, and session `session_123` must satisfy all three constraints. An empty scope dimension means unrestricted for that dimension, but only within the explicitly granted lifecycle capability.
 
-The shared TypeScript `createKnowledgeClient()` exposes equivalent methods for trusted integrations.
+Path-prefix matching is segment-aware: a prefix `foo/bar` permits `foo/bar/note.md` but not `foo/barista/note.md`.
 
-## Next durability step
+Project scope is never trusted from mutation request metadata. When a mutation references a durable session, AgentVault resolves the project from the persisted `AgentSession.Project`. Therefore a project-restricted capability must operate through a durable session whose recorded project is allowed.
 
-Before extending this protocol to multi-file proposals, add an explicit transaction manifest with ordered operations, durable per-operation progress, rollback material for every target, deterministic recovery, and a writer-coordination strategy. A multi-file UI should not ship ahead of those semantics.
+A scoped proposer cannot spoof `agentId`; AgentVault binds proposal `agentId` to the capability principal's agent ID. Scoped approve/reject operations likewise bind the audit actor to the stable capability principal ID.
+
+## HTTP security boundary
+
+Mutation proposals contain complete before/after rollback snapshots, so mutation reads are authenticated. `GET /mutations` and `GET /mutations/{id}` require the root token or `mutation:read`; they are not part of the otherwise-public GET surface.
+
+Each lifecycle route requires its exact capability:
+
+| Route | Capability |
+| --- | --- |
+| `GET /mutations` | `mutation:read` |
+| `GET /mutations/{id}` | `mutation:read` |
+| `POST /mutations` | `mutation:propose` |
+| `POST /mutations/{id}/approve` | `mutation:approve` |
+| `POST /mutations/{id}/commit` | `mutation:commit` |
+| `POST /mutations/{id}/undo` | `mutation:undo` |
+| `POST /mutations/{id}/reject` | `mutation:reject` |
+
+A mutation capability token is not accepted as a generic API write token. It cannot create notes, memories, sessions, objects, or new capability identities. Those existing write surfaces continue to require the root server token.
+
+Capability administration is root-only:
+
+- `GET /auth/capabilities`
+- `POST /auth/capabilities`
+- `POST /auth/capabilities/{id}/revoke`
+
+The raw token returned by `POST /auth/capabilities` should be stored as a secret because it cannot be recovered from the registry later. Rotation is mint-new then revoke-old.
+
+## MCP security boundary
+
+Unscoped **stdio** MCP preserves the conservative compatibility behavior from the transactional-mutation PR: mutation tools are proposal/read-only, and legacy direct user-file writers remain disabled by default.
+
+A scoped MCP process can be bound with `AGENTVAULT_CAPABILITY_TOKEN` or `--capability-token`. Its mutation tool registry is reduced to the capabilities actually granted to that principal. For example, a proposer receives proposal/read tools but not commit; a reviewer with `mutation:approve` and `mutation:commit` receives those lifecycle tools subject to the same path/project/session policy checks.
+
+HTTP MCP now requires a capability token and requires that same token on each HTTP request through `Authorization: Bearer ...` or `X-AgentVault-Token`.
+
+`--allow-direct-writes` is mutually exclusive with a capability token. This prevents a scoped identity from accidentally regaining legacy unreviewed file-writing tools.
+
+Capability enforcement in this slice is intentionally **mutation-specific**. Existing non-mutation MCP tools retain their current trust model; authenticating an HTTP MCP process does not yet imply fine-grained authorization for every search, AI, structured-knowledge, or session tool. Extending the capability namespace across those tool families is the next security layer and must happen before describing AgentVault MCP as fully least-privilege.
+
+## Registry durability boundary
+
+The API keeps one capability registry instance per process, so issuance and revocation through that server are serialized. The registry is durably replaced through a temporary file plus fsync and rename.
+
+This does not yet provide an inter-process compare-and-swap protocol for two independent AgentVault processes concurrently editing the same capability registry. Administrators should use one authoritative local API process for capability issuance/revocation. Multi-process registry coordination belongs with the future writer-coordination work.
+
+## TypeScript control plane
+
+`createKnowledgeClient()` exposes the mutation lifecycle plus root-only capability administration methods:
+
+- `listCapabilities()`
+- `mintCapability()`
+- `revokeCapability()`
+
+Types are exported from `@agentvault/contract/capabilities`.
+
+## Next durability and security steps
+
+Before extending this protocol to multi-file proposals, add an explicit transaction manifest with ordered operations, durable per-operation progress, rollback material for every target, deterministic recovery, and an inter-process writer-coordination strategy.
+
+Before broadening autonomous MCP access, extend capability enforcement to non-mutation tools and separate read/search, knowledge-write, session, AI/provider, and filesystem privileges. A multi-file UI or a claim of fully least-privilege MCP should not ship ahead of those semantics.
