@@ -85,6 +85,7 @@ func runMcpServe(cmd *cobra.Command, args []string) {
 	server := mcp.NewServer(vp, database)
 	server.RegisterTools()
 	server.RegisterKnowledgeTools()
+	server.RegisterContextTool()
 	server.RegisterResources()
 
 	if mcpHTTP {
