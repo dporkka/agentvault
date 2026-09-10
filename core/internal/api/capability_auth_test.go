@@ -26,24 +26,23 @@ func TestCapabilityScopedMutationLifecycle(t *testing.T) {
 	}
 
 	server := NewServer(vaultPath, database)
+	if server.capabilityInitErr != nil {
+		t.Fatal(server.capabilityInitErr)
+	}
 	session, err := server.knowledge.StartSession(contract.StartAgentSessionRequest{
 		AgentID: "planner", Project: "alpha", Objective: "update plan",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry, err := authz.NewRegistry(vaultPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	proposer, err := registry.Mint(authz.MintRequest{
+	proposer, err := server.capabilityRegistry.Mint(authz.MintRequest{
 		ID: "proposer", AgentID: "planner", Capabilities: []authz.Capability{authz.MutationRead, authz.MutationPropose},
 		Scope: authz.Scope{PathPrefixes: []string{"30-projects/alpha"}, Projects: []string{"alpha"}, Sessions: []string{session.ID}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	reviewer, err := registry.Mint(authz.MintRequest{
+	reviewer, err := server.capabilityRegistry.Mint(authz.MintRequest{
 		ID: "reviewer", AgentID: "reviewer-agent", Capabilities: []authz.Capability{authz.MutationRead, authz.MutationApprove, authz.MutationCommit},
 		Scope: authz.Scope{PathPrefixes: []string{"30-projects/alpha"}, Projects: []string{"alpha"}, Sessions: []string{session.ID}},
 	})
@@ -136,14 +135,13 @@ func TestProjectScopeUsesDurableSessionProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry, _ := authz.NewRegistry(vaultPath)
-	issued, err := registry.Mint(authz.MintRequest{
+	issued, err := server.capabilityRegistry.Mint(authz.MintRequest{
 		AgentID: "agent", Capabilities: []authz.Capability{authz.MutationPropose}, Scope: authz.Scope{Projects: []string{"alpha"}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	principal, err := registry.Authenticate(issued.Token)
+	principal, err := server.capabilityRegistry.Authenticate(issued.Token)
 	if err != nil {
 		t.Fatal(err)
 	}
