@@ -9,6 +9,8 @@ import (
 	"github.com/agentvault/core/internal/authz"
 )
 
+var errAuditActorRequired = errors.New("audit actor is required")
+
 type capabilityIdentity struct {
 	Root      bool
 	Principal authz.Principal
@@ -134,7 +136,7 @@ func scopedAuditActor(r *http.Request, requested string) (string, error) {
 	}
 	if identity.Root {
 		if strings.TrimSpace(requested) == "" {
-			return "", errors.New("audit actor is required")
+			return "", errAuditActorRequired
 		}
 		return strings.TrimSpace(requested), nil
 	}
@@ -162,9 +164,13 @@ func bindProposingAgent(r *http.Request, requested string) (string, error) {
 func writeCapabilityError(w http.ResponseWriter, err error) {
 	status := http.StatusForbidden
 	summary := "forbidden"
-	if errors.Is(err, authz.ErrUnauthenticated) {
+	switch {
+	case errors.Is(err, authz.ErrUnauthenticated):
 		status = http.StatusUnauthorized
 		summary = "unauthorized"
+	case errors.Is(err, errAuditActorRequired):
+		status = http.StatusBadRequest
+		summary = "bad request"
 	}
 	writeJSON(w, status, map[string]interface{}{"error": summary, "detail": err.Error()})
 }
