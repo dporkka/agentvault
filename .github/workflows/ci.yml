@@ -35,7 +35,8 @@ jobs:
       - name: Check Go formatting
         working-directory: ${{ github.workspace }}
         run: |
-          test -z "$(gofmt -l core/ apps/desktop-wails/)"
+          gofmt -w core/ apps/desktop-wails/
+          git diff --exit-code -- '*.go'
       - name: go vet
         run: go vet ./...
       - name: go test with race detector
