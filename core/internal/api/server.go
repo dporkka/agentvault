@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/agentvault/core/internal/ai"
+	"github.com/agentvault/core/internal/authz"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/indexer"
@@ -61,21 +62,23 @@ const Version = "0.1.0"
 
 // Server is the HTTP API server for AgentVault.
 type Server struct {
-	vaultPath        string
-	db               *db.DB
-	searcher         *search.Searcher
-	indexer          *indexer.Indexer
-	knowledge        *knowledge.Store
-	mutations        *mutations.Engine
-	knowledgeInitErr error
-	mux              *http.ServeMux
-	server           *http.Server
-	addr             string
-	authToken        string
-	aiProvider       ai.AIProvider
-	aiProviderMu     sync.Mutex
-	rateLimiter      *simpleRateLimiter
-	watcher          *watcher.Watcher
+	vaultPath          string
+	db                 *db.DB
+	searcher           *search.Searcher
+	indexer            *indexer.Indexer
+	knowledge          *knowledge.Store
+	mutations          *mutations.Engine
+	knowledgeInitErr   error
+	capabilityRegistry *authz.Registry
+	capabilityInitErr  error
+	mux                *http.ServeMux
+	server             *http.Server
+	addr               string
+	authToken          string
+	aiProvider         ai.AIProvider
+	aiProviderMu       sync.Mutex
+	rateLimiter        *simpleRateLimiter
+	watcher            *watcher.Watcher
 }
 
 // NewServer creates a new API server. Structured agent state is recovered from
@@ -95,17 +98,20 @@ func NewServer(vaultPath string, database *db.DB) *Server {
 			knowledgeInitErr = fmt.Errorf("mutation recovery failed: %w", errors.Join(recoveryErrors...))
 		}
 	}
+	capabilityRegistry, capabilityInitErr := authz.NewRegistry(vaultPath)
 	return &Server{
-		vaultPath:        vaultPath,
-		db:               database,
-		searcher:         searcher,
-		indexer:          idx,
-		knowledge:        knowledgeStore,
-		mutations:        mutationEngine,
-		knowledgeInitErr: knowledgeInitErr,
-		mux:              mux,
-		authToken:        generateAuthToken(),
-		rateLimiter:      newRateLimiter(30, time.Second),
+		vaultPath:          vaultPath,
+		db:                 database,
+		searcher:           searcher,
+		indexer:            idx,
+		knowledge:          knowledgeStore,
+		mutations:          mutationEngine,
+		knowledgeInitErr:   knowledgeInitErr,
+		capabilityRegistry: capabilityRegistry,
+		capabilityInitErr:  capabilityInitErr,
+		mux:                mux,
+		authToken:          generateAuthToken(),
+		rateLimiter:        newRateLimiter(30, time.Second),
 	}
 }
 
