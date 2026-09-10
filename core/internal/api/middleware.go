@@ -65,26 +65,29 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// authMiddleware checks the X-AgentVault-Token header for write endpoints.
+// authMiddleware keeps the ephemeral root token as the authority for existing
+// write endpoints. Transactional mutation routes have their own capability
+// guards so narrowly scoped agent tokens never become generic write tokens.
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Read endpoints are open (GET)
+		// Read endpoints remain open unless a route adds a stricter guard. Mutation
+		// reads do exactly that because proposals contain full rollback snapshots.
 		if r.Method == http.MethodGet {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// POST endpoints require auth token
-		token := r.Header.Get("X-AgentVault-Token")
-		if token == "" {
-			token = r.Header.Get("Authorization")
-			// Support "Bearer <token>" format
-			if strings.HasPrefix(token, "Bearer ") {
-				token = strings.TrimPrefix(token, "Bearer ")
-			}
+		// Mutation routes authenticate and authorize against their exact lifecycle
+		// capability inside the route wrapper. Do not preemptively require root.
+		if r.URL.Path == "/mutations" || strings.HasPrefix(r.URL.Path, "/mutations/") {
+			next.ServeHTTP(w, r)
+			return
 		}
 
-		if token != s.authToken {
+		// All other writes continue to require the root server token. In particular,
+		// a mutation-only capability token cannot create notes, memory, sessions, or
+		// capability identities.
+		if requestToken(r) != s.authToken {
 			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
 				"error":  "unauthorized",
 				"detail": "Valid X-AgentVault-Token header required",
