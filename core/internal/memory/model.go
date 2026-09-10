@@ -165,6 +165,28 @@ func (m Metadata) Validate() error {
 	return nil
 }
 
+// Normalize validates metadata and returns the canonical SQLite projection.
+// RFC3339 timestamps are converted to UTC so lexical TEXT ordering in SQLite
+// matches chronological ordering even when Markdown used another UTC offset.
+func (m Metadata) Normalize() (Metadata, error) {
+	if err := m.Validate(); err != nil {
+		return Metadata{}, err
+	}
+
+	m.NoteID = strings.TrimSpace(m.NoteID)
+	m.Scope.WorkspaceID = strings.TrimSpace(m.Scope.WorkspaceID)
+	m.Scope.AgentID = strings.TrimSpace(m.Scope.AgentID)
+	m.Scope.SessionID = strings.TrimSpace(m.Scope.SessionID)
+	m.ObservedAt = normalizeOptionalTime(m.ObservedAt)
+	m.ValidFrom = normalizeOptionalTime(m.ValidFrom)
+	m.ValidTo = normalizeOptionalTime(m.ValidTo)
+	m.Provenance.CapturedAt = normalizeOptionalTime(m.Provenance.CapturedAt)
+	for i := range m.Supersedes {
+		m.Supersedes[i] = strings.TrimSpace(m.Supersedes[i])
+	}
+	return m, nil
+}
+
 // IsActive reports whether the memory is temporally valid at the supplied
 // instant. ValidFrom is inclusive and ValidTo is exclusive.
 func (m Metadata) IsActive(at time.Time) bool {
@@ -195,4 +217,16 @@ func parseOptionalTime(field, value string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("%s must be RFC3339: %w", field, err)
 	}
 	return t, nil
+}
+
+func normalizeOptionalTime(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return value
+	}
+	return t.UTC().Format(time.RFC3339)
 }
