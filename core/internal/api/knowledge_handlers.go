@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/agentvault/core/internal/contract"
-	"github.com/agentvault/core/internal/knowledge"
 )
 
 const maxKnowledgeRequestBytes = 2 << 20 // 2 MiB
@@ -24,7 +23,7 @@ func (s *Server) handleListObjects(w http.ResponseWriter, r *http.Request) {
 		Status:       r.URL.Query().Get("status"),
 		Limit:        limit,
 	}
-	objects, err := knowledge.New(s.db).ListObjects(filter)
+	objects, err := s.knowledge.ListObjects(filter)
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -33,7 +32,7 @@ func (s *Server) handleListObjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetObject(w http.ResponseWriter, r *http.Request) {
-	object, err := knowledge.New(s.db).GetObject(r.PathValue("id"))
+	object, err := s.knowledge.GetObject(r.PathValue("id"))
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -54,7 +53,7 @@ func (s *Server) handleUpsertObject(w http.ResponseWriter, r *http.Request) {
 		}
 		req.ID = pathID
 	}
-	object, err := knowledge.New(s.db).UpsertObject(req)
+	object, err := s.knowledge.UpsertObject(req)
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -72,7 +71,7 @@ func (s *Server) handleCreateRelation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
 		return
 	}
-	relation, err := knowledge.New(s.db).CreateRelation(req)
+	relation, err := s.knowledge.CreateRelation(req)
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -81,7 +80,7 @@ func (s *Server) handleCreateRelation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleObjectRelations(w http.ResponseWriter, r *http.Request) {
-	relations, err := knowledge.New(s.db).RelationsForObject(r.PathValue("id"))
+	relations, err := s.knowledge.RelationsForObject(r.PathValue("id"))
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -95,7 +94,7 @@ func (s *Server) handleCreateProvenance(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
 		return
 	}
-	record, err := knowledge.New(s.db).CreateProvenance(req)
+	record, err := s.knowledge.CreateProvenance(req)
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -104,7 +103,7 @@ func (s *Server) handleCreateProvenance(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleGetProvenance(w http.ResponseWriter, r *http.Request) {
-	record, err := knowledge.New(s.db).GetProvenance(r.PathValue("id"))
+	record, err := s.knowledge.GetProvenance(r.PathValue("id"))
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -118,7 +117,7 @@ func (s *Server) handleCreateMemory(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
 		return
 	}
-	memory, err := knowledge.New(s.db).RecordMemory(req)
+	memory, err := s.knowledge.RecordMemory(req)
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -128,7 +127,7 @@ func (s *Server) handleCreateMemory(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListMemories(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	memories, err := knowledge.New(s.db).ListMemories(
+	memories, err := s.knowledge.ListMemories(
 		r.URL.Query().Get("scopeType"),
 		r.URL.Query().Get("scopeId"),
 		r.URL.Query().Get("memoryType"),
@@ -147,7 +146,7 @@ func (s *Server) handleStartAgentSession(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
 		return
 	}
-	session, err := knowledge.New(s.db).StartSession(req)
+	session, err := s.knowledge.StartSession(req)
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -156,7 +155,7 @@ func (s *Server) handleStartAgentSession(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleGetAgentSession(w http.ResponseWriter, r *http.Request) {
-	session, err := knowledge.New(s.db).GetSession(r.PathValue("id"))
+	session, err := s.knowledge.GetSession(r.PathValue("id"))
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -170,7 +169,7 @@ func (s *Server) handleAppendSessionEvent(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
 		return
 	}
-	event, err := knowledge.New(s.db).AppendSessionEvent(r.PathValue("id"), req)
+	event, err := s.knowledge.AppendSessionEvent(r.PathValue("id"), req)
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -186,7 +185,7 @@ func (s *Server) handleCloseAgentSession(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	session, err := knowledge.New(s.db).CloseSession(r.PathValue("id"), req.Status)
+	session, err := s.knowledge.CloseSession(r.PathValue("id"), req.Status)
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
