@@ -128,10 +128,10 @@ func (s *Store) Get(ctx context.Context, noteID string) (*Record, error) {
 	return record, nil
 }
 
-// Query returns memories visible from the supplied scope. Broader memories are
-// inherited by narrower contexts; scoped memories never leak into a different
-// workspace, agent, or session. Expired/future memories are excluded at the
-// current time unless Query.At selects another instant.
+// Query returns classified memories visible from the supplied scope. Broader
+// memories are inherited by narrower contexts; scoped memories never leak into
+// a different workspace, agent, or session. Expired/future memories are
+// excluded at the current time unless Query.At selects another instant.
 func (s *Store) Query(ctx context.Context, query Query) ([]Record, error) {
 	limit := query.Limit
 	if limit <= 0 {
@@ -162,16 +162,34 @@ func (s *Store) Query(ctx context.Context, query Query) ([]Record, error) {
 			notes.updated_at, notes.workspace_id, notes.agent_id, notes.session_id,
 			notes.memory_kind, notes.confidence, notes.provenance_json, notes.observed_at,
 			notes.valid_from, notes.valid_to,
-			EXISTS(SELECT 1 FROM memory_supersessions ms WHERE ms.superseded_note_id = notes.id)
+			EXISTS(
+				SELECT 1
+				FROM memory_supersessions ms
+				JOIN notes sup ON sup.id = ms.superseding_note_id
+				WHERE ms.superseded_note_id = notes.id
+				  AND (sup.workspace_id = '' OR sup.workspace_id = ?)
+				  AND (sup.agent_id = '' OR sup.agent_id = ?)
+				  AND (sup.session_id = '' OR sup.session_id = ?)
+				  AND (sup.valid_from IS NULL OR sup.valid_from = '' OR sup.valid_from <= ?)
+				  AND (sup.valid_to IS NULL OR sup.valid_to = '' OR sup.valid_to > ?)
+			) AS superseded
 		FROM notes
 		JOIN files ON files.id = notes.file_id
-		WHERE (notes.workspace_id = '' OR notes.workspace_id = ?)
+		WHERE notes.memory_kind <> ''
+		  AND (notes.workspace_id = '' OR notes.workspace_id = ?)
 		  AND (notes.agent_id = '' OR notes.agent_id = ?)
 		  AND (notes.session_id = '' OR notes.session_id = ?)
 		  AND (notes.valid_from IS NULL OR notes.valid_from = '' OR notes.valid_from <= ?)
 		  AND (notes.valid_to IS NULL OR notes.valid_to = '' OR notes.valid_to > ?)
 	`)
 	args := []interface{}{
+		// SELECT superseded expression.
+		query.Context.WorkspaceID,
+		query.Context.AgentID,
+		query.Context.SessionID,
+		atText,
+		atText,
+		// Candidate visibility/validity.
 		query.Context.WorkspaceID,
 		query.Context.AgentID,
 		query.Context.SessionID,
