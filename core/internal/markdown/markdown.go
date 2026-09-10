@@ -13,19 +13,41 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Provenance describes the canonical source metadata for a semantic memory.
+// It lives in Markdown frontmatter so the SQLite memory projection is fully
+// rebuildable from files.
+type Provenance struct {
+	SourceType string `yaml:"source_type"`
+	SourceRef  string `yaml:"source_ref"`
+	Actor      string `yaml:"actor"`
+	Model      string `yaml:"model"`
+	CapturedAt string `yaml:"captured_at"`
+}
+
 // Frontmatter holds the YAML frontmatter from a note.
 type Frontmatter struct {
-	ID            string                 `yaml:"id"`
-	Type          string                 `yaml:"type"`
-	Title         string                 `yaml:"title"`
-	Status        string                 `yaml:"status"`
-	Project       string                 `yaml:"project"`
-	Tags          []string               `yaml:"tags"`
-	Entities      []string               `yaml:"entities"`
-	Created       string                 `yaml:"created"`
-	Updated       string                 `yaml:"updated"`
-	SourceQuality string                 `yaml:"source_quality"`
-	Extra         map[string]interface{} `yaml:",inline"`
+	ID                 string                 `yaml:"id"`
+	Type               string                 `yaml:"type"`
+	Title              string                 `yaml:"title"`
+	Status             string                 `yaml:"status"`
+	Project            string                 `yaml:"project"`
+	Tags               []string               `yaml:"tags"`
+	Entities           []string               `yaml:"entities"`
+	Created            string                 `yaml:"created"`
+	Updated            string                 `yaml:"updated"`
+	SourceQuality      string                 `yaml:"source_quality"`
+	WorkspaceID        string                 `yaml:"workspace_id"`
+	AgentID            string                 `yaml:"agent_id"`
+	SessionID          string                 `yaml:"session_id"`
+	MemoryKind         string                 `yaml:"memory_kind"`
+	Confidence         *float64               `yaml:"confidence"`
+	Provenance         Provenance             `yaml:"provenance"`
+	ObservedAt         string                 `yaml:"observed_at"`
+	ValidFrom          string                 `yaml:"valid_from"`
+	ValidTo            string                 `yaml:"valid_to"`
+	Supersedes         []string               `yaml:"supersedes"`
+	SupersessionReason string                 `yaml:"supersession_reason"`
+	Extra              map[string]interface{} `yaml:",inline"`
 }
 
 // WikiLink represents a [[wiki link]].
