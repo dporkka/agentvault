@@ -24,7 +24,7 @@ type Manifest struct {
 	Name        string   `json:"name"`
 	Version     string   `json:"version"`
 	Description string   `json:"description,omitempty"`
-	Command     string   `json:"command"`       // executable to launch (stdio MCP)
+	Command     string   `json:"command"` // executable to launch (stdio MCP)
 	Args        []string `json:"args,omitempty"`
 	URL         string   `json:"url,omitempty"` // HTTP MCP endpoint (alternative to command)
 	Tools       []string `json:"tools,omitempty"`
