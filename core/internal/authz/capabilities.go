@@ -147,8 +147,8 @@ func (r *Registry) Mint(req MintRequest) (IssuedToken, error) {
 			return IssuedToken{}, err
 		}
 	}
-	if strings.ContainsAny(id, "\r\n\t ") {
-		return IssuedToken{}, errors.New("capability identity id cannot contain whitespace")
+	if !validPrincipalID(id) {
+		return IssuedToken{}, errors.New("capability identity id may contain only letters, digits, '.', '_', ':', and '-'")
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -208,9 +208,11 @@ func (r *Registry) Revoke(id string) (Principal, error) {
 		return Principal{}, fmt.Errorf("capability identity %s not found", id)
 	}
 	if rec.RevokedAt == "" {
+		previous := rec
 		rec.RevokedAt = time.Now().UTC().Format(time.RFC3339Nano)
 		r.records[id] = rec
 		if err := r.persistLocked(); err != nil {
+			r.records[id] = previous
 			return Principal{}, err
 		}
 	}
@@ -230,9 +232,15 @@ func Authorize(principal Principal, capability Capability, resource Resource) er
 	if !HasCapability(principal, capability) {
 		return fmt.Errorf("%w: %s is not granted", ErrForbidden, capability)
 	}
+	path, err := normalizeRelativePath(resource.Path)
+	if err != nil {
+		return fmt.Errorf("%w: invalid resource path", ErrForbidden)
+	}
+	if path != "" && isProtectedMutationPath(path) {
+		return fmt.Errorf("%w: protected AgentVault internal path", ErrForbidden)
+	}
 	if len(principal.Scope.PathPrefixes) > 0 {
-		path, err := normalizeRelativePath(resource.Path)
-		if err != nil || path == "" || !matchesPathPrefix(path, principal.Scope.PathPrefixes) {
+		if path == "" || !matchesPathPrefix(path, principal.Scope.PathPrefixes) {
 			return fmt.Errorf("%w: path is outside granted prefixes", ErrForbidden)
 		}
 	}
@@ -255,6 +263,9 @@ func normalizeScope(scope Scope) (Scope, error) {
 		if normalized == "" {
 			return Scope{}, errors.New("path prefix cannot be empty")
 		}
+		if isProtectedMutationPath(normalized) {
+			return Scope{}, fmt.Errorf("path prefix %q targets protected AgentVault internal state", prefix)
+		}
 		out.PathPrefixes = append(out.PathPrefixes, normalized)
 	}
 	out.PathPrefixes = uniqueTrimmed(out.PathPrefixes)
@@ -265,18 +276,26 @@ func normalizeScope(scope Scope) (Scope, error) {
 }
 
 func normalizeRelativePath(value string) (string, error) {
-	value = filepath.ToSlash(strings.TrimSpace(value))
-	if value == "" {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
 		return "", nil
 	}
-	if strings.HasPrefix(value, "/") {
+	native := filepath.FromSlash(raw)
+	if filepath.IsAbs(native) || filepath.VolumeName(native) != "" {
 		return "", errors.New("path must be vault-relative")
 	}
-	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(value)))
+	clean := filepath.ToSlash(filepath.Clean(native))
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
 		return "", errors.New("path escapes vault")
 	}
 	return clean, nil
+}
+
+func isProtectedMutationPath(path string) bool {
+	lower := strings.ToLower(filepath.ToSlash(path))
+	return lower == ".agentvault" || strings.HasPrefix(lower, ".agentvault/") ||
+		lower == ".git" || strings.HasPrefix(lower, ".git/") ||
+		lower == "80-agent-runs/knowledge.journal.jsonl"
 }
 
 func matchesPathPrefix(path string, prefixes []string) bool {
@@ -315,6 +334,20 @@ func uniqueTrimmed(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func validPrincipalID(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, char := range id {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '.' || char == '_' || char == ':' || char == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (r *Registry) load() error {
