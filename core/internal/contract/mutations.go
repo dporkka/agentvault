@@ -34,7 +34,6 @@ type CreateMutationProposalRequest struct {
 	Path         string       `json:"path"`
 	Content      *string      `json:"content,omitempty"`
 	Reason       string       `json:"reason"`
-	Project      string       `json:"project,omitempty"`
 	AgentID      string       `json:"agentId,omitempty"`
 	SessionID    string       `json:"sessionId,omitempty"`
 	ProvenanceID string       `json:"provenanceId,omitempty"`
@@ -53,7 +52,6 @@ type MutationProposal struct {
 	Kind          MutationKind   `json:"kind"`
 	Path          string         `json:"path"`
 	Reason        string         `json:"reason"`
-	Project       string         `json:"project,omitempty"`
 	AgentID       string         `json:"agentId,omitempty"`
 	SessionID     string         `json:"sessionId,omitempty"`
 	ProvenanceID  string         `json:"provenanceId,omitempty"`
@@ -83,7 +81,6 @@ type MutationResult struct {
 // MutationProposalFilter scopes proposal listing.
 type MutationProposalFilter struct {
 	Status    MutationStatus `json:"status,omitempty"`
-	Project   string         `json:"project,omitempty"`
 	AgentID   string         `json:"agentId,omitempty"`
 	SessionID string         `json:"sessionId,omitempty"`
 	Limit     int            `json:"limit,omitempty"`
