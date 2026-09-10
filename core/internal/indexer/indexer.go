@@ -17,7 +17,9 @@ import (
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/embeddings"
 	"github.com/agentvault/core/internal/markdown"
+	"github.com/agentvault/core/internal/memory"
 	"github.com/agentvault/core/internal/vectors"
+	"gopkg.in/yaml.v3"
 )
 
 // Indexer indexes markdown files into the database.
@@ -196,6 +198,41 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 		noteID = fileID
 	}
 
+	memoryMetadata, err := memory.Metadata{
+		NoteID: noteID,
+		Scope: memory.Scope{
+			WorkspaceID: doc.Frontmatter.WorkspaceID,
+			AgentID:     doc.Frontmatter.AgentID,
+			SessionID:   doc.Frontmatter.SessionID,
+		},
+		Kind:       memory.Kind(doc.Frontmatter.MemoryKind),
+		Confidence: doc.Frontmatter.Confidence,
+		Provenance: memory.Provenance{
+			SourceType: doc.Frontmatter.Provenance.SourceType,
+			SourceRef:  doc.Frontmatter.Provenance.SourceRef,
+			Actor:      doc.Frontmatter.Provenance.Actor,
+			Model:      doc.Frontmatter.Provenance.Model,
+			CapturedAt: doc.Frontmatter.Provenance.CapturedAt,
+		},
+		ObservedAt:         doc.Frontmatter.ObservedAt,
+		ValidFrom:          doc.Frontmatter.ValidFrom,
+		ValidTo:            doc.Frontmatter.ValidTo,
+		Supersedes:         append([]string(nil), doc.Frontmatter.Supersedes...),
+		SupersessionReason: doc.Frontmatter.SupersessionReason,
+	}.Normalize()
+	if err != nil {
+		return nil, fmt.Errorf("invalid memory frontmatter: %w", err)
+	}
+
+	frontmatterJSON, err := encodeFrontmatterJSON(doc.RawFrontmatter)
+	if err != nil {
+		return nil, fmt.Errorf("encode frontmatter: %w", err)
+	}
+	provenanceJSON, err := encodeProvenanceJSON(memoryMetadata.Provenance)
+	if err != nil {
+		return nil, fmt.Errorf("encode memory provenance: %w", err)
+	}
+
 	// Begin a transaction so all writes for this file are atomic.
 	tx, err := idx.db.Begin()
 	if err != nil {
@@ -216,25 +253,64 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 		return nil, fmt.Errorf("failed to upsert file: %w", err)
 	}
 
-	// Upsert notes table
+	// Upsert notes and the semantic memory projection. These fields are all
+	// rebuildable from Markdown frontmatter; SQLite remains an index/cache.
 	tagsStr := strings.Join(doc.Frontmatter.Tags, ", ")
 	entitiesStr := strings.Join(doc.Frontmatter.Entities, ", ")
 	_, err = tx.Exec(`
-		INSERT INTO notes (id, file_id, title, type, status, project, created_at, updated_at, source_quality, body)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO notes (
+			id, file_id, title, type, status, project, created_at, updated_at,
+			source_quality, frontmatter_json, body, workspace_id, agent_id,
+			session_id, memory_kind, confidence, provenance_json, observed_at,
+			valid_from, valid_to
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
+			file_id = excluded.file_id,
 			title = excluded.title,
 			type = excluded.type,
 			status = excluded.status,
 			project = excluded.project,
 			updated_at = excluded.updated_at,
-			body = excluded.body
+			source_quality = excluded.source_quality,
+			frontmatter_json = excluded.frontmatter_json,
+			body = excluded.body,
+			workspace_id = excluded.workspace_id,
+			agent_id = excluded.agent_id,
+			session_id = excluded.session_id,
+			memory_kind = excluded.memory_kind,
+			confidence = excluded.confidence,
+			provenance_json = excluded.provenance_json,
+			observed_at = excluded.observed_at,
+			valid_from = excluded.valid_from,
+			valid_to = excluded.valid_to
 	`, noteID, fileID, doc.Frontmatter.Title, doc.Frontmatter.Type,
 		doc.Frontmatter.Status, doc.Frontmatter.Project,
 		doc.Frontmatter.Created, doc.Frontmatter.Updated,
-		doc.Frontmatter.SourceQuality, doc.Body)
+		doc.Frontmatter.SourceQuality, frontmatterJSON, doc.Body,
+		memoryMetadata.Scope.WorkspaceID, memoryMetadata.Scope.AgentID,
+		memoryMetadata.Scope.SessionID, string(memoryMetadata.Kind),
+		nullableFloat(memoryMetadata.Confidence), provenanceJSON,
+		nullableString(memoryMetadata.ObservedAt), nullableString(memoryMetadata.ValidFrom),
+		nullableString(memoryMetadata.ValidTo))
 	if err != nil {
 		return nil, fmt.Errorf("failed to upsert note: %w", err)
+	}
+
+	// Replace canonical outgoing supersession edges for this memory. The relation
+	// deliberately permits targets that are not indexed yet, so indexing order
+	// does not affect correctness.
+	if _, err := tx.Exec("DELETE FROM memory_supersessions WHERE superseding_note_id = ?", noteID); err != nil {
+		return nil, fmt.Errorf("failed to clear old memory supersessions: %w", err)
+	}
+	for _, supersededID := range memoryMetadata.Supersedes {
+		if _, err := tx.Exec(`
+			INSERT INTO memory_supersessions
+				(superseding_note_id, superseded_note_id, reason, created_at)
+			VALUES (?, ?, ?, datetime('now'))
+		`, noteID, supersededID, nullableString(memoryMetadata.SupersessionReason)); err != nil {
+			return nil, fmt.Errorf("failed to insert memory supersession: %w", err)
+		}
 	}
 
 	// Delete and re-insert tags
@@ -427,6 +503,12 @@ func (idx *Indexer) cleanupDeletedFiles() error {
 	}
 
 	for _, id := range orphanedIDs {
+		// Supersession edges are a projection too. Remove edges for a deleted
+		// superseding note so Get() cannot report stale absolute supersession.
+		idx.db.Exec(`
+			DELETE FROM memory_supersessions
+			WHERE superseding_note_id IN (SELECT id FROM notes WHERE file_id = ?)
+		`, id)
 		idx.db.Exec("DELETE FROM notes WHERE file_id = ?", id)
 		idx.db.Exec("DELETE FROM files WHERE id = ?", id)
 	}
@@ -453,4 +535,45 @@ func filepathToID(path string) string {
 	// Remove .md extension
 	id = strings.TrimSuffix(id, ".md")
 	return id
+}
+
+func encodeFrontmatterJSON(raw string) (string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return "{}", nil
+	}
+	var frontmatter map[string]interface{}
+	if err := yaml.Unmarshal([]byte(raw), &frontmatter); err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(frontmatter)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func encodeProvenanceJSON(provenance memory.Provenance) (interface{}, error) {
+	if provenance.SourceType == "" && provenance.SourceRef == "" &&
+		provenance.Actor == "" && provenance.Model == "" && provenance.CapturedAt == "" {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(provenance)
+	if err != nil {
+		return nil, err
+	}
+	return string(encoded), nil
+}
+
+func nullableString(value string) interface{} {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return value
+}
+
+func nullableFloat(value *float64) interface{} {
+	if value == nil {
+		return nil
+	}
+	return *value
 }
