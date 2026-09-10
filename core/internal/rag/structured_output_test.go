@@ -15,7 +15,7 @@ func TestPipeline_Ask_DecodesStructuredJSONWithoutFallbackParsing(t *testing.T) 
 
 	searcher := search.New(database)
 	mock := &ai.MockProvider{
-		Response: `{"answer":"Postgres with pgvector was selected.","confidence":"high","caveats":["Re-evaluate at larger scale"],"suggested_actions":["Benchmark retrieval"]}`,
+		Response: `{"answer":"Postgres with pgvector was selected.","confidence":"high","caveats":["Re-evaluate at larger scale"],"suggestedActions":["Benchmark retrieval"]}`,
 	}
 
 	pipeline := New(searcher, mock)
