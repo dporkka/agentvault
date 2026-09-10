@@ -46,7 +46,7 @@ export interface KnowledgeClient {
   closeSession(id: string, req?: CloseAgentSessionRequest): Promise<AgentSession>;
 }
 
-function queryString(values: Record<string, unknown>): string {
+function queryString<T extends object>(values: T): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(values)) {
     if (value === undefined || value === null || value === '') continue;
