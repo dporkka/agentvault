@@ -26,9 +26,11 @@ func NewStore(database *db.DB) *Store {
 // Project replaces the indexed semantic metadata for an existing note and its
 // outgoing supersession relations atomically.
 func (s *Store) Project(ctx context.Context, metadata Metadata) error {
-	if err := metadata.Validate(); err != nil {
+	normalized, err := metadata.Normalize()
+	if err != nil {
 		return err
 	}
+	metadata = normalized
 
 	var provenanceJSON interface{}
 	if !isZeroProvenance(metadata.Provenance) {
