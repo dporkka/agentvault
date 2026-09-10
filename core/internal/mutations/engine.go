@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/agentvault/core/internal/contract"
@@ -22,6 +23,13 @@ const (
 	maxMutationBytes = 1 << 20 // 1 MiB per before/after text snapshot
 	maxDiffBytes     = 256 << 10
 )
+
+// AgentVault may construct more than one Engine for the same vault (for
+// example HTTP and MCP surfaces). Serialize mutations by canonical target path
+// across those instances so two AgentVault commits cannot race each other.
+// This is intentionally process-local; arbitrary external writers remain an
+// optimistic-concurrency boundary documented in TRANSACTIONAL_MUTATIONS.md.
+var mutationPathLocks sync.Map // canonical path -> *sync.Mutex
 
 // Engine coordinates proposal persistence with canonical user files.
 type Engine struct {
@@ -48,6 +56,9 @@ func (e *Engine) Propose(req contract.CreateMutationProposalRequest) (contract.M
 	if strings.TrimSpace(req.Reason) == "" {
 		return contract.MutationProposal{}, errors.New("reason is required")
 	}
+
+	unlock := lockMutationPath(fullPath)
+	defer unlock()
 
 	before, err := readState(fullPath)
 	if err != nil {
@@ -122,12 +133,22 @@ func (e *Engine) Commit(id string) (contract.MutationResult, error) {
 	if err != nil {
 		return contract.MutationResult{}, err
 	}
-	if proposal.Status != contract.MutationApproved {
-		return contract.MutationResult{}, fmt.Errorf("mutation %s is %s; expected approved", id, proposal.Status)
-	}
 	_, fullPath, err := e.resolvePath(proposal.Path)
 	if err != nil {
 		return contract.MutationResult{}, err
+	}
+
+	unlock := lockMutationPath(fullPath)
+	defer unlock()
+
+	// Re-read lifecycle state after acquiring the path lock so concurrent
+	// AgentVault callers cannot act on the same stale proposal snapshot.
+	proposal, err = e.store.GetMutationProposal(id)
+	if err != nil {
+		return contract.MutationResult{}, err
+	}
+	if proposal.Status != contract.MutationApproved {
+		return contract.MutationResult{}, fmt.Errorf("mutation %s is %s; expected approved", id, proposal.Status)
 	}
 	current, err := readState(fullPath)
 	if err != nil {
@@ -141,6 +162,21 @@ func (e *Engine) Commit(id string) (contract.MutationResult, error) {
 	if err != nil {
 		return contract.MutationResult{}, err
 	}
+
+	// The intent append is fsynced and can take materially longer than a memory
+	// operation. Re-observe the file immediately afterward so an external edit
+	// made during that durability window is rejected instead of overwritten.
+	current, err = readState(fullPath)
+	if err != nil {
+		_, _ = e.store.AbortMutationCommit(id, err.Error())
+		return contract.MutationResult{}, err
+	}
+	if !matchesProposalState(current, proposal.BeforeExists, proposal.BeforeHash) {
+		conflict := conflictError(proposal, "commit", current, proposal.BeforeExists, proposal.BeforeHash)
+		_, _ = e.store.AbortMutationCommit(id, conflict.Error())
+		return contract.MutationResult{}, conflict
+	}
+
 	applyErr := e.applyAfter(fullPath, proposal)
 	if applyErr != nil {
 		return e.resolveInterruptedCommit(proposal, fullPath, applyErr)
@@ -162,12 +198,20 @@ func (e *Engine) Undo(id string) (contract.MutationResult, error) {
 	if err != nil {
 		return contract.MutationResult{}, err
 	}
-	if proposal.Status != contract.MutationCommitted {
-		return contract.MutationResult{}, fmt.Errorf("mutation %s is %s; expected committed", id, proposal.Status)
-	}
 	_, fullPath, err := e.resolvePath(proposal.Path)
 	if err != nil {
 		return contract.MutationResult{}, err
+	}
+
+	unlock := lockMutationPath(fullPath)
+	defer unlock()
+
+	proposal, err = e.store.GetMutationProposal(id)
+	if err != nil {
+		return contract.MutationResult{}, err
+	}
+	if proposal.Status != contract.MutationCommitted {
+		return contract.MutationResult{}, fmt.Errorf("mutation %s is %s; expected committed", id, proposal.Status)
 	}
 	current, err := readState(fullPath)
 	if err != nil {
@@ -181,6 +225,17 @@ func (e *Engine) Undo(id string) (contract.MutationResult, error) {
 	if err != nil {
 		return contract.MutationResult{}, err
 	}
+	current, err = readState(fullPath)
+	if err != nil {
+		_, _ = e.store.AbortMutationUndo(id, err.Error())
+		return contract.MutationResult{}, err
+	}
+	if !matchesProposalState(current, proposal.AfterExists, proposal.AfterHash) {
+		conflict := conflictError(proposal, "undo", current, proposal.AfterExists, proposal.AfterHash)
+		_, _ = e.store.AbortMutationUndo(id, conflict.Error())
+		return contract.MutationResult{}, conflict
+	}
+
 	applyErr := e.applyBefore(fullPath, proposal)
 	if applyErr != nil {
 		return e.resolveInterruptedUndo(proposal, fullPath, applyErr)
@@ -212,8 +267,10 @@ func (e *Engine) Recover() []error {
 				problems = append(problems, fmt.Errorf("recover %s: %w", proposal.ID, err))
 				continue
 			}
+			unlock := lockMutationPath(fullPath)
 			current, err := readState(fullPath)
 			if err != nil {
+				unlock()
 				problems = append(problems, fmt.Errorf("recover %s: %w", proposal.ID, err))
 				continue
 			}
@@ -243,6 +300,7 @@ func (e *Engine) Recover() []error {
 					problems = append(problems, err)
 				}
 			}
+			unlock()
 		}
 	}
 	return problems
@@ -431,6 +489,13 @@ func conflictError(proposal contract.MutationProposal, action string, current fi
 		expected = expectedHash
 	}
 	return fmt.Errorf("mutation %s %s conflict for %s: expected %s, found %s; create a new proposal from current state", proposal.ID, action, proposal.Path, expected, actual)
+}
+
+func lockMutationPath(path string) func() {
+	lock, _ := mutationPathLocks.LoadOrStore(filepath.Clean(path), &sync.Mutex{})
+	mutex := lock.(*sync.Mutex)
+	mutex.Lock()
+	return mutex.Unlock
 }
 
 func hashBytes(content []byte) string {
