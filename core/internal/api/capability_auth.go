@@ -36,11 +36,13 @@ func (s *Server) authenticateCapabilityRequest(r *http.Request) (capabilityIdent
 	if token == s.authToken {
 		return capabilityIdentity{Root: true}, nil
 	}
-	registry, err := authz.NewRegistry(s.vaultPath)
-	if err != nil {
-		return capabilityIdentity{}, err
+	if s.capabilityInitErr != nil || s.capabilityRegistry == nil {
+		if s.capabilityInitErr != nil {
+			return capabilityIdentity{}, s.capabilityInitErr
+		}
+		return capabilityIdentity{}, authz.ErrUnauthenticated
 	}
-	principal, err := registry.Authenticate(token)
+	principal, err := s.capabilityRegistry.Authenticate(token)
 	if err != nil {
 		return capabilityIdentity{}, err
 	}
