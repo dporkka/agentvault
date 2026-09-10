@@ -86,6 +86,10 @@ func runMcpServe(cmd *cobra.Command, args []string) {
 	server.RegisterTools()
 	server.RegisterKnowledgeTools()
 	server.RegisterContextTool()
+	// Mutation MCP intentionally exposes proposal/read tools only. Approval,
+	// commit, reject, and undo remain trusted control-plane operations until MCP
+	// identities are capability-scoped.
+	server.RegisterMutationTools()
 	server.RegisterResources()
 
 	if mcpHTTP {
