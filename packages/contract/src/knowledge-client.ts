@@ -5,6 +5,11 @@ import {
   type TokenStore,
 } from './client';
 import type {
+  CapabilityPrincipal,
+  IssuedCapabilityToken,
+  MintCapabilityRequest,
+} from './capabilities';
+import type {
   CompileContextRequest,
   ContextBundle,
 } from './context';
@@ -62,13 +67,18 @@ export interface KnowledgeClient {
   proposeMutation(req: CreateMutationProposalRequest): Promise<MutationProposal>;
   listMutations(filter?: MutationProposalFilter): Promise<MutationProposal[]>;
   getMutation(id: string): Promise<MutationProposal>;
-  /** Trusted control-plane operation. Approval is intentionally separate from proposal creation. */
-  approveMutation(id: string, req: ApproveMutationRequest): Promise<MutationProposal>;
-  /** Trusted control-plane operation. Applies an approved proposal if its before-state still matches. */
+  /** Applies an explicit mutation approval when the current token carries mutation:approve. */
+  approveMutation(id: string, req?: ApproveMutationRequest): Promise<MutationProposal>;
+  /** Applies an approved proposal when the current token carries mutation:commit. */
   commitMutation(id: string): Promise<MutationResult>;
-  /** Trusted control-plane operation. Restores the captured before-state if the committed state still matches. */
+  /** Restores the captured before-state when the current token carries mutation:undo. */
   undoMutation(id: string): Promise<MutationResult>;
-  rejectMutation(id: string, req: RejectMutationRequest): Promise<MutationProposal>;
+  rejectMutation(id: string, req?: RejectMutationRequest): Promise<MutationProposal>;
+
+  /** Root-token-only administration. Raw capability tokens are returned only by mintCapability. */
+  listCapabilities(): Promise<CapabilityPrincipal[]>;
+  mintCapability(req: MintCapabilityRequest): Promise<IssuedCapabilityToken>;
+  revokeCapability(id: string): Promise<CapabilityPrincipal>;
 }
 
 function queryString<T extends object>(values: T): string {
@@ -174,7 +184,7 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions = {}): Knowle
     getMutation(id) {
       return call<MutationProposal>('GET', `/mutations/${encodeURIComponent(id)}`);
     },
-    approveMutation(id, req) {
+    approveMutation(id, req = { approvedBy: '' }) {
       return call<MutationProposal>('POST', `/mutations/${encodeURIComponent(id)}/approve`, req);
     },
     commitMutation(id) {
@@ -183,8 +193,17 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions = {}): Knowle
     undoMutation(id) {
       return call<MutationResult>('POST', `/mutations/${encodeURIComponent(id)}/undo`);
     },
-    rejectMutation(id, req) {
+    rejectMutation(id, req = { actor: '', reason: '' }) {
       return call<MutationProposal>('POST', `/mutations/${encodeURIComponent(id)}/reject`, req);
+    },
+    listCapabilities() {
+      return call<CapabilityPrincipal[]>('GET', '/auth/capabilities');
+    },
+    mintCapability(req) {
+      return call<IssuedCapabilityToken>('POST', '/auth/capabilities', req);
+    },
+    revokeCapability(id) {
+      return call<CapabilityPrincipal>('POST', `/auth/capabilities/${encodeURIComponent(id)}/revoke`);
     },
   };
 }
