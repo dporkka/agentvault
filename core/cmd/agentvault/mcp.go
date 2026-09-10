@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,6 +18,7 @@ var (
 	mcpHTTP              bool
 	mcpPort              int
 	mcpAllowDirectWrites bool
+	mcpCapabilityToken   string
 )
 
 // mcpStopSignal returns a channel that is closed when the MCP server should
@@ -40,15 +42,18 @@ var mcpCmd = &cobra.Command{
 	Long: `Model Context Protocol (MCP) server for AgentVault.
 
 Exposes AgentVault tools to AI agents via the Model Context Protocol.
-Supports stdio (default) and HTTP transports.
+Supports stdio (default) and authenticated HTTP transports.
 
-User-authored file writes are proposal-only by default. Legacy direct-write MCP
-commands can be enabled explicitly for compatibility with trusted clients.
+User-authored file writes are proposal-only by default. A persistent capability
+token can bind the MCP process to a scoped agent identity and selectively expose
+approve, commit, reject, or undo tools. Legacy direct-write MCP commands remain
+an explicit compatibility opt-in and cannot be combined with a scoped identity.
 
 Example:
-  agentvault mcp serve                         # stdio, reviewed mutations
-  agentvault mcp serve --http                  # HTTP on default port 7777
-  agentvault mcp serve --allow-direct-writes   # opt in to legacy file writers`,
+  agentvault mcp serve
+  AGENTVAULT_CAPABILITY_TOKEN=avc_... agentvault mcp serve
+  AGENTVAULT_CAPABILITY_TOKEN=avc_... agentvault mcp serve --http
+  agentvault mcp serve --allow-direct-writes`,
 }
 
 // mcpServeCmd is the actual serve subcommand.
@@ -57,14 +62,15 @@ var mcpServeCmd = &cobra.Command{
 	Short: "Start MCP server for AI agent integration",
 	Long: `Starts an MCP server that exposes AgentVault tools to AI agents.
 
-Supports stdio (default) and HTTP transports. Direct mutation of user-authored
-vault files is disabled by default; agents can create reviewable transactional
-mutation proposals instead.
+Stdio may run without a capability token and then exposes only the legacy safe
+proposal/read mutation subset. Supplying a capability token binds the process to
+that identity and its mutation scopes. HTTP transport requires a capability token
+and uses the same token as Bearer/X-AgentVault-Token transport authentication.
 
-Example:
-  agentvault mcp serve
-  agentvault mcp serve --http --port 7777
-  agentvault mcp serve --allow-direct-writes`,
+--allow-direct-writes is mutually exclusive with a capability token so a scoped
+identity can never regain the legacy unreviewed file-writing tools by accident.
+Prefer AGENTVAULT_CAPABILITY_TOKEN over a command-line token when process-list
+visibility is a concern.`,
 	Run: runMcpServe,
 }
 
@@ -75,13 +81,12 @@ func init() {
 	mcpServeCmd.Flags().BoolVar(&mcpHTTP, "http", false, "Use HTTP transport instead of stdio")
 	mcpServeCmd.Flags().IntVar(&mcpPort, "port", 7777, "Port for HTTP transport")
 	mcpServeCmd.Flags().BoolVar(&mcpAllowDirectWrites, "allow-direct-writes", false, "Enable legacy MCP tools that write vault files without transactional review")
+	mcpServeCmd.Flags().StringVar(&mcpCapabilityToken, "capability-token", "", "Bind MCP to a persistent scoped capability token (prefer AGENTVAULT_CAPABILITY_TOKEN)")
 }
 
 func runMcpServe(cmd *cobra.Command, args []string) {
-	// Validate vault
 	vp := mustRequireVault()
 
-	// Open database
 	database, err := openDB(vp)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -89,9 +94,29 @@ func runMcpServe(cmd *cobra.Command, args []string) {
 	}
 	defer database.Close()
 
-	// Create and configure server. The default registry prevents direct edits to
-	// user-authored files from bypassing the mutation review protocol.
+	capabilityToken := strings.TrimSpace(mcpCapabilityToken)
+	if capabilityToken == "" {
+		capabilityToken = strings.TrimSpace(os.Getenv("AGENTVAULT_CAPABILITY_TOKEN"))
+	}
+	if mcpHTTP && capabilityToken == "" {
+		fmt.Fprintln(os.Stderr, "Error: HTTP MCP requires --capability-token or AGENTVAULT_CAPABILITY_TOKEN")
+		os.Exit(1)
+	}
+	if mcpAllowDirectWrites && capabilityToken != "" {
+		fmt.Fprintln(os.Stderr, "Error: --allow-direct-writes cannot be combined with a scoped capability token")
+		os.Exit(1)
+	}
+
 	server := mcp.NewServer(vp, database)
+	if capabilityToken != "" {
+		if err := server.SetCapabilityToken(capabilityToken); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid capability token: %v\n", err)
+			os.Exit(1)
+		}
+		if mcpHTTP {
+			server.SetAuthToken(capabilityToken)
+		}
+	}
 	if mcpAllowDirectWrites {
 		server.RegisterTools()
 	} else {
@@ -99,15 +124,12 @@ func runMcpServe(cmd *cobra.Command, args []string) {
 	}
 	server.RegisterKnowledgeTools()
 	server.RegisterContextTool()
-	// Mutation MCP intentionally exposes proposal/read tools only. Approval,
-	// commit, reject, and undo remain trusted control-plane operations until MCP
-	// identities are capability-scoped.
 	server.RegisterMutationTools()
 	server.RegisterResources()
 
 	if mcpHTTP {
 		addr := fmt.Sprintf("127.0.0.1:%d", mcpPort)
-		fmt.Fprintf(os.Stderr, "AgentVault MCP server started (HTTP on %s)\n", addr)
+		fmt.Fprintf(os.Stderr, "AgentVault MCP server started (authenticated HTTP on %s)\n", addr)
 		srv := &http.Server{Addr: addr, Handler: server}
 		go func() {
 			<-mcpStopSignal()

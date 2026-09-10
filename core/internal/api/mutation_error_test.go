@@ -14,6 +14,7 @@ func TestMutationMissingIDReturnsNotFound(t *testing.T) {
 	server.RegisterRoutes()
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/mutations/mut_missing", nil)
+	request.Header.Set("X-AgentVault-Token", server.AuthToken())
 	server.mux.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusNotFound {

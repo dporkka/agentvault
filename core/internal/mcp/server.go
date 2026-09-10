@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/authz"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/search"
@@ -25,13 +26,14 @@ const (
 
 // Server is an MCP server for AgentVault.
 type Server struct {
-	vaultPath string
-	db        *db.DB
-	searcher  *search.Searcher
-	indexer   *indexer.Indexer
-	tools     map[string]Tool
-	resources map[string]Resource
-	authToken string
+	vaultPath           string
+	db                  *db.DB
+	searcher            *search.Searcher
+	indexer             *indexer.Indexer
+	tools               map[string]Tool
+	resources           map[string]Resource
+	authToken           string
+	capabilityPrincipal *authz.Principal
 }
 
 // Tool represents an MCP tool.
@@ -132,6 +134,11 @@ func (s *Server) SetAuthToken(token string) {
 func (s *Server) Handle(ctx context.Context, req JSONRPCRequest) JSONRPCResponse {
 	if req.JSONRPC != "2.0" && req.JSONRPC != "" {
 		return errorResponse(req.ID, -32600, "Invalid JSON-RPC version")
+	}
+	if s.capabilityPrincipal != nil {
+		if _, ok := s.capabilityIdentity(); !ok {
+			return errorResponse(req.ID, -32001, "Capability identity is invalid, expired, or revoked")
+		}
 	}
 
 	switch req.Method {
@@ -244,7 +251,6 @@ func (s *Server) handleToolsCall(req JSONRPCRequest) JSONRPCResponse {
 		Result:  result,
 	}
 }
-
 
 // resourceDescription is the JSON representation of a resource for
 // the resources/list response.
@@ -381,6 +387,7 @@ func matchResourceTemplate(tmpl, uri string) bool {
 	}
 	return true
 }
+
 // ServeStdio runs the MCP server over stdin/stdout.
 func (s *Server) ServeStdio() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -492,6 +499,11 @@ func errorResponse(id interface{}, code int, message string) JSONRPCResponse {
 	}
 }
 
+// currentTimestamp returns the current time in RFC3339 format.
+func currentTimestamp() string {
+	return time.Now().UTC().Format(time.RFC3339)
+}
+
 // stringArg extracts a string argument from args map.
 func stringArg(args map[string]interface{}, key string) string {
 	if v, ok := args[key].(string); ok {
@@ -518,18 +530,16 @@ func stringSliceArg(args map[string]interface{}, key string) []string {
 		return nil
 	}
 	if arr, ok := raw.([]interface{}); ok {
-		var result []string
+		result := make([]string, 0, len(arr))
 		for _, v := range arr {
-			if s, ok := v.(string); ok {
-				result = append(result, s)
+			if str, ok := v.(string); ok {
+				result = append(result, str)
 			}
 		}
 		return result
 	}
+	if arr, ok := raw.([]string); ok {
+		return arr
+	}
 	return nil
-}
-
-// currentTimestamp returns the current time in RFC3339 format.
-func currentTimestamp() string {
-	return time.Now().UTC().Format(time.RFC3339)
 }
