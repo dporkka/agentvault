@@ -44,12 +44,17 @@ func generateAuthToken() string {
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" && isAllowedOrigin(origin) {
+		switch {
+		case origin == "":
+			// Non-browser clients do not send Origin. Keep the historical wildcard
+			// response for compatibility, but never combine '*' with credentials.
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		case isAllowedOrigin(origin):
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-AgentVault-Token")
 
 		if r.Method == http.MethodOptions {
