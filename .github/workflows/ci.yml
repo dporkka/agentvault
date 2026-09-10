@@ -35,7 +35,12 @@ jobs:
       - name: Check Go formatting
         working-directory: ${{ github.workspace }}
         run: |
-          test -z "$(gofmt -l core/ apps/desktop-wails/)"
+          unformatted="$(gofmt -l core/ apps/desktop-wails/)"
+          if [ -n "$unformatted" ]; then
+            echo "The following Go files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
       - name: go vet
         run: go vet ./...
       - name: go test with race detector
