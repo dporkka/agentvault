@@ -80,16 +80,25 @@ This is a test note for the API server.
 	return tmpDir, database
 }
 
-// newTestServer creates a test server with the given vault.
+// newTestServer creates an authenticated test server with the given vault.
+// Handler-focused tests use this helper so they exercise protected endpoints
+// without each test repeating token plumbing. Authentication behavior itself is
+// covered independently in middleware tests and the explicit write-auth tests.
 func newTestServer(t *testing.T, vaultPath string, database *db.DB) *httptest.Server {
 	t.Helper()
 	srv := NewServer(vaultPath, database)
 	srv.RegisterRoutes()
 
-	// Build handler chain (same as production)
-	var handler http.Handler = srv.mux
-	handler = srv.authMiddleware(handler)
-	handler = srv.corsMiddleware(handler)
+	var protected http.Handler = srv.mux
+	protected = srv.authMiddleware(protected)
+	protected = srv.corsMiddleware(protected)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isPublicEndpoint(r) && requestAuthToken(r) == "" {
+			r.Header.Set("X-AgentVault-Token", srv.AuthToken())
+		}
+		protected.ServeHTTP(w, r)
+	})
 
 	return httptest.NewServer(handler)
 }
