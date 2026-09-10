@@ -166,7 +166,7 @@ func (s *Store) ApproveMutation(id, approvedBy string) (contract.MutationProposa
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	transition := mutationTransition{ID: id, Status: contract.MutationApproved, Actor: approvedBy, OccurredAt: now}
 	if err := s.persist(eventMutationApproved, transition, func() error {
-		return s.projectMutationTransition(transition)
+		return s.projectMutationTransition(eventMutationApproved, transition)
 	}); err != nil {
 		return contract.MutationProposal{}, err
 	}
@@ -241,6 +241,10 @@ func (s *Store) MarkMutationConflicted(id, reason string) (contract.MutationProp
 
 // RejectMutation explicitly closes an uncommitted proposal.
 func (s *Store) RejectMutation(id, actor, reason string) (contract.MutationProposal, error) {
+	actor = strings.TrimSpace(actor)
+	if actor == "" {
+		return contract.MutationProposal{}, errors.New("actor is required")
+	}
 	proposal, err := s.GetMutationProposal(id)
 	if err != nil {
 		return contract.MutationProposal{}, err
@@ -248,14 +252,14 @@ func (s *Store) RejectMutation(id, actor, reason string) (contract.MutationPropo
 	if proposal.Status != contract.MutationProposed && proposal.Status != contract.MutationApproved {
 		return contract.MutationProposal{}, fmt.Errorf("mutation %s cannot be rejected from status %s", id, proposal.Status)
 	}
-	return s.transitionMutation(id, eventMutationRejected, contract.MutationRejected, actor, reason)
+	return s.transitionMutation(id, eventMutationRejected, contract.MutationRejected, actor, strings.TrimSpace(reason))
 }
 
 func (s *Store) transitionMutation(id, eventType string, status contract.MutationStatus, actor, reason string) (contract.MutationProposal, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	transition := mutationTransition{ID: id, Status: status, Actor: actor, Error: reason, OccurredAt: now}
 	if err := s.persist(eventType, transition, func() error {
-		return s.projectMutationTransition(transition)
+		return s.projectMutationTransition(eventType, transition)
 	}); err != nil {
 		return contract.MutationProposal{}, err
 	}
