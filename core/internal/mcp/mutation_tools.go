@@ -40,6 +40,14 @@ func (s *Server) RegisterMutationTools() {
 		return authz.HasCapability(principal, capability)
 	}
 	authorize := func(capability authz.Capability, path, sessionID string) error {
+		currentPrincipal := principal
+		if scoped {
+			var ok bool
+			currentPrincipal, ok = s.capabilityIdentity()
+			if !ok {
+				return authz.ErrUnauthenticated
+			}
+		}
 		if !scoped {
 			return nil
 		}
@@ -51,7 +59,7 @@ func (s *Server) RegisterMutationTools() {
 			}
 			project = session.Project
 		}
-		return authz.Authorize(principal, capability, authz.Resource{Path: path, Project: project, SessionID: sessionID})
+		return authz.Authorize(currentPrincipal, capability, authz.Resource{Path: path, Project: project, SessionID: sessionID})
 	}
 
 	if allowed(authz.MutationPropose) {
