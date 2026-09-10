@@ -13,12 +13,18 @@ import (
 	"strings"
 )
 
+const (
+	PermissionRead     = "read"
+	PermissionWrite    = "write"
+	PermissionAnnotate = "annotate"
+)
+
 // Manifest is the plugin.json schema found in .agentvault/plugins/<name>/.
 type Manifest struct {
 	Name        string   `json:"name"`
 	Version     string   `json:"version"`
 	Description string   `json:"description,omitempty"`
-	Command     string   `json:"command"`     // executable to launch (stdio MCP)
+	Command     string   `json:"command"` // executable to launch (stdio MCP)
 	Args        []string `json:"args,omitempty"`
 	URL         string   `json:"url,omitempty"` // HTTP MCP endpoint (alternative to command)
 	Tools       []string `json:"tools,omitempty"`
@@ -90,7 +96,6 @@ func Enabled(vaultPath string) ([]Plugin, error) {
 	return enabled, nil
 }
 
-
 // Scheduled returns enabled plugins that have a cron schedule.
 func Scheduled(vaultPath string) ([]Plugin, error) {
 	enabled, err := Enabled(vaultPath)
@@ -106,16 +111,19 @@ func Scheduled(vaultPath string) ([]Plugin, error) {
 	return scheduled, nil
 }
 
-// HasPermission checks if a plugin has a specific permission.
+// HasPermission checks whether a plugin was explicitly granted a capability.
+// Capabilities are default-deny: an omitted permissions list grants no access.
+// Write includes annotate because annotation is a narrower write operation.
 func HasPermission(p Plugin, perm string) bool {
 	for _, have := range p.Manifest.Permissions {
-		if have == perm || have == "write" && perm == "annotate" {
+		have = strings.TrimSpace(strings.ToLower(have))
+		if have == perm || (have == PermissionWrite && perm == PermissionAnnotate) {
 			return true
 		}
 	}
-	// No permissions listed = full access (backward compat)
-	return len(p.Manifest.Permissions) == 0
+	return false
 }
+
 func Enable(vaultPath, name string) error {
 	return setEnabled(vaultPath, name, true)
 }

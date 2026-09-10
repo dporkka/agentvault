@@ -49,7 +49,8 @@ export interface TokenStore {
 }
 
 // inMemoryTokenStore is the default token store used when an app does not
-// pass its own. Suitable for read-only clients and tests.
+// pass its own. Suitable for health checks and tests; protected operations
+// require a token.
 export function inMemoryTokenStore(initial = ''): TokenStore {
   let value = initial;
   return {
@@ -188,23 +189,23 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
       return call<HealthResponse>('GET', '/health', undefined, false);
     },
     verifyAuth() {
-      return call<AuthVerifyResponse>('GET', '/auth/verify', undefined, true);
+      return call<AuthVerifyResponse>('GET', '/auth/verify');
     },
     getVaultStatus() {
-      return call<VaultStatus>('GET', '/vault/status', undefined, false);
+      return call<VaultStatus>('GET', '/vault/status');
     },
     async triggerIndex(idxOpts?: IndexOptions) {
       return call<IndexResult>('POST', '/vault/index', idxOpts ?? {});
     },
     search(params, signal?) {
       const qs = buildSearch(params);
-      return call<SearchResult[]>('GET', qs ? `/search?${qs}` : '/search', undefined, false, signal);
+      return call<SearchResult[]>('GET', qs ? `/search?${qs}` : '/search', undefined, true, signal);
     },
     getNote(id) {
-      return call<NoteDetail>('GET', `/notes/${encodeURIComponent(id)}`, undefined, false);
+      return call<NoteDetail>('GET', `/notes/${encodeURIComponent(id)}`);
     },
     getNoteLinks(id) {
-      return call<NoteLinks>('GET', `/links/${encodeURIComponent(id)}`, undefined, false);
+      return call<NoteLinks>('GET', `/links/${encodeURIComponent(id)}`);
     },
     createNote(req) {
       return call<CreateNoteResponse>('POST', '/notes', req);
@@ -213,7 +214,7 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
       return call<UpdateNoteResponse>('PUT', `/notes/${encodeURIComponent(id)}`, req);
     },
     deleteNote(id) {
-      return call<DeleteNoteResponse>('DELETE', `/notes/${encodeURIComponent(id)}`, undefined, true);
+      return call<DeleteNoteResponse>('DELETE', `/notes/${encodeURIComponent(id)}`);
     },
     capture(req) {
       return call<CaptureResponse>('POST', '/capture', req);
@@ -222,31 +223,31 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
       return call<AskResponse>('POST', '/ask', req);
     },
     getProjects() {
-      return call<Projects>('GET', '/projects', undefined, false);
+      return call<Projects>('GET', '/projects');
     },
     getRecent(params) {
       const qs = buildSearch(params);
-      return call<SearchResult[]>('GET', qs ? `/recent?${qs}` : '/recent', undefined, false);
+      return call<SearchResult[]>('GET', qs ? `/recent?${qs}` : '/recent');
     },
     getStale(params) {
       const qs = buildSearch(params);
-      return call<SearchResult[]>('GET', qs ? `/stale?${qs}` : '/stale', undefined, false);
+      return call<SearchResult[]>('GET', qs ? `/stale?${qs}` : '/stale');
     },
     getGitStatus() {
-      return call<GitStatus>('GET', '/git/status', undefined, false);
+      return call<GitStatus>('GET', '/git/status');
     },
     getGraph(center, depth) {
       const qs = depth !== undefined ? `?center=${encodeURIComponent(center)}&depth=${depth}` : `?center=${encodeURIComponent(center)}`;
-      return call<Graph>('GET', `/graph${qs}`, undefined, false);
+      return call<Graph>('GET', `/graph${qs}`);
     },
     getGraphNeighbors(id) {
-      return call<Graph>('GET', `/graph/neighbors?id=${encodeURIComponent(id)}`, undefined, false);
+      return call<Graph>('GET', `/graph/neighbors?id=${encodeURIComponent(id)}`);
     },
     pinNote(id) {
-      return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/pin`, undefined, true);
+      return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/pin`);
     },
     unpinNote(id) {
-      return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/unpin`, undefined, true);
+      return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/unpin`);
     },
   };
 }

@@ -135,7 +135,7 @@ func (p *Pipeline) AskWithOptions(ctx context.Context, question string, opts *RA
 	aiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	var answer *Answer
+	answer := &Answer{}
 	if err := p.provider.ChatJSON(aiCtx, messages, answer); err != nil {
 		rawAnswer, chatErr := p.provider.Chat(aiCtx, messages)
 		if chatErr != nil {
@@ -144,14 +144,10 @@ func (p *Pipeline) AskWithOptions(ctx context.Context, question string, opts *RA
 		answer = ParseAnswer(rawAnswer, sources)
 	}
 
-	if answer == nil {
-		answer = &Answer{Answer: "Unable to generate answer.", Confidence: "low"}
-	}
 	answer.Sources = sources
 
 	return answer, nil
 }
-
 
 // isListItem reports whether line starts with a markdown list marker.
 func isListItem(line string) bool {
@@ -169,6 +165,7 @@ func trimListItem(line string) string {
 	}
 	return listMarkerDigitRe.ReplaceAllString(line, "")
 }
+
 // ParseAnswer extracts structured information from the AI's raw text response.
 // DEPRECATED: Only used as a fallback when ChatJSON (structured output) fails.
 // Prefer the JSON-structured path in Pipeline.Ask.

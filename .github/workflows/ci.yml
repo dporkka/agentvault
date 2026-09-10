@@ -32,16 +32,21 @@ jobs:
           go mod verify
           go mod tidy
           git diff --exit-code go.mod go.sum
-      - name: Check Go formatting
-        working-directory: ${{ github.workspace }}
-        run: |
-          test -z "$(gofmt -l core/ apps/desktop-wails/)"
       - name: go vet
         run: go vet ./...
       - name: go test with race detector
         run: go test -race -count=1 ./...
       - name: go build
         run: go build -o /tmp/agentvault ./cmd/agentvault
+      - name: Check Go formatting
+        working-directory: ${{ github.workspace }}
+        run: |
+          unformatted="$(gofmt -l core/ apps/desktop-wails/)"
+          if [ -n "$unformatted" ]; then
+            echo "The following Go files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
