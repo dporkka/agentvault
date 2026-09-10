@@ -94,7 +94,9 @@ func (s *Store) Project(ctx context.Context, metadata Metadata) error {
 	return nil
 }
 
-// Get returns semantic metadata and note identity for one note.
+// Get returns semantic metadata and note identity for one note. Superseded is
+// true when any supersession relation points at the note; scoped retrieval uses
+// contextual supersession rules in Query rather than this absolute flag.
 func (s *Store) Get(ctx context.Context, noteID string) (*Record, error) {
 	row := s.db.QueryRow(`
 		SELECT notes.id, notes.title, files.path, notes.type, notes.project, notes.status,
@@ -115,7 +117,7 @@ func (s *Store) Get(ctx context.Context, noteID string) (*Record, error) {
 		return nil, err
 	}
 
-	supersedes, reason, err := s.loadSupersedes(ctx, noteID)
+	supersedes, reason, err := s.loadSupersedes(noteID)
 	if err != nil {
 		return nil, err
 	}
@@ -188,12 +190,30 @@ func (s *Store) Query(ctx context.Context, query Query) ([]Record, error) {
 		args = append(args, *query.MinConfidence)
 	}
 	if !query.IncludeSuperseded {
+		// Supersession is contextual. A scoped replacement can suppress an older
+		// memory only in contexts where that replacement itself is visible and
+		// temporally active. This prevents workspace-local facts from invalidating
+		// a broader/global memory for unrelated workspaces.
 		sqlText.WriteString(`
 			AND NOT EXISTS (
-				SELECT 1 FROM memory_supersessions ms
+				SELECT 1
+				FROM memory_supersessions ms
+				JOIN notes sup ON sup.id = ms.superseding_note_id
 				WHERE ms.superseded_note_id = notes.id
+				  AND (sup.workspace_id = '' OR sup.workspace_id = ?)
+				  AND (sup.agent_id = '' OR sup.agent_id = ?)
+				  AND (sup.session_id = '' OR sup.session_id = ?)
+				  AND (sup.valid_from IS NULL OR sup.valid_from = '' OR sup.valid_from <= ?)
+				  AND (sup.valid_to IS NULL OR sup.valid_to = '' OR sup.valid_to > ?)
 			)
 		`)
+		args = append(args,
+			query.Context.WorkspaceID,
+			query.Context.AgentID,
+			query.Context.SessionID,
+			atText,
+			atText,
+		)
 	}
 
 	sqlText.WriteString(`
@@ -234,6 +254,7 @@ type rowScanner func(dest ...interface{}) error
 
 func scanRecord(scan rowScanner) (*Record, error) {
 	var record Record
+	var kind string
 	var confidence sql.NullFloat64
 	var provenanceJSON sql.NullString
 	var observedAt sql.NullString
@@ -254,7 +275,7 @@ func scanRecord(scan rowScanner) (*Record, error) {
 		&record.Scope.WorkspaceID,
 		&record.Scope.AgentID,
 		&record.Scope.SessionID,
-		&record.Kind,
+		&kind,
 		&confidence,
 		&provenanceJSON,
 		&observedAt,
@@ -265,6 +286,7 @@ func scanRecord(scan rowScanner) (*Record, error) {
 		return nil, err
 	}
 
+	record.Kind = Kind(kind)
 	if project.Valid {
 		record.Project = project.String
 	}
@@ -295,7 +317,7 @@ func scanRecord(scan rowScanner) (*Record, error) {
 	return &record, nil
 }
 
-func (s *Store) loadSupersedes(ctx context.Context, noteID string) ([]string, string, error) {
+func (s *Store) loadSupersedes(noteID string) ([]string, string, error) {
 	rows, err := s.db.Query(`
 		SELECT superseded_note_id, reason
 		FROM memory_supersessions
