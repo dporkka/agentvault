@@ -11,7 +11,8 @@ workspace_id: adacavo
 agent_id: planner
 session_id: session-42
 memory_kind: preference
-confidence: 0.91
+memory_confidence: 0.91
+confidence: high
 provenance:
   source_type: conversation
   source_ref: conversation-12
@@ -38,8 +39,8 @@ Use the lower-maintenance deployment target.
 	if fm.MemoryKind != "preference" {
 		t.Fatalf("memory kind = %q", fm.MemoryKind)
 	}
-	if fm.Confidence == nil || *fm.Confidence != 0.91 {
-		t.Fatalf("confidence = %v", fm.Confidence)
+	if fm.MemoryConfidence == nil || *fm.MemoryConfidence != 0.91 {
+		t.Fatalf("memory confidence = %v", fm.MemoryConfidence)
 	}
 	if fm.Provenance.SourceType != "conversation" || fm.Provenance.SourceRef != "conversation-12" {
 		t.Fatalf("provenance = %+v", fm.Provenance)
@@ -52,6 +53,9 @@ Use the lower-maintenance deployment target.
 	}
 	if fm.SupersessionReason != "newer explicit preference" {
 		t.Fatalf("supersession reason = %q", fm.SupersessionReason)
+	}
+	if got := fm.Extra["confidence"]; got != "high" {
+		t.Fatalf("legacy confidence field was not preserved in Extra: %#v", got)
 	}
 	if got := fm.Extra["custom_field"]; got != "preserved" {
 		t.Fatalf("custom inline frontmatter field = %#v", got)
