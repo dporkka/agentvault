@@ -2,12 +2,9 @@ package mcp
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/agentvault/core/internal/authz"
 )
-
-var scopedMCPPrincipals sync.Map // *Server -> authz.Principal
 
 // SetCapabilityToken binds this MCP server process to one persistent capability
 // identity. Stdio uses the fixed identity directly; HTTP callers must also send
@@ -21,14 +18,13 @@ func (s *Server) SetCapabilityToken(token string) error {
 	if err != nil {
 		return err
 	}
-	scopedMCPPrincipals.Store(s, principal)
+	s.capabilityPrincipal = &principal
 	return nil
 }
 
-func (s *Server) capabilityPrincipal() (authz.Principal, bool) {
-	principal, ok := scopedMCPPrincipals.Load(s)
-	if !ok {
+func (s *Server) capabilityIdentity() (authz.Principal, bool) {
+	if s.capabilityPrincipal == nil {
 		return authz.Principal{}, false
 	}
-	return principal.(authz.Principal), true
+	return *s.capabilityPrincipal, true
 }
