@@ -1,6 +1,8 @@
 package api
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -103,7 +105,7 @@ func writeMutationError(w http.ResponseWriter, err error) {
 	message := strings.ToLower(err.Error())
 	status := http.StatusBadRequest
 	switch {
-	case strings.Contains(message, "not found"):
+	case errors.Is(err, sql.ErrNoRows), strings.Contains(message, "not found"):
 		status = http.StatusNotFound
 	case strings.Contains(message, " conflict "),
 		strings.Contains(message, "expected approved"),
