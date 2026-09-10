@@ -10,7 +10,7 @@ import (
 
 func (s *Server) handleListMutations(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	proposals, err := s.mutationsStore.ListMutationProposals(contract.MutationProposalFilter{
+	proposals, err := s.knowledge.ListMutationProposals(contract.MutationProposalFilter{
 		Status:    contract.MutationStatus(r.URL.Query().Get("status")),
 		AgentID:   r.URL.Query().Get("agentId"),
 		SessionID: r.URL.Query().Get("sessionId"),
@@ -24,7 +24,7 @@ func (s *Server) handleListMutations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetMutation(w http.ResponseWriter, r *http.Request) {
-	proposal, err := s.mutationsStore.GetMutationProposal(r.PathValue("id"))
+	proposal, err := s.knowledge.GetMutationProposal(r.PathValue("id"))
 	if err != nil {
 		writeMutationError(w, err)
 		return
@@ -91,7 +91,7 @@ func (s *Server) handleRejectMutation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "actor is required"})
 		return
 	}
-	proposal, err := s.mutationsStore.RejectMutation(r.PathValue("id"), req.Actor, req.Reason)
+	proposal, err := s.knowledge.RejectMutation(r.PathValue("id"), req.Actor, req.Reason)
 	if err != nil {
 		writeMutationError(w, err)
 		return
