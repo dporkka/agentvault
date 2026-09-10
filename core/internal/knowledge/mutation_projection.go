@@ -34,7 +34,7 @@ func (s *Store) projectMutationJournalEvent(event JournalEvent) (bool, error) {
 		if transition.ID == "" || transition.Status == "" || transition.OccurredAt == "" {
 			return true, fmt.Errorf("invalid mutation transition")
 		}
-		return true, s.projectMutationTransition(transition)
+		return true, s.projectMutationTransition(event.Type, transition)
 	default:
 		return false, nil
 	}
@@ -82,18 +82,21 @@ func (s *Store) projectMutationProposal(proposal contract.MutationProposal) erro
 	return nil
 }
 
-func (s *Store) projectMutationTransition(transition mutationTransition) error {
+func (s *Store) projectMutationTransition(eventType string, transition mutationTransition) error {
 	query := `UPDATE mutation_proposals SET status = ?, updated_at = ?, last_error = ?`
 	args := []interface{}{transition.Status, transition.OccurredAt, nullIfEmpty(transition.Error)}
 
-	switch transition.Status {
-	case contract.MutationApproved:
+	// Audit timestamps are derived from the actual durable event, not merely
+	// the resulting status. An aborted commit returns to "approved" but must
+	// not look like a second approval or erase the original reviewer.
+	switch eventType {
+	case eventMutationApproved:
 		query += `, approved_by = ?, approved_at = ?`
 		args = append(args, nullIfEmpty(transition.Actor), transition.OccurredAt)
-	case contract.MutationCommitted:
+	case eventMutationCommitted:
 		query += `, committed_at = ?`
 		args = append(args, transition.OccurredAt)
-	case contract.MutationUndone:
+	case eventMutationUndone:
 		query += `, undone_at = ?`
 		args = append(args, transition.OccurredAt)
 	}
