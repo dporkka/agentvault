@@ -32,7 +32,7 @@ func (s *Server) RegisterMutationTools() {
 		}
 	}
 
-	principal, scoped := s.capabilityPrincipal()
+	principal, scoped := s.capabilityIdentity()
 	allowed := func(capability authz.Capability) bool {
 		if !scoped {
 			return capability == authz.MutationRead || capability == authz.MutationPropose
