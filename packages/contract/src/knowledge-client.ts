@@ -5,6 +5,10 @@ import {
   type TokenStore,
 } from './client';
 import type {
+  CompileContextRequest,
+  ContextBundle,
+} from './context';
+import type {
   AgentSession,
   AppendSessionEventRequest,
   CloseAgentSessionRequest,
@@ -30,6 +34,7 @@ export interface KnowledgeClientOptions {
 }
 
 export interface KnowledgeClient {
+  compileContext(req: CompileContextRequest): Promise<ContextBundle>;
   listObjects(filter?: KnowledgeObjectFilter): Promise<KnowledgeObject[]>;
   getObject(id: string): Promise<KnowledgeObject>;
   upsertObject(req: UpsertKnowledgeObjectRequest): Promise<KnowledgeObject>;
@@ -92,6 +97,9 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions = {}): Knowle
   }
 
   return {
+    compileContext(req) {
+      return call<ContextBundle>('POST', '/context/compile', req);
+    },
     listObjects(filter = {}) {
       const qs = queryString(filter);
       return call<KnowledgeObject[]>('GET', qs ? `/objects?${qs}` : '/objects');
