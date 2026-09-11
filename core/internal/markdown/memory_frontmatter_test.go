@@ -60,4 +60,26 @@ Use the lower-maintenance deployment target.
 	if got := fm.Extra["custom_field"]; got != "preserved" {
 		t.Fatalf("custom inline frontmatter field = %#v", got)
 	}
+
+	// Typed non-core fields are mirrored into Extra as a compatibility layer for
+	// existing write paths that rebuild frontmatter from core fields + Extra.
+	if got := fm.Extra["workspace_id"]; got != "adacavo" {
+		t.Fatalf("workspace_id not mirrored for round-trip preservation: %#v", got)
+	}
+	if got := fm.Extra["memory_kind"]; got != "preference" {
+		t.Fatalf("memory_kind not mirrored for round-trip preservation: %#v", got)
+	}
+	if got, ok := fm.Extra["memory_confidence"].(float64); !ok || got != 0.91 {
+		t.Fatalf("memory_confidence not mirrored for round-trip preservation: %#v", fm.Extra["memory_confidence"])
+	}
+	provenance, ok := fm.Extra["provenance"].(map[string]interface{})
+	if !ok || provenance["source_ref"] != "conversation-12" || provenance["actor"] != "user" {
+		t.Fatalf("provenance not mirrored for round-trip preservation: %#v", fm.Extra["provenance"])
+	}
+	if got := fm.Extra["valid_to"]; got != "2027-09-10T10:01:00Z" {
+		t.Fatalf("valid_to not mirrored for round-trip preservation: %#v", got)
+	}
+	if supersedes, ok := fm.Extra["supersedes"].([]string); !ok || len(supersedes) != 1 || supersedes[0] != "fact-0" {
+		t.Fatalf("supersedes not mirrored for round-trip preservation: %#v", fm.Extra["supersedes"])
+	}
 }
