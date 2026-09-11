@@ -109,6 +109,7 @@ func ParseReader(r io.Reader) (*ParsedDocument, error) {
 			if err := yaml.Unmarshal([]byte(rawFrontmatter), &frontmatter); err != nil {
 				return nil, fmt.Errorf("invalid YAML frontmatter: %w", err)
 			}
+			mirrorPreservedFields(&frontmatter)
 			body = strings.TrimSpace(strings.Join(lines[closeIdx+1:], "\n"))
 		} else {
 			body = str
@@ -125,6 +126,77 @@ func ParseReader(r io.Reader) (*ParsedDocument, error) {
 		RawFrontmatter: rawFrontmatter,
 		WikiLinks:      wikiLinks,
 	}, nil
+}
+
+// mirrorPreservedFields copies typed, non-core metadata into Extra so legacy
+// note mutation paths that rebuild frontmatter from the core fields plus Extra
+// do not silently erase information they do not understand. Typed fields remain
+// authoritative for reads/indexing; Extra here is a round-trip compatibility
+// layer until all writers share a single canonical serializer.
+func mirrorPreservedFields(frontmatter *Frontmatter) {
+	if frontmatter.Extra == nil {
+		frontmatter.Extra = make(map[string]interface{})
+	}
+
+	if len(frontmatter.Entities) > 0 {
+		frontmatter.Extra["entities"] = append([]string(nil), frontmatter.Entities...)
+	}
+	if frontmatter.SourceQuality != "" {
+		frontmatter.Extra["source_quality"] = frontmatter.SourceQuality
+	}
+	if frontmatter.WorkspaceID != "" {
+		frontmatter.Extra["workspace_id"] = frontmatter.WorkspaceID
+	}
+	if frontmatter.AgentID != "" {
+		frontmatter.Extra["agent_id"] = frontmatter.AgentID
+	}
+	if frontmatter.SessionID != "" {
+		frontmatter.Extra["session_id"] = frontmatter.SessionID
+	}
+	if frontmatter.MemoryKind != "" {
+		frontmatter.Extra["memory_kind"] = frontmatter.MemoryKind
+	}
+	if frontmatter.MemoryConfidence != nil {
+		frontmatter.Extra["memory_confidence"] = *frontmatter.MemoryConfidence
+	}
+	if provenance := provenanceMap(frontmatter.Provenance); len(provenance) > 0 {
+		frontmatter.Extra["provenance"] = provenance
+	}
+	if frontmatter.ObservedAt != "" {
+		frontmatter.Extra["observed_at"] = frontmatter.ObservedAt
+	}
+	if frontmatter.ValidFrom != "" {
+		frontmatter.Extra["valid_from"] = frontmatter.ValidFrom
+	}
+	if frontmatter.ValidTo != "" {
+		frontmatter.Extra["valid_to"] = frontmatter.ValidTo
+	}
+	if len(frontmatter.Supersedes) > 0 {
+		frontmatter.Extra["supersedes"] = append([]string(nil), frontmatter.Supersedes...)
+	}
+	if frontmatter.SupersessionReason != "" {
+		frontmatter.Extra["supersession_reason"] = frontmatter.SupersessionReason
+	}
+}
+
+func provenanceMap(provenance Provenance) map[string]interface{} {
+	result := make(map[string]interface{})
+	if provenance.SourceType != "" {
+		result["source_type"] = provenance.SourceType
+	}
+	if provenance.SourceRef != "" {
+		result["source_ref"] = provenance.SourceRef
+	}
+	if provenance.Actor != "" {
+		result["actor"] = provenance.Actor
+	}
+	if provenance.Model != "" {
+		result["model"] = provenance.Model
+	}
+	if provenance.CapturedAt != "" {
+		result["captured_at"] = provenance.CapturedAt
+	}
+	return result
 }
 
 // isFenceLine reports whether a line is a YAML frontmatter fence: three or
