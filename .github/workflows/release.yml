@@ -10,14 +10,34 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   WAILS_VERSION: v2.9.2
+  NODE_VERSION: '22'
 
 jobs:
+  verify-source:
+    name: Verify release source
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require tagged commit to be reachable from main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Release tags must point to a commit reachable from main."
+            exit 1
+          fi
+
   build-linux:
     name: Build CLI, Linux desktop, extension, and mobile artifacts
+    needs: verify-source
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -28,7 +48,7 @@ jobs:
           cache-dependency-path: core/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: apps/**/package-lock.json
       - name: Install GTK/WebKit system libraries
@@ -37,6 +57,7 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: Install frontend dependencies
         run: |
+          (cd packages/ui && npm ci)
           (cd apps/web-local && npm ci)
           (cd apps/browser-extension && npm ci)
           (cd apps/desktop-wails/frontend && npm ci)
@@ -52,6 +73,7 @@ jobs:
 
   build-macos:
     name: Build macOS desktop app
+    needs: verify-source
     runs-on: macos-latest
     timeout-minutes: 30
     env:
@@ -69,7 +91,8 @@ jobs:
           cache-dependency-path: apps/desktop-wails/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
           cache-dependency-path: apps/desktop-wails/frontend/package-lock.json
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
@@ -105,7 +128,7 @@ jobs:
         if: env.MACOS_SIGN_ENABLED == 'true'
         working-directory: apps/desktop-wails/build/bin
         run: codesign --deep --force --verify --verbose --sign "$MACOS_SIGN_IDENTITY" AgentVault.app
-      - name: Create .dmg
+      - name: Create unsigned .dmg
         if: env.MACOS_SIGN_ENABLED == 'false'
         working-directory: apps/desktop-wails/build/bin
         run: hdiutil create -volname AgentVault -srcfolder AgentVault.app -ov -format UDZO AgentVault-unsigned.dmg
@@ -123,13 +146,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-artifacts-macos
-          path: |
-            apps/desktop-wails/build/bin/AgentVault.app
-            apps/desktop-wails/build/bin/*.dmg
+          path: apps/desktop-wails/build/bin/*.dmg
           if-no-files-found: error
 
   build-windows:
     name: Build Windows desktop app
+    needs: verify-source
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -143,7 +165,8 @@ jobs:
           cache-dependency-path: apps/desktop-wails/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
           cache-dependency-path: apps/desktop-wails/frontend/package-lock.json
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
@@ -205,7 +228,14 @@ jobs:
         with:
           name: release-artifacts-windows
           path: dist/windows
-      - name: Create GitHub release
+      - name: Generate SHA-256 checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          find dist -type f ! -name SHA256SUMS -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > dist/SHA256SUMS
+      - name: Create draft GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -215,4 +245,4 @@ jobs:
             --generate-notes \
             --draft \
             dist/cli/* dist/desktop/* dist/extension/* dist/mobile/*.zip \
-            dist/macos/* dist/windows/*
+            dist/macos/*.dmg dist/windows/*.exe dist/SHA256SUMS
