@@ -156,6 +156,11 @@ func (s *Server) RegisterRoutes() {
 	// Search
 	s.mux.HandleFunc("GET /search", s.handleSearch)
 
+	// Semantic memory (read-only). These routes are protected by the global
+	// auth middleware just like note/search reads.
+	s.mux.HandleFunc("GET /memories", s.handleMemories)
+	s.mux.HandleFunc("GET /memories/{id}", s.handleMemoryByID)
+
 	// Notes CRUD
 	s.mux.HandleFunc("GET /notes/", s.handleNoteByPath) // handles /notes/{id}
 	s.mux.HandleFunc("POST /notes", s.handleCreateNote)
