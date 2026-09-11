@@ -2,11 +2,16 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { AppState, type AppStateStatus } from 'react-native';
 import { syncCaptures } from '../../storage/sync';
+import { useSettings } from '../../context/SettingsContext';
 import { useConnection } from '../useConnection';
 import { useAutoSync } from '../useAutoSync';
 
 jest.mock('../../storage/sync', () => ({
   syncCaptures: jest.fn().mockResolvedValue({ added: 0, updated: 0, failed: 0, removed: 0 }),
+}));
+
+jest.mock('../../context/SettingsContext', () => ({
+  useSettings: jest.fn(),
 }));
 
 jest.mock('../useConnection', () => ({
@@ -63,6 +68,16 @@ describe('useAutoSync', () => {
         return { remove: () => appStateHandlers.delete(handler as (state: AppStateStatus) => void) } as never;
       });
     (useConnection as jest.Mock).mockReturnValue({ status: 'online', check: jest.fn() });
+    (useSettings as jest.Mock).mockReturnValue({
+      settings: {
+        serverUrl: 'http://127.0.0.1:47321',
+        defaultProject: '',
+        token: '',
+        autoSyncInterval: 'off',
+      },
+      loaded: true,
+      saveSettings: jest.fn(),
+    });
   });
 
   afterEach(() => {
