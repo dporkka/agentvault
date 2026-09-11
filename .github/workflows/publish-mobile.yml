@@ -107,8 +107,8 @@ jobs:
         if: env.EAS_BUILD_ENABLED == 'false'
         working-directory: apps/mobile-expo
         run: |
-          npx expo export --platform ios
-          npx expo export --platform android
+          npx expo export --platform ios --output-dir dist/ios
+          npx expo export --platform android --output-dir dist/android
       - name: Upload mobile bundle artifacts (fallback)
         if: env.EAS_BUILD_ENABLED == 'false'
         uses: actions/upload-artifact@v4
