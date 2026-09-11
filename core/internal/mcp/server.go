@@ -105,6 +105,7 @@ func NewServer(vaultPath string, database *db.DB) *Server {
 // RegisterTools registers all AgentVault tools on the server.
 func (s *Server) RegisterTools() {
 	s.registerSearch()
+	s.registerRecallMemories()
 	s.registerReadNote()
 	s.registerGetLinks()
 	s.registerCreateNote()
@@ -245,7 +246,6 @@ func (s *Server) handleToolsCall(req JSONRPCRequest) JSONRPCResponse {
 	}
 }
 
-
 // resourceDescription is the JSON representation of a resource for
 // the resources/list response.
 type resourceDescription struct {
@@ -381,6 +381,7 @@ func matchResourceTemplate(tmpl, uri string) bool {
 	}
 	return true
 }
+
 // ServeStdio runs the MCP server over stdin/stdout.
 func (s *Server) ServeStdio() {
 	ctx, cancel := context.WithCancel(context.Background())
