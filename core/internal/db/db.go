@@ -353,9 +353,13 @@ CREATE INDEX IF NOT EXISTS idx_memory_supersessions_superseded
 	if err != nil {
 		return fmt.Errorf("failed to run inline migrations: %w", err)
 	}
-	_, err = d.conn.Exec(
-		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, datetime('now'))`,
-	)
+	_, err = d.conn.Exec(`
+		INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+		VALUES
+			(1, datetime('now')),
+			(2, datetime('now')),
+			(3, datetime('now'))
+	`)
 	return err
 }
 
