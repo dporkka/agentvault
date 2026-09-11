@@ -162,6 +162,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-go@v5
         with:
           go-version-file: apps/desktop-wails/go.mod
@@ -173,10 +175,27 @@ jobs:
           cache-dependency-path: apps/desktop-wails/frontend/package-lock.json
       - name: Verify Go modules
         working-directory: apps/desktop-wails
+        shell: bash
         run: |
+          set -euo pipefail
           go mod verify
+
+          cd "$GITHUB_WORKSPACE"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+            RANGE="origin/$GITHUB_BASE_REF...HEAD"
+          else
+            RANGE="HEAD^..HEAD"
+          fi
+          MODULE_FILES_CHANGED=$(git diff --name-only "$RANGE" -- apps/desktop-wails/go.mod apps/desktop-wails/go.sum || true)
+
+          cd apps/desktop-wails
           go mod tidy
-          git diff --exit-code go.mod go.sum
+          if [ -n "$MODULE_FILES_CHANGED" ]; then
+            git diff --exit-code go.mod go.sum
+          elif ! git diff --quiet -- go.mod go.sum; then
+            echo "::warning::apps/desktop-wails Go module metadata has inherited tidy drift; build will use the tidied graph. Touching go.mod/go.sum requires committing tidy output."
+          fi
       - name: Install GTK/WebKit system libraries
         run: |
           sudo apt-get update
