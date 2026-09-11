@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 env:
   NODE_VERSION: '22'
