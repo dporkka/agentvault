@@ -206,7 +206,7 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 			SessionID:   doc.Frontmatter.SessionID,
 		},
 		Kind:       memory.Kind(doc.Frontmatter.MemoryKind),
-		Confidence: doc.Frontmatter.Confidence,
+		Confidence: doc.Frontmatter.MemoryConfidence,
 		Provenance: memory.Provenance{
 			SourceType: doc.Frontmatter.Provenance.SourceType,
 			SourceRef:  doc.Frontmatter.Provenance.SourceRef,
