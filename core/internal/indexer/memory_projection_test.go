@@ -19,7 +19,7 @@ id: fact-old
 type: note
 title: Old fact
 memory_kind: fact
-confidence: 0.6
+memory_confidence: 0.6
 ---
 Old fact.
 `)
@@ -31,7 +31,7 @@ workspace_id: workspace-a
 agent_id: agent-a
 session_id: session-a
 memory_kind: fact
-confidence: 0.93
+memory_confidence: 0.93
 provenance:
   source_type: conversation
   source_ref: conversation-7
@@ -123,7 +123,7 @@ type: note
 title: New fact
 workspace_id: workspace-a
 memory_kind: fact
-confidence: 0.9
+memory_confidence: 0.9
 supersedes: [fact-old]
 ---
 New fact.
