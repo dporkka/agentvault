@@ -66,8 +66,8 @@ func TestMetadataValidate(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		mutate  func(*Metadata)
+		name     string
+		mutate   func(*Metadata)
 		contains string
 	}{
 		{name: "missing note id", mutate: func(m *Metadata) { m.NoteID = "" }, contains: "note id"},
