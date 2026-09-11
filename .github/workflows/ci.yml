@@ -144,9 +144,9 @@ jobs:
       - name: Run tests
         run: npm test
       - name: Bundle iOS with Metro
-        run: npx expo export --platform ios
+        run: npx expo export --platform ios --output-dir dist/ios
       - name: Bundle Android with Metro
-        run: npx expo export --platform android
+        run: npx expo export --platform android --output-dir dist/android
       - name: Upload mobile bundles
         uses: actions/upload-artifact@v4
         with:
