@@ -260,7 +260,7 @@ func equalStrings(got, want []string) bool {
 	}
 	for i := range got {
 		if got[i] != want[i] {
-		return false
+			return false
 		}
 	}
 	return true
