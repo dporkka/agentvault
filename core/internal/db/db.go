@@ -129,6 +129,12 @@ func (d *DB) runEmbeddedMigrations(entries []fs.DirEntry) error {
 	sort.Slice(migrationsList, func(i, j int) bool {
 		return migrationsList[i].version < migrationsList[j].version
 	})
+	for i := 1; i < len(migrationsList); i++ {
+		if migrationsList[i-1].version == migrationsList[i].version {
+			return fmt.Errorf("duplicate migration version %d in %s and %s",
+				migrationsList[i].version, migrationsList[i-1].name, migrationsList[i].name)
+		}
+	}
 
 	// Ensure the migration tracking table exists before querying it.
 	if _, err := d.conn.Exec(`
@@ -140,16 +146,42 @@ func (d *DB) runEmbeddedMigrations(entries []fs.DirEntry) error {
 		return fmt.Errorf("failed to create schema_migrations: %w", err)
 	}
 
-	var currentVersion int
-	row := d.conn.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations")
-	if err := row.Scan(&currentVersion); err != nil {
-		return fmt.Errorf("failed to query current migration version: %w", err)
+	rows, err := d.conn.Query("SELECT version FROM schema_migrations ORDER BY version")
+	if err != nil {
+		return fmt.Errorf("failed to query migration history: %w", err)
+	}
+	var applied []int
+	for rows.Next() {
+		var version int
+		if err := rows.Scan(&version); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("failed to scan migration history: %w", err)
+		}
+		applied = append(applied, version)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("failed to read migration history: %w", err)
+	}
+	_ = rows.Close()
+
+	// An applied migration history must be an exact prefix of the migrations
+	// available in this build. Using MAX(version) alone can hide a missing
+	// intermediate migration (for example [1, 3]); applying version 2 after 3
+	// may violate schema dependencies, so fail explicitly instead of guessing.
+	if len(applied) > len(migrationsList) {
+		return fmt.Errorf("database migration history has %d versions but this build only knows %d",
+			len(applied), len(migrationsList))
+	}
+	for i, version := range applied {
+		expected := migrationsList[i].version
+		if version != expected {
+			return fmt.Errorf("migration history gap: expected version %d at position %d, found version %d; refusing out-of-order repair",
+				expected, i+1, version)
+		}
 	}
 
-	for _, m := range migrationsList {
-		if m.version <= currentVersion {
-			continue
-		}
+	for _, m := range migrationsList[len(applied):] {
 		if err := d.applyMigration(m); err != nil {
 			return err
 		}
