@@ -31,6 +31,8 @@ Registers the file/index-backed vault read surface:
 
 It does **not** grant `agentvault.ask`, Context Compiler, structured knowledge writes, session writes, or file writes.
 
+`vault:read` is currently global-only. Any path/project/session restriction combined with this capability fails MCP startup because search/resources do not yet enforce one consistent resource scope across all alternate read paths.
+
 ### `knowledge:read`
 
 Registers only the read side of journal-backed structured knowledge:
@@ -47,7 +49,19 @@ It does **not** grant:
 - durable memory recording
 - session start/event append/close
 
-Those write capabilities are intentionally deferred until AgentVault has resource-aware authorization semantics for each operation.
+`knowledge:read` supports **project and durable-session scope** because those tools authorize persisted resources before returning data:
+
+- project-scoped object reads require the object's persisted `Project` to be allowed;
+- object relations are returned only when both endpoint objects are visible to the principal;
+- project memories require an allowed project scope;
+- session memories resolve the durable session and authorize its persisted project/session IDs;
+- session reads authorize the persisted session project and session ID.
+
+A session-only principal does not automatically become a project-wide knowledge reader: it can read its allowed session/session memories, but project objects or project memories lack the required session binding and are denied.
+
+Path-prefix restrictions are not yet supported for `knowledge:read`, because some structured records have no authoritative file path. A token combining `knowledge:read` with path-prefix scope fails MCP startup.
+
+Structured knowledge write capabilities are intentionally deferred until AgentVault has resource-aware authorization semantics for each operation.
 
 ### `context:compile`
 
@@ -57,6 +71,8 @@ Registers only:
 
 Context compilation can draw from multiple memory and knowledge sources, so this is a distinct authority rather than an implication of ordinary vault reads.
 
+`context:compile` remains global-only. The compiler can currently follow explicit object IDs, cross-object relations, and provenance records in addition to project-filtered notes/memories. Project/session authorization cannot be described as safe until every one of those alternate evidence paths is filtered against the capability principal.
+
 ### `ai:invoke`
 
 Registers only:
@@ -64,6 +80,8 @@ Registers only:
 - `agentvault.ask`
 
 AI/provider invocation is separate from data-read authority because it may consume model/provider credentials, trigger external inference, and internally retrieve vault context.
+
+`ai:invoke` remains global-only until the underlying retrieval/provider path can enforce the same resource scope end-to-end.
 
 ## Mutation capabilities
 
@@ -78,26 +96,25 @@ Transactional file mutations retain their independent lifecycle capabilities:
 
 Mutation capabilities can be path/project/session scoped because their handlers resolve and authorize the concrete proposal/session resource before acting.
 
-Read-side and mutation capabilities may be combined on one **unscoped** principal. For example, a local autonomous coding agent could receive `vault:read`, `context:compile`, `mutation:read`, and `mutation:propose` without receiving approval or commit authority.
+Read-side and mutation capabilities may be combined when their scope semantics are compatible. For example, a project-scoped autonomous agent can combine `knowledge:read` with project-scoped mutation capabilities. A token that also requests global-only `vault:read`, `context:compile`, or `ai:invoke` must remain unscoped until those families gain end-to-end resource filtering.
 
 ## Scope boundary
 
-The first read-side families are **global-only**. A capability principal that combines any of these:
+Current scope support is intentionally capability-specific:
 
-- `vault:read`
-- `knowledge:read`
-- `context:compile`
-- `ai:invoke`
+| Capability family | Path prefixes | Projects | Sessions |
+| --- | --- | --- | --- |
+| `mutation:*` | yes | yes | yes |
+| `knowledge:read` | no | yes | yes |
+| `vault:read` | no | no | no |
+| `context:compile` | no | no | no |
+| `ai:invoke` | no | no | no |
 
-with any path-prefix, project, or durable-session restriction is rejected during MCP runtime registration.
-
-This is intentional fail-closed behavior. AgentVault does not silently ignore a requested scope, and it does not assume that caller-supplied arguments are sufficient authorization. Precise scoped read capabilities require persisted-resource filtering inside each tool family.
-
-Mutation-only principals may continue to use path/project/session restrictions because those checks already exist.
+Unsupported combinations fail closed during MCP runtime registration. AgentVault does not silently ignore a requested scope, and it does not assume caller-supplied arguments are authorization.
 
 ## HTTP API boundary
 
-These new read-side capabilities currently govern **MCP only**. They do not become generic HTTP API credentials.
+These read-side capabilities currently govern **MCP only**. They do not become generic HTTP API credentials.
 
 The ordinary AgentVault HTTP API continues to require the per-process root token for non-mutation data endpoints. Mutation HTTP routes retain the capability-specific model documented in `TRANSACTIONAL_MUTATIONS.md`.
 
@@ -107,9 +124,9 @@ Keeping the boundaries separate prevents a token minted for a narrow MCP process
 
 A capability-bound process initializes only the subsystems it is authorized to use. In particular, a pure read-side principal does not register the mutation engine and therefore does not run mutation crash recovery as a startup side effect.
 
-`knowledge:read` and `context:compile` may rebuild/read SQLite projections from canonical local sources, but they do not append canonical knowledge events.
+`knowledge:read` may rebuild/read the SQLite projection from canonical journal state, but it does not append canonical knowledge events.
 
-## Next capability families
+## Next capability work
 
 Before exposing durable writes to scoped autonomous agents, add resource-aware policy for at least:
 
@@ -118,4 +135,6 @@ Before exposing durable writes to scoped autonomous agents, add resource-aware p
 - `session:read` / `session:write` if session authority should be separated from general knowledge
 - provenance creation
 
-Before allowing path/project/session-scoped `vault:read`, `knowledge:read`, `context:compile`, or `ai:invoke`, implement filtering against authoritative persisted resources and add adversarial tests showing that out-of-scope data cannot leak through alternate retrieval paths.
+Before allowing scoped `context:compile`, filter explicit object IDs, relations, provenance/evidence, notes, memories, and prior sessions against the principal and add adversarial alternate-path leakage tests.
+
+Before allowing scoped `vault:read` or `ai:invoke`, make every underlying search/resource/RAG path enforce the same authoritative scope. Path-scoped structured knowledge reads should wait until records without canonical paths have a defined policy rather than treating missing paths as implicitly safe.
