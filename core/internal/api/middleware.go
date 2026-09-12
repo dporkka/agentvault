@@ -92,11 +92,26 @@ func requestAuthToken(r *http.Request) string {
 	return authHeader
 }
 
-// authMiddleware requires the vault token for all data-bearing endpoints,
-// including reads. Only health, auth verification, and CORS preflights are public.
+func isMutationEndpoint(path string) bool {
+	return path == "/mutations" || strings.HasPrefix(path, "/mutations/")
+}
+
+// authMiddleware keeps the ephemeral root token as the authority for every
+// data-bearing endpoint except transactional mutation routes. Mutation routes
+// authenticate inside their lifecycle-specific capability wrappers so a scoped
+// token never becomes a generic vault credential.
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isPublicEndpoint(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// GET and write mutation routes both pass through here and are guarded by
+		// mutation:read/propose/approve/commit/undo/reject at the route itself.
+		// This exception is intentionally path-limited; all other reads and writes
+		// continue to require the root token.
+		if isMutationEndpoint(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
