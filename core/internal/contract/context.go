@@ -4,6 +4,7 @@ package contract
 // backed context bundle for one agent task.
 type CompileContextRequest struct {
 	Task        string   `json:"task"`
+	WorkspaceID string   `json:"workspaceId,omitempty"`
 	Project     string   `json:"project,omitempty"`
 	AgentID     string   `json:"agentId,omitempty"`
 	SessionID   string   `json:"sessionId,omitempty"`
@@ -16,16 +17,17 @@ type CompileContextRequest struct {
 // ContextBundle is the compiled, model-agnostic context payload. estimatedTokens
 // uses AgentVault's deterministic approximation and never exceeds tokenBudget.
 type ContextBundle struct {
-	Version         string            `json:"version"`
-	Task            string            `json:"task"`
-	Project         string            `json:"project,omitempty"`
-	AgentID         string            `json:"agentId,omitempty"`
-	SessionID       string            `json:"sessionId,omitempty"`
-	AsOf            string            `json:"asOf"`
-	TokenBudget     int               `json:"tokenBudget"`
-	EstimatedTokens int               `json:"estimatedTokens"`
-	Truncated       bool              `json:"truncated"`
-	Items           []ContextItem     `json:"items"`
+	Version         string             `json:"version"`
+	Task            string             `json:"task"`
+	WorkspaceID     string             `json:"workspaceId,omitempty"`
+	Project         string             `json:"project,omitempty"`
+	AgentID         string             `json:"agentId,omitempty"`
+	SessionID       string             `json:"sessionId,omitempty"`
+	AsOf            string             `json:"asOf"`
+	TokenBudget     int                `json:"tokenBudget"`
+	EstimatedTokens int                `json:"estimatedTokens"`
+	Truncated       bool               `json:"truncated"`
+	Items           []ContextItem      `json:"items"`
 	Stats           ContextBundleStats `json:"stats"`
 }
 
@@ -39,15 +41,15 @@ type ContextBundleStats struct {
 
 // ContextItem is one ranked unit of evidence/context.
 type ContextItem struct {
-	Kind            string             `json:"kind"`
-	ID              string             `json:"id"`
-	Title           string             `json:"title,omitempty"`
-	Content         string             `json:"content"`
-	Path            string             `json:"path,omitempty"`
-	Score           float64            `json:"score"`
-	EstimatedTokens int                `json:"estimatedTokens"`
-	ObjectIDs       []string           `json:"objectIds,omitempty"`
-	Provenance      *ContextProvenance `json:"provenance,omitempty"`
+	Kind            string                 `json:"kind"`
+	ID              string                 `json:"id"`
+	Title           string                 `json:"title,omitempty"`
+	Content         string                 `json:"content"`
+	Path            string                 `json:"path,omitempty"`
+	Score           float64                `json:"score"`
+	EstimatedTokens int                    `json:"estimatedTokens"`
+	ObjectIDs       []string               `json:"objectIds,omitempty"`
+	Provenance      *ContextProvenance     `json:"provenance,omitempty"`
 	Metadata        map[string]interface{} `json:"metadata,omitempty"`
 }
 
