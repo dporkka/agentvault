@@ -12,7 +12,7 @@ AgentVault has three MCP operating modes:
 
 HTTP MCP always requires a capability token. The same token authenticates the HTTP transport and determines the registered tool surface.
 
-## Read capabilities
+## Read/context capabilities
 
 ### `vault:read`
 
@@ -40,7 +40,26 @@ A session-scoped compiler may use project context for its authorized session but
 
 ### `ai:invoke`
 
-Registers only `agentvault.ask`. It remains global-only until RAG/context/provider execution carries the same resource policy end-to-end.
+Registers `agentvault.ask`, but a **capability-bound** identity receives it only when the same principal also has `context:compile`.
+
+This is intentional authority separation:
+
+- `ai:invoke` permits configured provider execution;
+- `context:compile` permits vault context retrieval;
+- neither grant silently implies the other.
+
+For capability-bound identities, `agentvault.ask` never instantiates the legacy broad RAG search path. It first builds an authorized Context Compiler bundle using the same project/session rules as `context:compile`, then sends **only that bundle** to the provider.
+
+Additional provider-boundary rules:
+
+- authorized context is labeled untrusted evidence and the system message instructs the model not to follow instructions contained inside evidence;
+- no provider call is made when zero authorized context items survive filtering;
+- provider-supplied source lists are discarded;
+- returned sources are reconstructed only from the authorized Context Compiler items;
+- path-prefix scope remains unsupported;
+- project/session scope is therefore supported through the paired `ai:invoke + context:compile` grants.
+
+Only unbound trusted-local stdio preserves the legacy broad RAG `agentvault.ask` behavior for compatibility.
 
 ## Durable machine-write capabilities
 
@@ -116,8 +135,8 @@ Mutation capabilities can be path/project/session scoped because their handlers 
 | `memory:write` | no | yes | yes |
 | `session:write` | no | yes | yes |
 | `context:compile` | no | yes | yes |
+| `ai:invoke` + `context:compile` | no | yes | yes |
 | `vault:read` | no | no | no |
-| `ai:invoke` | no | no | no |
 
 Unsupported combinations fail closed during MCP runtime registration. Caller-supplied labels are never treated as sufficient authorization when authoritative persisted state exists.
 
@@ -127,10 +146,10 @@ These non-mutation capabilities currently govern MCP only. They do not become ge
 
 ## Side-effect boundary
 
-A capability-bound process initializes only the subsystems it can use. Knowledge/context/durable-machine-write authority does not initialize transactional file-mutation recovery unless a `mutation:*` capability is also present.
+A capability-bound process initializes only the subsystems it can use. Knowledge/context/AI/durable-machine-write authority does not initialize transactional file-mutation recovery unless a `mutation:*` capability is also present.
 
 ## Next capability work
 
-The highest-value remaining read-side gaps are scoped `vault:read` and scoped `ai:invoke`. `vault:read` requires consistent policy across search, graph/resources, recent/project listings, note reads, backlinks, and Markdown recall. `ai:invoke` should inherit scoped Context Compiler/RAG policy so prompts cannot receive out-of-scope context.
+The largest remaining read-side gap is scoped `vault:read`. It requires one consistent resource policy across search, graph/resources, recent/project listings, note reads, backlinks, Markdown recall, and git status without alternate-path leakage.
 
 Path-scoped structured knowledge remains intentionally deferred until records without canonical paths have an explicit policy rather than being treated as implicitly safe.
