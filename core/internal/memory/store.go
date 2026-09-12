@@ -23,7 +23,7 @@ func NewStore(database *db.DB) *Store {
 	return &Store{db: database}
 }
 
-// Project replaces the indexed semantic metadata for an existing note and its
+// Project replaces the indexed memory metadata for an existing note and its
 // outgoing supersession relations atomically.
 func (s *Store) Project(ctx context.Context, metadata Metadata) error {
 	normalized, err := metadata.Normalize()
@@ -54,11 +54,11 @@ func (s *Store) Project(ctx context.Context, metadata Metadata) error {
 
 	result, err := tx.ExecContext(ctx, `
 		UPDATE notes
-		SET workspace_id = ?, agent_id = ?, session_id = ?, memory_kind = ?,
+		SET workspace_id = ?, agent_id = ?, session_id = ?, memory_class = ?, memory_kind = ?,
 			confidence = ?, provenance_json = ?, observed_at = ?, valid_from = ?, valid_to = ?
 		WHERE id = ?
 	`, metadata.Scope.WorkspaceID, metadata.Scope.AgentID, metadata.Scope.SessionID,
-		string(metadata.Kind), nullableFloat(metadata.Confidence), provenanceJSON,
+		string(metadata.Class), string(metadata.Kind), nullableFloat(metadata.Confidence), provenanceJSON,
 		nullableString(metadata.ObservedAt), nullableString(metadata.ValidFrom),
 		nullableString(metadata.ValidTo), metadata.NoteID)
 	if err != nil {
@@ -96,14 +96,14 @@ func (s *Store) Project(ctx context.Context, metadata Metadata) error {
 	return nil
 }
 
-// Get returns semantic metadata and note identity for one note. Superseded is
-// true when any supersession relation points at the note; scoped retrieval uses
+// Get returns memory metadata and note identity for one note. Superseded is true
+// when any supersession relation points at the note; scoped retrieval uses
 // contextual supersession rules in Query rather than this absolute flag.
 func (s *Store) Get(ctx context.Context, noteID string) (*Record, error) {
 	row := s.db.QueryRow(`
 		SELECT notes.id, notes.title, files.path, notes.type, notes.project, notes.status,
 			notes.updated_at, notes.workspace_id, notes.agent_id, notes.session_id,
-			notes.memory_kind, notes.confidence, notes.provenance_json, notes.observed_at,
+			notes.memory_class, notes.memory_kind, notes.confidence, notes.provenance_json, notes.observed_at,
 			notes.valid_from, notes.valid_to,
 			EXISTS(SELECT 1 FROM memory_supersessions ms WHERE ms.superseded_note_id = notes.id)
 		FROM notes
@@ -141,6 +141,11 @@ func (s *Store) Query(ctx context.Context, query Query) ([]Record, error) {
 		limit = 200
 	}
 
+	for _, class := range query.Classes {
+		if !class.Valid() {
+			return nil, fmt.Errorf("unsupported memory class %q", class)
+		}
+	}
 	for _, kind := range query.Kinds {
 		if !kind.Valid() {
 			return nil, fmt.Errorf("unsupported memory kind %q", kind)
@@ -160,7 +165,7 @@ func (s *Store) Query(ctx context.Context, query Query) ([]Record, error) {
 	sqlText.WriteString(`
 		SELECT notes.id, notes.title, files.path, notes.type, notes.project, notes.status,
 			notes.updated_at, notes.workspace_id, notes.agent_id, notes.session_id,
-			notes.memory_kind, notes.confidence, notes.provenance_json, notes.observed_at,
+			notes.memory_class, notes.memory_kind, notes.confidence, notes.provenance_json, notes.observed_at,
 			notes.valid_from, notes.valid_to,
 			EXISTS(
 				SELECT 1
@@ -183,13 +188,11 @@ func (s *Store) Query(ctx context.Context, query Query) ([]Record, error) {
 		  AND (notes.valid_to IS NULL OR notes.valid_to = '' OR notes.valid_to > ?)
 	`)
 	args := []interface{}{
-		// SELECT superseded expression.
 		query.Context.WorkspaceID,
 		query.Context.AgentID,
 		query.Context.SessionID,
 		atText,
 		atText,
-		// Candidate visibility/validity.
 		query.Context.WorkspaceID,
 		query.Context.AgentID,
 		query.Context.SessionID,
@@ -197,6 +200,14 @@ func (s *Store) Query(ctx context.Context, query Query) ([]Record, error) {
 		atText,
 	}
 
+	if len(query.Classes) > 0 {
+		placeholders := make([]string, len(query.Classes))
+		for i, class := range query.Classes {
+			placeholders[i] = "?"
+			args = append(args, string(class))
+		}
+		sqlText.WriteString(" AND notes.memory_class IN (" + strings.Join(placeholders, ",") + ")")
+	}
 	if len(query.Kinds) > 0 {
 		placeholders := make([]string, len(query.Kinds))
 		for i, kind := range query.Kinds {
@@ -274,6 +285,7 @@ type rowScanner func(dest ...interface{}) error
 
 func scanRecord(scan rowScanner) (*Record, error) {
 	var record Record
+	var class string
 	var kind string
 	var confidence sql.NullFloat64
 	var provenanceJSON sql.NullString
@@ -295,6 +307,7 @@ func scanRecord(scan rowScanner) (*Record, error) {
 		&record.Scope.WorkspaceID,
 		&record.Scope.AgentID,
 		&record.Scope.SessionID,
+		&class,
 		&kind,
 		&confidence,
 		&provenanceJSON,
@@ -306,6 +319,7 @@ func scanRecord(scan rowScanner) (*Record, error) {
 		return nil, err
 	}
 
+	record.Class = Class(class)
 	record.Kind = Kind(kind)
 	if project.Valid {
 		record.Project = project.String
