@@ -47,15 +47,15 @@ Supports stdio (default) and authenticated HTTP transports.
 User-authored file writes are proposal-only by default. A persistent capability
 token can bind the MCP process to an agent identity. Bound identities receive
 only explicitly granted families such as vault:read, knowledge:read,
-context:compile, ai:invoke, and mutation:* lifecycle capabilities. Legacy direct-
-write MCP commands remain an explicit compatibility opt-in and cannot be
-combined with a capability identity.
+knowledge:write, memory:write, session:write, context:compile, ai:invoke, and
+mutation:* lifecycle capabilities. Legacy direct-write MCP commands remain an
+explicit compatibility opt-in and cannot be combined with a capability identity.
 
 Scope support is capability-specific: mutation capabilities support path/project/
-session restrictions; knowledge:read and context:compile support project/session
-restrictions; path-scoped knowledge/context access remains unsupported; and
-vault:read plus ai:invoke remain global-only until their full retrieval paths can
-enforce narrower scope.
+session restrictions; structured knowledge read/write, memory writes, session
+writes, and context compilation support project/session restrictions; path-scoped
+structured access remains unsupported; and vault:read plus ai:invoke remain
+global-only until their full retrieval paths can enforce narrower scope.
 
 Example:
   agentvault mcp serve
@@ -74,6 +74,9 @@ Unbound stdio exposes the existing safe local surface plus proposal/read
 mutations. Supplying a capability token binds the process to that identity and
 registers only explicitly granted tool families. HTTP transport requires a
 capability token and uses that same token as the transport credential.
+
+Durable machine-authored knowledge/session writes use their own capability
+families and do not grant direct writes to user-authored vault files.
 
 --allow-direct-writes is mutually exclusive with a capability token so a scoped
 identity can never regain legacy unreviewed file-writing tools by accident.
