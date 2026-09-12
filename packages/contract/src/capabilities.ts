@@ -6,6 +6,14 @@ export type MutationCapability =
   | 'mutation:undo'
   | 'mutation:reject';
 
+export type ReadCapability =
+  | 'vault:read'
+  | 'knowledge:read'
+  | 'context:compile'
+  | 'ai:invoke';
+
+export type Capability = MutationCapability | ReadCapability;
+
 export interface CapabilityScope {
   pathPrefixes?: string[];
   projects?: string[];
@@ -15,7 +23,7 @@ export interface CapabilityScope {
 export interface CapabilityPrincipal {
   id: string;
   agentId: string;
-  capabilities: MutationCapability[];
+  capabilities: Capability[];
   scope?: CapabilityScope;
   createdAt: string;
   expiresAt?: string;
@@ -25,7 +33,7 @@ export interface CapabilityPrincipal {
 export interface MintCapabilityRequest {
   id?: string;
   agentId: string;
-  capabilities: MutationCapability[];
+  capabilities: Capability[];
   scope?: CapabilityScope;
   expiresAt?: string;
 }
