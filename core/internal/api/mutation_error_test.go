@@ -14,6 +14,7 @@ func TestMutationMissingIDReturnsNotFound(t *testing.T) {
 	server.RegisterRoutes()
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/mutations/mut_missing", nil)
+	request.Header.Set("X-AgentVault-Token", server.AuthToken())
 	server.mux.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusNotFound {
@@ -58,6 +59,7 @@ func TestMutationRecoveryFailureDoesNotDisableKnowledgeAPI(t *testing.T) {
 
 	mutationRecorder := httptest.NewRecorder()
 	mutationRequest := httptest.NewRequest(http.MethodGet, "/mutations", nil)
+	mutationRequest.Header.Set("X-AgentVault-Token", server.AuthToken())
 	server.mux.ServeHTTP(mutationRecorder, mutationRequest)
 	if mutationRecorder.Code != http.StatusInternalServerError {
 		t.Fatalf("mutation endpoint status=%d want=%d body=%s", mutationRecorder.Code, http.StatusInternalServerError, mutationRecorder.Body.String())
