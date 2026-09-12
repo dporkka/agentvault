@@ -9,9 +9,31 @@ import (
 	"time"
 )
 
-// Kind classifies the semantic role of a memory independently of the note's
-// document type. A decision note, for example, may also be projected as a
-// decision memory.
+// Class describes the lifecycle/cognitive role of a memory. It is independent
+// of Kind: a semantic memory may be a fact or decision, while an episodic
+// memory may be an observation or episode.
+type Class string
+
+const (
+	ClassWorking    Class = "working"
+	ClassEpisodic   Class = "episodic"
+	ClassSemantic   Class = "semantic"
+	ClassProcedural Class = "procedural"
+)
+
+// Valid reports whether c is one of the supported memory classes.
+func (c Class) Valid() bool {
+	switch c {
+	case ClassWorking, ClassEpisodic, ClassSemantic, ClassProcedural:
+		return true
+	default:
+		return false
+	}
+}
+
+// Kind classifies the semantic meaning of a memory independently of its
+// lifecycle class and the note's document type. A semantic memory, for
+// example, may be a fact, preference, decision, procedure, or constraint.
 type Kind string
 
 const (
@@ -80,10 +102,13 @@ type Provenance struct {
 	CapturedAt string `json:"capturedAt,omitempty"`
 }
 
-// Metadata is the semantic projection attached to a note.
+// Metadata is the memory projection attached to a note. Class and Kind are
+// orthogonal. For backward-compatible Markdown, a non-empty Kind with an empty
+// Class normalizes to ClassSemantic.
 type Metadata struct {
 	NoteID             string     `json:"noteId"`
 	Scope              Scope      `json:"scope"`
+	Class              Class      `json:"class,omitempty"`
 	Kind               Kind       `json:"kind,omitempty"`
 	Confidence         *float64   `json:"confidence,omitempty"`
 	Provenance         Provenance `json:"provenance,omitempty"`
@@ -94,7 +119,7 @@ type Metadata struct {
 	SupersessionReason string     `json:"supersessionReason,omitempty"`
 }
 
-// Record combines semantic metadata with the minimal note fields useful to a
+// Record combines memory metadata with the minimal note fields useful to a
 // retriever. Superseded is derived from the relation table rather than stored
 // as mutable state on the note.
 type Record struct {
@@ -108,9 +133,10 @@ type Record struct {
 	Superseded bool   `json:"superseded"`
 }
 
-// Query controls semantic memory retrieval.
+// Query controls memory retrieval.
 type Query struct {
 	Context           Scope
+	Classes           []Class
 	Kinds             []Kind
 	MinConfidence     *float64
 	At                *time.Time
@@ -123,8 +149,14 @@ func (m Metadata) Validate() error {
 	if strings.TrimSpace(m.NoteID) == "" {
 		return fmt.Errorf("note id is required")
 	}
+	if m.Class != "" && !m.Class.Valid() {
+		return fmt.Errorf("unsupported memory class %q", m.Class)
+	}
 	if m.Kind != "" && !m.Kind.Valid() {
 		return fmt.Errorf("unsupported memory kind %q", m.Kind)
+	}
+	if m.Class != "" && m.Kind == "" {
+		return fmt.Errorf("memory kind is required when memory class is set")
 	}
 	if m.Confidence != nil && (*m.Confidence < 0 || *m.Confidence > 1) {
 		return fmt.Errorf("confidence must be between 0 and 1")
@@ -166,9 +198,13 @@ func (m Metadata) Validate() error {
 }
 
 // Normalize validates metadata and returns the canonical SQLite projection.
-// RFC3339 timestamps are converted to UTC so lexical TEXT ordering in SQLite
-// matches chronological ordering even when Markdown used another UTC offset.
+// Existing Markdown that declares memory_kind but predates memory_class is
+// treated as semantic memory. RFC3339 timestamps are converted to UTC so
+// lexical TEXT ordering in SQLite matches chronological ordering.
 func (m Metadata) Normalize() (Metadata, error) {
+	if m.Kind != "" && m.Class == "" {
+		m.Class = ClassSemantic
+	}
 	if err := m.Validate(); err != nil {
 		return Metadata{}, err
 	}
