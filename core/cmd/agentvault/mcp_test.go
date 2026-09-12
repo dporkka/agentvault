@@ -16,6 +16,9 @@ func TestMcpFlagsRegistered(t *testing.T) {
 	if mcpServeCmd.Flags().Lookup("port") == nil {
 		t.Error("expected 'port' flag to be registered on mcp serve")
 	}
+	if mcpServeCmd.Flags().Lookup("allow-direct-writes") == nil {
+		t.Error("expected 'allow-direct-writes' flag to be registered on mcp serve")
+	}
 }
 
 func TestRunMcpServeHTTPStartsAndStops(t *testing.T) {
@@ -25,6 +28,12 @@ func TestRunMcpServeHTTPStartsAndStops(t *testing.T) {
 
 	mcpHTTP = true
 	mcpPort = 47322
+	mcpAllowDirectWrites = false
+	defer func() {
+		mcpHTTP = false
+		mcpPort = 7777
+		mcpAllowDirectWrites = false
+	}()
 
 	stopCh := make(chan struct{})
 	original := mcpStopSignal

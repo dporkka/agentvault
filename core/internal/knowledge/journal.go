@@ -20,6 +20,8 @@ const (
 	maxJournalLine = 16 << 20 // 16 MiB per event
 )
 
+var journalLocks sync.Map // canonical path -> *sync.Mutex
+
 // JournalEvent is the durable envelope for structured machine state. The
 // journal is canonical; SQLite tables are projections that can be rebuilt by
 // replaying these events.
@@ -34,12 +36,19 @@ type JournalEvent struct {
 // Journal persists append-only knowledge events in the user-owned vault.
 type Journal struct {
 	path string
-	mu   sync.Mutex
+	mu   *sync.Mutex
 }
 
-// NewJournal creates a journal rooted in vaultPath.
+// NewJournal creates a journal rooted in vaultPath. All Journal instances in
+// this process that resolve to the same canonical path share one mutex so MCP,
+// HTTP, context, and mutation stores cannot interleave append/replay operations.
 func NewJournal(vaultPath string) *Journal {
-	return &Journal{path: filepath.Join(vaultPath, filepath.FromSlash(journalRelPath))}
+	path := filepath.Clean(filepath.Join(vaultPath, filepath.FromSlash(journalRelPath)))
+	if absolute, err := filepath.Abs(path); err == nil {
+		path = absolute
+	}
+	lock, _ := journalLocks.LoadOrStore(path, &sync.Mutex{})
+	return &Journal{path: path, mu: lock.(*sync.Mutex)}
 }
 
 // Path returns the canonical journal path.
@@ -105,11 +114,16 @@ func (j *Journal) Append(eventType string, payload interface{}) (JournalEvent, e
 // Replay reads canonical events in order and applies each through handler.
 // A missing journal is equivalent to an empty journal. Canonical payloads are
 // revalidated during replay so malformed or manually corrupted temporal state
-// cannot silently enter the SQLite projection.
+// cannot silently enter the SQLite projection. Replay shares the same
+// process-local lock as Append so it cannot observe a partially appended event.
 func (j *Journal) Replay(handler func(JournalEvent) error) error {
 	if j == nil {
 		return nil
 	}
+
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
 	file, err := os.Open(j.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil

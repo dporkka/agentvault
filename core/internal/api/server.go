@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/knowledge"
+	"github.com/agentvault/core/internal/mutations"
 	"github.com/agentvault/core/internal/search"
 	"github.com/agentvault/core/internal/watcher"
 )
@@ -64,7 +66,9 @@ type Server struct {
 	searcher         *search.Searcher
 	indexer          *indexer.Indexer
 	knowledge        *knowledge.Store
+	mutations        *mutations.Engine
 	knowledgeInitErr error
+	mutationInitErr  error
 	mux              *http.ServeMux
 	server           *http.Server
 	addr             string
@@ -78,20 +82,33 @@ type Server struct {
 // NewServer creates a new API server. Structured machine-authored state is
 // recovered from the canonical vault journal before journal-backed knowledge
 // endpoints become available; Markdown-backed memory remains independently
-// rebuildable through indexing.
+// rebuildable through indexing. Interrupted filesystem mutations are then
+// reconciled against their durable before/after hashes. Mutation recovery
+// failures fail the mutation control plane closed without taking unrelated
+// knowledge/context endpoints offline.
 func NewServer(vaultPath string, database *db.DB) *Server {
 	mux := http.NewServeMux()
 	searcher := search.New(database)
 	searcher.ConfigureEmbeddings(vaultPath)
+	idx := indexer.New(database, vaultPath)
 	knowledgeStore := knowledge.New(database, vaultPath)
 	knowledgeInitErr := knowledgeStore.ReplayJournal()
+	mutationEngine := mutations.New(vaultPath, knowledgeStore, idx)
+	mutationInitErr := knowledgeInitErr
+	if mutationInitErr == nil {
+		if recoveryErrors := mutationEngine.Recover(); len(recoveryErrors) > 0 {
+			mutationInitErr = fmt.Errorf("mutation recovery failed: %w", errors.Join(recoveryErrors...))
+		}
+	}
 	return &Server{
 		vaultPath:        vaultPath,
 		db:               database,
 		searcher:         searcher,
-		indexer:          indexer.New(database, vaultPath),
+		indexer:          idx,
 		knowledge:        knowledgeStore,
+		mutations:        mutationEngine,
 		knowledgeInitErr: knowledgeInitErr,
+		mutationInitErr:  mutationInitErr,
 		mux:              mux,
 		authToken:        generateAuthToken(),
 		rateLimiter:      newRateLimiter(30, time.Second),
@@ -157,6 +174,19 @@ func (s *Server) withKnowledgeReady(next http.HandlerFunc) http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 				"error":  "knowledge projection is unavailable",
 				"detail": s.knowledgeInitErr.Error(),
+			})
+			return
+		}
+		next(w, r)
+	}
+}
+
+func (s *Server) withMutationReady(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.mutationInitErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"error":  "mutation subsystem is unavailable",
+				"detail": s.mutationInitErr.Error(),
 			})
 			return
 		}
@@ -238,6 +268,16 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /sessions/{id}", s.withKnowledgeReady(s.handleGetAgentSession))
 	s.mux.HandleFunc("POST /sessions/{id}/events", s.withKnowledgeReady(s.handleAppendSessionEvent))
 	s.mux.HandleFunc("POST /sessions/{id}/close", s.withKnowledgeReady(s.handleCloseAgentSession))
+
+	// Transactional agent mutations. Proposal, approval, commit, and undo remain
+	// separate operations so an agent cannot silently collapse the review gate.
+	s.mux.HandleFunc("GET /mutations", s.withMutationReady(s.handleListMutations))
+	s.mux.HandleFunc("POST /mutations", s.withMutationReady(s.handleProposeMutation))
+	s.mux.HandleFunc("GET /mutations/{id}", s.withMutationReady(s.handleGetMutation))
+	s.mux.HandleFunc("POST /mutations/{id}/approve", s.withMutationReady(s.handleApproveMutation))
+	s.mux.HandleFunc("POST /mutations/{id}/commit", s.withMutationReady(s.handleCommitMutation))
+	s.mux.HandleFunc("POST /mutations/{id}/undo", s.withMutationReady(s.handleUndoMutation))
+	s.mux.HandleFunc("POST /mutations/{id}/reject", s.withMutationReady(s.handleRejectMutation))
 
 	// Git status
 	s.mux.HandleFunc("GET /git/status", s.handleGitStatus)
