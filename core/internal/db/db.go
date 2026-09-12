@@ -250,6 +250,8 @@ CREATE TABLE IF NOT EXISTS notes (
   workspace_id TEXT NOT NULL DEFAULT '',
   agent_id TEXT NOT NULL DEFAULT '',
   session_id TEXT NOT NULL DEFAULT '',
+  memory_class TEXT NOT NULL DEFAULT ''
+    CHECK(memory_class IN ('', 'working', 'episodic', 'semantic', 'procedural')),
   memory_kind TEXT NOT NULL DEFAULT '',
   confidence REAL CHECK(confidence IS NULL OR (confidence >= 0.0 AND confidence <= 1.0)),
   provenance_json TEXT,
@@ -355,6 +357,40 @@ CREATE TABLE IF NOT EXISTS memory_supersessions (
   PRIMARY KEY (superseding_note_id, superseded_note_id)
 );
 
+CREATE TRIGGER IF NOT EXISTS project_memory_class_after_insert
+AFTER INSERT ON notes
+BEGIN
+  UPDATE notes
+  SET memory_class = CASE
+    WHEN NEW.memory_kind = '' THEN ''
+    ELSE CASE COALESCE(json_extract(NEW.frontmatter_json, '$.memory_class'), '')
+      WHEN 'working' THEN 'working'
+      WHEN 'episodic' THEN 'episodic'
+      WHEN 'semantic' THEN 'semantic'
+      WHEN 'procedural' THEN 'procedural'
+      ELSE 'semantic'
+    END
+  END
+  WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS project_memory_class_after_update
+AFTER UPDATE OF frontmatter_json, memory_kind ON notes
+BEGIN
+  UPDATE notes
+  SET memory_class = CASE
+    WHEN NEW.memory_kind = '' THEN ''
+    ELSE CASE COALESCE(json_extract(NEW.frontmatter_json, '$.memory_class'), '')
+      WHEN 'working' THEN 'working'
+      WHEN 'episodic' THEN 'episodic'
+      WHEN 'semantic' THEN 'semantic'
+      WHEN 'procedural' THEN 'procedural'
+      ELSE 'semantic'
+    END
+  END
+  WHERE id = NEW.id;
+END;
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL
@@ -372,6 +408,8 @@ CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation
   ON conversation_messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_notes_memory_scope
   ON notes(workspace_id, agent_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_notes_memory_class
+  ON notes(memory_class);
 CREATE INDEX IF NOT EXISTS idx_notes_memory_kind
   ON notes(memory_kind);
 CREATE INDEX IF NOT EXISTS idx_notes_memory_confidence
