@@ -10,6 +10,7 @@ title: Preferred deployment target
 workspace_id: adacavo
 agent_id: planner
 session_id: session-42
+memory_class: semantic
 memory_kind: preference
 memory_confidence: 0.91
 confidence: high
@@ -35,6 +36,9 @@ Use the lower-maintenance deployment target.
 	fm := doc.Frontmatter
 	if fm.WorkspaceID != "adacavo" || fm.AgentID != "planner" || fm.SessionID != "session-42" {
 		t.Fatalf("scope fields = %q/%q/%q", fm.WorkspaceID, fm.AgentID, fm.SessionID)
+	}
+	if fm.MemoryClass != "semantic" {
+		t.Fatalf("memory class = %q", fm.MemoryClass)
 	}
 	if fm.MemoryKind != "preference" {
 		t.Fatalf("memory kind = %q", fm.MemoryKind)
@@ -66,6 +70,9 @@ Use the lower-maintenance deployment target.
 	if got := fm.Extra["workspace_id"]; got != "adacavo" {
 		t.Fatalf("workspace_id not mirrored for round-trip preservation: %#v", got)
 	}
+	if got := fm.Extra["memory_class"]; got != "semantic" {
+		t.Fatalf("memory_class not mirrored for round-trip preservation: %#v", got)
+	}
 	if got := fm.Extra["memory_kind"]; got != "preference" {
 		t.Fatalf("memory_kind not mirrored for round-trip preservation: %#v", got)
 	}
@@ -81,5 +88,30 @@ Use the lower-maintenance deployment target.
 	}
 	if supersedes, ok := fm.Extra["supersedes"].([]string); !ok || len(supersedes) != 1 || supersedes[0] != "fact-0" {
 		t.Fatalf("supersedes not mirrored for round-trip preservation: %#v", fm.Extra["supersedes"])
+	}
+}
+
+func TestParseMemoryFrontmatterRejectsUnsupportedClass(t *testing.T) {
+	_, err := ParseBytes([]byte(`---
+id: bad-memory
+memory_class: archival
+memory_kind: fact
+---
+Body
+`))
+	if err == nil {
+		t.Fatal("expected unsupported memory_class to fail")
+	}
+}
+
+func TestParseMemoryFrontmatterRejectsClassWithoutKind(t *testing.T) {
+	_, err := ParseBytes([]byte(`---
+id: bad-memory
+memory_class: episodic
+---
+Body
+`))
+	if err == nil {
+		t.Fatal("expected memory_class without memory_kind to fail")
 	}
 }
