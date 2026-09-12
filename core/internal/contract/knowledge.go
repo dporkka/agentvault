@@ -107,11 +107,13 @@ type CreateObjectRelationRequest struct {
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// MemoryRecord stores one durable memory with explicit class, scope,
-// provenance, confidence, and temporal validity.
+// MemoryRecord stores one durable machine-authored memory. Class describes its
+// lifecycle/cognitive role; Kind describes its semantic meaning. They use the
+// same vocabulary as file-backed Markdown memories.
 type MemoryRecord struct {
 	ID           string                 `json:"id"`
-	MemoryType   string                 `json:"memoryType"`
+	MemoryClass  string                 `json:"memoryClass"`
+	MemoryKind   string                 `json:"memoryKind,omitempty"`
 	ScopeType    string                 `json:"scopeType"`
 	ScopeID      string                 `json:"scopeId"`
 	Content      string                 `json:"content"`
@@ -126,11 +128,13 @@ type MemoryRecord struct {
 	UpdatedAt    string                 `json:"updatedAt"`
 }
 
-// CreateMemoryRequest records a memory. memoryType must be working, episodic,
-// semantic, or procedural.
+// CreateMemoryRequest records a memory. memoryClass must be working, episodic,
+// semantic, or procedural. memoryKind is optional but, when supplied, must use
+// the shared semantic-kind vocabulary.
 type CreateMemoryRequest struct {
 	ID           string                 `json:"id,omitempty"`
-	MemoryType   string                 `json:"memoryType"`
+	MemoryClass  string                 `json:"memoryClass"`
+	MemoryKind   string                 `json:"memoryKind,omitempty"`
 	ScopeType    string                 `json:"scopeType"`
 	ScopeID      string                 `json:"scopeId"`
 	Content      string                 `json:"content"`
