@@ -55,12 +55,12 @@ func TestRunMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 3 {
-		t.Errorf("Expected migration version 3, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected migration version 4, got %d", version)
 	}
 
 	// Verify tables exist
-	tables := []string{"files", "notes", "tags", "entities", "links", "conversations", "memory_supersessions", "schema_migrations"}
+	tables := []string{"files", "notes", "tags", "entities", "links", "conversations", "memory_supersessions", "provenance_records", "objects", "object_relations", "memory_records", "agent_sessions", "session_events", "schema_migrations"}
 	for _, table := range tables {
 		var name string
 		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
@@ -153,8 +153,8 @@ func TestRunMigrationsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 3 {
-		t.Errorf("Expected migration version 3, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected migration version 4, got %d", version)
 	}
 }
 
@@ -167,7 +167,7 @@ func TestEmbeddedMigrationsPresent(t *testing.T) {
 	for _, e := range entries {
 		found[e.Name()] = true
 	}
-	for _, name := range []string{"001_init.sql", "002_conversations.sql", "003_memory_semantics.sql"} {
+	for _, name := range []string{"001_init.sql", "002_conversations.sql", "003_memory_semantics.sql", "004_universal_knowledge.sql"} {
 		if !found[name] {
 			t.Errorf("Expected %s to be embedded", name)
 		}
@@ -207,7 +207,7 @@ func TestRunInlineMigrations(t *testing.T) {
 	}
 
 	// Verify the inline schema created expected tables.
-	tables := []string{"files", "notes", "tags", "entities", "links", "chunks", "conversations", "conversation_messages", "memory_supersessions", "schema_migrations"}
+	tables := []string{"files", "notes", "tags", "entities", "links", "chunks", "conversations", "conversation_messages", "memory_supersessions", "provenance_records", "objects", "object_relations", "memory_records", "agent_sessions", "session_events", "schema_migrations"}
 	for _, table := range tables {
 		var name string
 		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
@@ -229,8 +229,8 @@ func TestRunInlineMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 3 {
-		t.Errorf("Expected migration version 3, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected migration version 4, got %d", version)
 	}
 }
 
@@ -259,8 +259,8 @@ func TestRunMigrationsInlineFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 3 {
-		t.Errorf("Expected inline migration version 3, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected inline migration version 4, got %d", version)
 	}
 }
 
