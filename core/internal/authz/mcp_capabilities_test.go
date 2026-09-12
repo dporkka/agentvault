@@ -2,16 +2,19 @@ package authz
 
 import "testing"
 
-func TestRegistryMintsReadSideMCPCapabilities(t *testing.T) {
+func TestRegistryMintsMCPCapabilityFamilies(t *testing.T) {
 	registry, err := NewRegistry(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	issued, err := registry.Mint(MintRequest{
-		AgentID: "reader",
+		AgentID: "agent",
 		Capabilities: []Capability{
 			VaultRead,
 			KnowledgeRead,
+			KnowledgeWrite,
+			MemoryWrite,
+			SessionWrite,
 			ContextCompile,
 			AIInvoke,
 		},
@@ -23,16 +26,24 @@ func TestRegistryMintsReadSideMCPCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, capability := range []Capability{VaultRead, KnowledgeRead, ContextCompile, AIInvoke} {
+	for _, capability := range []Capability{
+		VaultRead,
+		KnowledgeRead,
+		KnowledgeWrite,
+		MemoryWrite,
+		SessionWrite,
+		ContextCompile,
+		AIInvoke,
+	} {
 		if !HasCapability(principal, capability) {
 			t.Errorf("minted principal missing %s", capability)
 		}
 	}
 	if HasResourceScope(principal) {
-		t.Fatal("unscoped read principal unexpectedly reports resource scope")
+		t.Fatal("unscoped principal unexpectedly reports resource scope")
 	}
-	if !HasAnyCapability(principal, MutationCommit, ContextCompile) {
-		t.Fatal("HasAnyCapability should detect granted context capability")
+	if !HasAnyCapability(principal, MutationCommit, MemoryWrite) {
+		t.Fatal("HasAnyCapability should detect granted durable-write capability")
 	}
 }
 

@@ -1,11 +1,14 @@
 package authz
 
-// Non-mutation MCP capability families deliberately start read-side only.
-// Machine-authored knowledge/session writes need resource-aware scope checks
-// before they are safe to grant to persistent agent identities.
+// MCP capability families are explicit rather than implied by one generic
+// AgentVault credential. Read, machine-knowledge writes, session lifecycle,
+// model invocation, and transactional file mutation remain independently grantable.
 const (
 	VaultRead      Capability = "vault:read"
 	KnowledgeRead  Capability = "knowledge:read"
+	KnowledgeWrite Capability = "knowledge:write"
+	MemoryWrite    Capability = "memory:write"
+	SessionWrite   Capability = "session:write"
 	ContextCompile Capability = "context:compile"
 	AIInvoke       Capability = "ai:invoke"
 )
@@ -13,15 +16,17 @@ const (
 func init() {
 	validCapabilities[VaultRead] = struct{}{}
 	validCapabilities[KnowledgeRead] = struct{}{}
+	validCapabilities[KnowledgeWrite] = struct{}{}
+	validCapabilities[MemoryWrite] = struct{}{}
+	validCapabilities[SessionWrite] = struct{}{}
 	validCapabilities[ContextCompile] = struct{}{}
 	validCapabilities[AIInvoke] = struct{}{}
 }
 
 // HasResourceScope reports whether a principal carries path/project/session
-// restrictions. The first non-mutation MCP capability slice is intentionally
-// global-only: if any of these restrictions are present, runtime registration
-// fails closed rather than silently pretending those broad read tools can honor
-// a scope they do not yet filter precisely.
+// restrictions. Individual capability families decide which scope dimensions
+// they can enforce; unsupported combinations fail closed at runtime registration
+// or at the concrete resource operation.
 func HasResourceScope(principal Principal) bool {
 	return len(principal.Scope.PathPrefixes) > 0 || len(principal.Scope.Projects) > 0 || len(principal.Scope.Sessions) > 0
 }

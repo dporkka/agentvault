@@ -12,7 +12,12 @@ export type ReadCapability =
   | 'context:compile'
   | 'ai:invoke';
 
-export type Capability = MutationCapability | ReadCapability;
+export type DurableWriteCapability =
+  | 'knowledge:write'
+  | 'memory:write'
+  | 'session:write';
+
+export type Capability = MutationCapability | ReadCapability | DurableWriteCapability;
 
 export interface CapabilityScope {
   pathPrefixes?: string[];
