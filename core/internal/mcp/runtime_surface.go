@@ -53,9 +53,20 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 			s.RegisterAIInvokeTool()
 		}
 
-		// RegisterMutationTools performs its own capability and resource checks;
-		// on a read-only principal it registers no mutation tools.
-		s.RegisterMutationTools()
+		if authz.HasAnyCapability(
+			principal,
+			authz.MutationRead,
+			authz.MutationPropose,
+			authz.MutationApprove,
+			authz.MutationCommit,
+			authz.MutationUndo,
+			authz.MutationReject,
+		) {
+			// Mutation registration performs crash recovery, so do it only for a
+			// principal that actually carries mutation authority. A pure read-side
+			// identity must not reconcile mutation lifecycle state as a startup side effect.
+			s.RegisterMutationTools()
+		}
 		return nil
 	}
 
