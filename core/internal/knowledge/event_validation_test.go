@@ -69,12 +69,13 @@ func TestInvalidMemoryValidityNeverEntersJournal(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = store.RecordMemory(contract.CreateMemoryRequest{
-		ID:         "mem_invalid_temporal",
-		MemoryType: "semantic",
-		ScopeType:  "project",
-		ScopeID:    "agentvault",
-		Content:    "This should never persist.",
-		ValidFrom:  "not-a-date",
+		ID:          "mem_invalid_temporal",
+		MemoryClass: "semantic",
+		MemoryKind:  "fact",
+		ScopeType:   "project",
+		ScopeID:     "agentvault",
+		Content:     "This should never persist.",
+		ValidFrom:   "not-a-date",
 	})
 	if err == nil {
 		t.Fatal("expected malformed memory validity to fail")
