@@ -45,10 +45,15 @@ Exposes AgentVault tools to AI agents via the Model Context Protocol.
 Supports stdio (default) and authenticated HTTP transports.
 
 User-authored file writes are proposal-only by default. A persistent capability
-token can bind the MCP process to a scoped agent identity. Bound identities see
-only mutation tools covered by their granted mutation capabilities until broader
-MCP capability families are introduced. Legacy direct-write MCP commands remain
-an explicit compatibility opt-in and cannot be combined with a scoped identity.
+token can bind the MCP process to an agent identity. Bound identities receive
+only explicitly granted families such as vault:read, knowledge:read,
+context:compile, ai:invoke, and mutation:* lifecycle capabilities. Legacy direct-
+write MCP commands remain an explicit compatibility opt-in and cannot be
+combined with a capability identity.
+
+The first non-mutation capability families are global-only. A token combining
+those families with path/project/session scope is rejected until that family can
+enforce the scope precisely.
 
 Example:
   agentvault mcp serve
@@ -65,9 +70,8 @@ var mcpServeCmd = &cobra.Command{
 
 Unbound stdio exposes the existing safe local surface plus proposal/read
 mutations. Supplying a capability token binds the process to that identity and
-registers only mutation tools represented by its granted capabilities. HTTP
-transport requires a capability token and uses that same token as the transport
-credential.
+registers only explicitly granted tool families. HTTP transport requires a
+capability token and uses that same token as the transport credential.
 
 --allow-direct-writes is mutually exclusive with a capability token so a scoped
 identity can never regain legacy unreviewed file-writing tools by accident.
