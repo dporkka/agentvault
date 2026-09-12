@@ -28,6 +28,40 @@ CREATE TABLE memory_supersessions (
   PRIMARY KEY (superseding_note_id, superseded_note_id)
 );
 
+-- The legacy indexer already stores complete raw frontmatter as JSON. These
+-- triggers make memory_class a rebuildable projection without coupling the
+-- indexer to the new field immediately. Explicit supported memory_class values
+-- are honored; legacy kind-only memories default to semantic.
+CREATE TRIGGER project_memory_class_after_insert
+AFTER INSERT ON notes
+WHEN NEW.memory_kind <> ''
+BEGIN
+  UPDATE notes
+  SET memory_class = CASE COALESCE(json_extract(NEW.frontmatter_json, '$.memory_class'), '')
+    WHEN 'working' THEN 'working'
+    WHEN 'episodic' THEN 'episodic'
+    WHEN 'semantic' THEN 'semantic'
+    WHEN 'procedural' THEN 'procedural'
+    ELSE 'semantic'
+  END
+  WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER project_memory_class_after_update
+AFTER UPDATE OF frontmatter_json, memory_kind ON notes
+WHEN NEW.memory_kind <> ''
+BEGIN
+  UPDATE notes
+  SET memory_class = CASE COALESCE(json_extract(NEW.frontmatter_json, '$.memory_class'), '')
+    WHEN 'working' THEN 'working'
+    WHEN 'episodic' THEN 'episodic'
+    WHEN 'semantic' THEN 'semantic'
+    WHEN 'procedural' THEN 'procedural'
+    ELSE 'semantic'
+  END
+  WHERE id = NEW.id;
+END;
+
 CREATE INDEX idx_notes_memory_scope
   ON notes(workspace_id, agent_id, session_id);
 CREATE INDEX idx_notes_memory_class
