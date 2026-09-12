@@ -30,7 +30,7 @@ func (s *Server) handleCreateCapability(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var req authz.MintRequest
-	if err := readJSON(r, &req); err != nil {
+	if err := decodeKnowledgeJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid capability request", "detail": err.Error()})
 		return
 	}
