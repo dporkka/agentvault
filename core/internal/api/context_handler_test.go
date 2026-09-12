@@ -38,7 +38,8 @@ func TestCompileContextEndpoint(t *testing.T) {
 	}
 	if _, err := server.knowledge.RecordMemory(contract.CreateMemoryRequest{
 		ID:           "mem_api_context",
-		MemoryType:   "semantic",
+		MemoryClass:  "semantic",
+		MemoryKind:   "decision",
 		ScopeType:    "project",
 		ScopeID:      "test-project",
 		Content:      "The context compiler is deterministic and does not require an LLM call.",
@@ -81,6 +82,9 @@ func TestCompileContextEndpoint(t *testing.T) {
 			foundMemory = true
 			if item.Provenance == nil || item.Provenance.ID != provenance.ID {
 				t.Fatalf("expected memory provenance, got %+v", item.Provenance)
+			}
+			if item.Metadata["memoryClass"] != "semantic" || item.Metadata["memoryKind"] != "decision" {
+				t.Fatalf("expected unified memory metadata, got %+v", item.Metadata)
 			}
 		case "obj_api_context":
 			foundObject = true
