@@ -396,18 +396,20 @@ func (e *Engine) resolvePath(requested string) (string, string, error) {
 	if requested == "" {
 		return "", "", errors.New("path is required")
 	}
-	if filepath.IsAbs(requested) {
+	nativePath := filepath.FromSlash(requested)
+	if filepath.IsAbs(nativePath) || filepath.VolumeName(nativePath) != "" {
 		return "", "", errors.New("mutation path must be vault-relative")
 	}
-	cleanRel := filepath.Clean(filepath.FromSlash(requested))
+	cleanRel := filepath.Clean(nativePath)
 	if cleanRel == "." || cleanRel == ".." || strings.HasPrefix(cleanRel, ".."+string(filepath.Separator)) {
 		return "", "", errors.New("mutation path escapes the vault")
 	}
 	relSlash := filepath.ToSlash(cleanRel)
-	if relSlash == ".agentvault" || strings.HasPrefix(relSlash, ".agentvault/") || relSlash == ".git" || strings.HasPrefix(relSlash, ".git/") {
+	protectedPath := strings.ToLower(relSlash)
+	if protectedPath == ".agentvault" || strings.HasPrefix(protectedPath, ".agentvault/") || protectedPath == ".git" || strings.HasPrefix(protectedPath, ".git/") {
 		return "", "", errors.New("mutation path targets protected internal state")
 	}
-	if relSlash == "80-agent-runs/knowledge.journal.jsonl" {
+	if protectedPath == "80-agent-runs/knowledge.journal.jsonl" {
 		return "", "", errors.New("mutation path targets the canonical knowledge journal")
 	}
 
