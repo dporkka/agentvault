@@ -6,6 +6,7 @@ package mcp
 // through RegisterMutationTools as reviewable proposals.
 func (s *Server) RegisterSafeTools() {
 	s.registerSearch()
+	s.registerRecallMemories()
 	s.registerReadNote()
 	s.registerGetLinks()
 	s.registerListProjects()
