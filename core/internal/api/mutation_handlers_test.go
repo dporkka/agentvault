@@ -45,6 +45,7 @@ func TestMutationHTTPAPIRequiresExplicitApprovalAndSupportsUndo(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		req.Header.Set("X-AgentVault-Token", server.AuthToken())
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
@@ -142,7 +143,10 @@ func TestHTTPServerRecoversInterruptedMutationOnStartup(t *testing.T) {
 
 	restarted := NewServer(vaultPath, database)
 	if restarted.knowledgeInitErr != nil {
-		t.Fatalf("startup recovery failed: %v", restarted.knowledgeInitErr)
+		t.Fatalf("knowledge startup failed: %v", restarted.knowledgeInitErr)
+	}
+	if restarted.mutationInitErr != nil {
+		t.Fatalf("mutation startup recovery failed: %v", restarted.mutationInitErr)
 	}
 	loaded, err := restarted.knowledge.GetMutationProposal(proposal.ID)
 	if err != nil {
