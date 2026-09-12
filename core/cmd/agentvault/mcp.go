@@ -81,9 +81,15 @@ func runMcpServe(cmd *cobra.Command, args []string) {
 	}
 	defer database.Close()
 
-	// Create and configure server
+	// Register both canonical memory surfaces:
+	// - RegisterTools includes read-only Markdown-backed recall_memories.
+	// - RegisterKnowledgeTools exposes journal-backed structured state.
+	// - RegisterContextTool compiles deterministic context across indexed notes
+	//   and the structured knowledge/session projection.
 	server := mcp.NewServer(vp, database)
 	server.RegisterTools()
+	server.RegisterKnowledgeTools()
+	server.RegisterContextTool()
 	server.RegisterResources()
 
 	if mcpHTTP {
