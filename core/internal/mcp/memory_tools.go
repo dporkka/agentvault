@@ -13,12 +13,13 @@ import (
 func (s *Server) registerRecallMemories() {
 	s.tools["agentvault.recall_memories"] = Tool{
 		Name: "agentvault.recall_memories",
-		Description: "Recall classified semantic memories visible in a workspace/agent/session context. " +
-			"Applies temporal validity, confidence filters, and contextual supersession before returning evidence-backed records.",
+		Description: "Recall classified memories visible in a workspace/agent/session context. " +
+			"Applies class/kind filters, temporal validity, confidence, and contextual supersession before returning evidence-backed records.",
 		InputSchema: makeSchema(map[string]interface{}{
 			"workspace": schemaString("Workspace scope. Broader global memories are inherited."),
 			"agent":     schemaString("Agent scope within the current context."),
 			"session":   schemaString("Session/run scope within the current context."),
+			"class":     schemaString("Comma-separated memory classes: working, episodic, semantic, procedural"),
 			"kind":      schemaString("Comma-separated memory kinds: observation, episode, fact, preference, decision, procedure, constraint, summary"),
 			"min_confidence": map[string]interface{}{
 				"type":        "number",
@@ -49,6 +50,19 @@ func (s *Server) handleRecallMemories(args map[string]interface{}) (string, erro
 	}
 	if _, supplied := args["limit"]; supplied && query.Limit <= 0 {
 		return "", fmt.Errorf("limit must be a positive integer")
+	}
+
+	if rawClasses := strings.TrimSpace(stringArg(args, "class")); rawClasses != "" {
+		for _, raw := range strings.Split(rawClasses, ",") {
+			class := memory.Class(strings.TrimSpace(raw))
+			if class == "" {
+				continue
+			}
+			if !class.Valid() {
+				return "", fmt.Errorf("unsupported memory class %q", class)
+			}
+			query.Classes = append(query.Classes, class)
+		}
 	}
 
 	if rawKinds := strings.TrimSpace(stringArg(args, "kind")); rawKinds != "" {
