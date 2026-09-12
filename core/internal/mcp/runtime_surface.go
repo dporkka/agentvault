@@ -52,6 +52,7 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 		}
 		if authz.HasAnyCapability(principal, authz.KnowledgeWrite, authz.MemoryWrite, authz.SessionWrite) {
 			s.RegisterKnowledgeWriteTools()
+			s.HardenKnowledgeWriteTools()
 		}
 		if authz.HasCapability(principal, authz.ContextCompile) {
 			s.RegisterContextTool()
