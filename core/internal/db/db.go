@@ -419,16 +419,19 @@ CREATE INDEX IF NOT EXISTS idx_notes_memory_validity
 CREATE INDEX IF NOT EXISTS idx_memory_supersessions_superseded
   ON memory_supersessions(superseded_note_id);
 `
-	_, err := d.conn.Exec(schema)
-	if err != nil {
-		return fmt.Errorf("failed to run inline migrations: %w", err)
+	if _, err := d.conn.Exec(schema); err != nil {
+		return fmt.Errorf("failed to run inline base migrations: %w", err)
 	}
-	_, err = d.conn.Exec(`
+	if _, err := d.conn.Exec(inlineKnowledgeSchema); err != nil {
+		return fmt.Errorf("failed to run inline knowledge migrations: %w", err)
+	}
+	_, err := d.conn.Exec(`
 		INSERT OR IGNORE INTO schema_migrations (version, applied_at)
 		VALUES
 			(1, datetime('now')),
 			(2, datetime('now')),
-			(3, datetime('now'))
+			(3, datetime('now')),
+			(4, datetime('now'))
 	`)
 	return err
 }
