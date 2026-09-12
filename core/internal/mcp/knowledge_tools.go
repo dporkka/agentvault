@@ -115,11 +115,12 @@ func (s *Server) RegisterKnowledgeTools() {
 
 	s.tools["agentvault.list_memories"] = Tool{
 		Name:        "agentvault.list_memories",
-		Description: "List durable machine-authored memories for a specific scope, optionally filtered by memory class.",
+		Description: "List durable machine-authored memories for a specific scope, optionally filtered independently by lifecycle class and semantic kind.",
 		InputSchema: makeSchema(map[string]interface{}{
 			"scope_type":   schemaString("Scope class such as user, organization, project, agent, or session"),
 			"scope_id":     schemaString("Scope identifier"),
 			"memory_class": schemaStringEnum("Optional memory class", []string{"working", "episodic", "semantic", "procedural"}),
+			"memory_kind":  schemaStringEnum("Optional semantic kind", []string{"observation", "episode", "fact", "preference", "decision", "procedure", "constraint", "summary"}),
 			"limit":        schemaInt("Maximum memories to return", 100),
 		}, []string{"scope_type", "scope_id"}),
 		Handler: withStore(handleListMemoriesTool),
@@ -291,10 +292,11 @@ func handleRecordMemoryTool(store *knowledge.Store, args map[string]interface{})
 }
 
 func handleListMemoriesTool(store *knowledge.Store, args map[string]interface{}) (string, error) {
-	memories, err := store.ListMemories(
+	memories, err := store.ListMemoriesFiltered(
 		stringArg(args, "scope_type"),
 		stringArg(args, "scope_id"),
 		stringArg(args, "memory_class"),
+		stringArg(args, "memory_kind"),
 		intArg(args, "limit", 100),
 	)
 	if err != nil {
