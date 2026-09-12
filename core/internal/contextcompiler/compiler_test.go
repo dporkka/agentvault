@@ -126,7 +126,8 @@ Contract renewals require finance approval before customer signature. The renewa
 
 	oldMemory, err := store.RecordMemory(contract.CreateMemoryRequest{
 		ID:           "mem_old",
-		MemoryType:   "semantic",
+		MemoryClass:  "semantic",
+		MemoryKind:   "decision",
 		ScopeType:    "project",
 		ScopeID:      "adacavo",
 		Content:      "Sales approves contract renewals.",
@@ -139,7 +140,8 @@ Contract renewals require finance approval before customer signature. The renewa
 	}
 	if _, err := store.RecordMemory(contract.CreateMemoryRequest{
 		ID:           "mem_current",
-		MemoryType:   "semantic",
+		MemoryClass:  "semantic",
+		MemoryKind:   "decision",
 		ScopeType:    "project",
 		ScopeID:      "adacavo",
 		Content:      "Finance approves contract renewals before signature.",
@@ -206,8 +208,12 @@ Contract renewals require finance approval before customer signature. The renewa
 	if _, ok := ids["rel_expired"]; ok {
 		t.Error("expired relation must not be compiled for current asOf")
 	}
-	if item := ids["mem_current"]; item.Provenance == nil || item.Provenance.ID != provenance.ID || item.Provenance.SourceType != "file" {
+	item := ids["mem_current"]
+	if item.Provenance == nil || item.Provenance.ID != provenance.ID || item.Provenance.SourceType != "file" {
 		t.Fatalf("memory provenance was not preserved: %+v", item)
+	}
+	if item.Metadata["memoryClass"] != "semantic" || item.Metadata["memoryKind"] != "decision" {
+		t.Fatalf("memory class/kind metadata was not preserved: %+v", item.Metadata)
 	}
 }
 
