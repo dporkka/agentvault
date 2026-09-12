@@ -130,7 +130,7 @@ func (s *Server) handleListMemories(w http.ResponseWriter, r *http.Request) {
 	memories, err := s.knowledge.ListMemories(
 		r.URL.Query().Get("scopeType"),
 		r.URL.Query().Get("scopeId"),
-		r.URL.Query().Get("memoryType"),
+		r.URL.Query().Get("memoryClass"),
 		limit,
 	)
 	if err != nil {
