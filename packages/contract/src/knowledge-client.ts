@@ -22,6 +22,14 @@ import type {
   StartAgentSessionRequest,
   UpsertKnowledgeObjectRequest,
 } from './knowledge';
+import type {
+  ApproveMutationRequest,
+  CreateMutationProposalRequest,
+  MutationProposal,
+  MutationProposalFilter,
+  MutationResult,
+  RejectMutationRequest,
+} from './mutations';
 
 export interface KnowledgeClientOptions {
   baseUrl?: string;
@@ -46,6 +54,18 @@ export interface KnowledgeClient {
   getSession(id: string): Promise<AgentSession>;
   appendSessionEvent(id: string, req: AppendSessionEventRequest): Promise<SessionEvent>;
   closeSession(id: string, req?: CloseAgentSessionRequest): Promise<AgentSession>;
+
+  /** Dry-run and persist a reviewable mutation proposal. Never changes the target file. */
+  proposeMutation(req: CreateMutationProposalRequest): Promise<MutationProposal>;
+  listMutations(filter?: MutationProposalFilter): Promise<MutationProposal[]>;
+  getMutation(id: string): Promise<MutationProposal>;
+  /** Trusted control-plane operation. Approval is intentionally separate from proposal creation. */
+  approveMutation(id: string, req: ApproveMutationRequest): Promise<MutationProposal>;
+  /** Trusted control-plane operation. Applies an approved proposal if its before-state still matches. */
+  commitMutation(id: string): Promise<MutationResult>;
+  /** Trusted control-plane operation. Restores the captured before-state if the committed state still matches. */
+  undoMutation(id: string): Promise<MutationResult>;
+  rejectMutation(id: string, req: RejectMutationRequest): Promise<MutationProposal>;
 }
 
 function queryString<T extends object>(values: T): string {
@@ -140,6 +160,28 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions = {}): Knowle
     },
     closeSession(id, req = {}) {
       return call<AgentSession>('POST', `/sessions/${encodeURIComponent(id)}/close`, req);
+    },
+    proposeMutation(req) {
+      return call<MutationProposal>('POST', '/mutations', req);
+    },
+    listMutations(filter = {}) {
+      const qs = queryString(filter);
+      return call<MutationProposal[]>('GET', qs ? `/mutations?${qs}` : '/mutations');
+    },
+    getMutation(id) {
+      return call<MutationProposal>('GET', `/mutations/${encodeURIComponent(id)}`);
+    },
+    approveMutation(id, req) {
+      return call<MutationProposal>('POST', `/mutations/${encodeURIComponent(id)}/approve`, req);
+    },
+    commitMutation(id) {
+      return call<MutationResult>('POST', `/mutations/${encodeURIComponent(id)}/commit`);
+    },
+    undoMutation(id) {
+      return call<MutationResult>('POST', `/mutations/${encodeURIComponent(id)}/undo`);
+    },
+    rejectMutation(id, req) {
+      return call<MutationProposal>('POST', `/mutations/${encodeURIComponent(id)}/reject`, req);
     },
   };
 }
