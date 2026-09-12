@@ -10,6 +10,7 @@ import (
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/knowledge"
+	"github.com/agentvault/core/internal/memory"
 )
 
 type captureAIProvider struct {
@@ -69,16 +70,16 @@ func TestScopedAIInvokeRequiresContextCapabilityAndRejectsPathScope(t *testing.T
 		wantErr      string
 	}{
 		{
-			name: "missing context capability",
+			name:         "missing context capability",
 			capabilities: []authz.Capability{authz.AIInvoke},
-			scope: authz.Scope{Projects: []string{"alpha"}},
-			wantErr: "requires context:compile",
+			scope:        authz.Scope{Projects: []string{"alpha"}},
+			wantErr:      "requires context:compile",
 		},
 		{
-			name: "path scope",
+			name:         "path scope",
 			capabilities: []authz.Capability{authz.AIInvoke, authz.ContextCompile},
-			scope: authz.Scope{PathPrefixes: []string{"30-projects/alpha"}},
-			wantErr: "path-prefix",
+			scope:        authz.Scope{PathPrefixes: []string{"30-projects/alpha"}},
+			wantErr:      "path-prefix",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -136,9 +137,9 @@ func TestScopedAIInvokeUsesAuthorizedSessionContextEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	issued, err := registry.Mint(authz.MintRequest{
-		AgentID: "agent",
+		AgentID:      "agent",
 		Capabilities: []authz.Capability{authz.AIInvoke, authz.ContextCompile},
-		Scope: authz.Scope{Projects: []string{"alpha"}, Sessions: []string{alphaSession.ID}},
+		Scope:        authz.Scope{Projects: []string{"alpha"}, Sessions: []string{alphaSession.ID}},
 	})
 	if err != nil {
 		t.Fatal(err)
