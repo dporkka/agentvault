@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/authz"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/search"
@@ -25,13 +26,14 @@ const (
 
 // Server is an MCP server for AgentVault.
 type Server struct {
-	vaultPath string
-	db        *db.DB
-	searcher  *search.Searcher
-	indexer   *indexer.Indexer
-	tools     map[string]Tool
-	resources map[string]Resource
-	authToken string
+	vaultPath           string
+	db                  *db.DB
+	searcher            *search.Searcher
+	indexer             *indexer.Indexer
+	tools               map[string]Tool
+	resources           map[string]Resource
+	authToken           string
+	capabilityPrincipal *authz.Principal
 }
 
 // Tool represents an MCP tool.
@@ -67,13 +69,13 @@ type JSONRPCResponse struct {
 	Error   *JSONRPCError `json:"error,omitempty"`
 }
 
-// JSONRPCError represents a JSON-RPC error.
+// JSONRPCError represents a JSON-RPC error response.
 type JSONRPCError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
 
-// toolDescription is the JSON representation of a tool for the tools/list response.
+// toolDescription is the JSON representation of a tool for tools/list.
 type toolDescription struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
@@ -102,7 +104,9 @@ func NewServer(vaultPath string, database *db.DB) *Server {
 	}
 }
 
-// RegisterTools registers all AgentVault tools on the server.
+// RegisterTools registers all legacy AgentVault tools. This is the explicit
+// direct-write compatibility surface; normal autonomous-agent startup uses
+// RegisterSafeTools instead.
 func (s *Server) RegisterTools() {
 	s.registerSearch()
 	s.registerRecallMemories()
@@ -129,10 +133,17 @@ func (s *Server) SetAuthToken(token string) {
 	s.authToken = token
 }
 
-// Handle processes a single JSON-RPC request and returns a response.
+// Handle processes a single JSON-RPC request and returns a response. A bound
+// capability token is revalidated before every dispatch so revocation or expiry
+// immediately stops all tools/resources, not merely mutation calls.
 func (s *Server) Handle(ctx context.Context, req JSONRPCRequest) JSONRPCResponse {
 	if req.JSONRPC != "2.0" && req.JSONRPC != "" {
 		return errorResponse(req.ID, -32600, "Invalid JSON-RPC version")
+	}
+	if s.capabilityPrincipal != nil {
+		if _, ok := s.capabilityIdentity(); !ok {
+			return errorResponse(req.ID, -32001, "Capability identity is invalid, expired, or revoked")
+		}
 	}
 
 	switch req.Method {
@@ -151,7 +162,6 @@ func (s *Server) Handle(ctx context.Context, req JSONRPCRequest) JSONRPCResponse
 	}
 }
 
-// handleInitialize handles the MCP initialize method.
 func (s *Server) handleInitialize(req JSONRPCRequest) JSONRPCResponse {
 	result := map[string]interface{}{
 		"protocolVersion": protocolVersion,
@@ -164,90 +174,57 @@ func (s *Server) handleInitialize(req JSONRPCRequest) JSONRPCResponse {
 			"version": serverVersion,
 		},
 	}
-	return JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      req.ID,
-		Result:  result,
-	}
+	return JSONRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: result}
 }
 
-// handleToolsList handles the tools/list method.
 func (s *Server) handleToolsList(req JSONRPCRequest) JSONRPCResponse {
 	descriptions := make([]toolDescription, 0, len(s.tools))
 	for _, tool := range s.tools {
 		descriptions = append(descriptions, toolDescription{
-			Name:        tool.Name,
-			Description: tool.Description,
-			InputSchema: tool.InputSchema,
+			Name: tool.Name, Description: tool.Description, InputSchema: tool.InputSchema,
 		})
 	}
-	result := map[string]interface{}{
-		"tools": descriptions,
-	}
 	return JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      req.ID,
-		Result:  result,
+		JSONRPC: "2.0", ID: req.ID,
+		Result: map[string]interface{}{"tools": descriptions},
 	}
 }
 
-// handleToolsCall handles the tools/call method.
 func (s *Server) handleToolsCall(req JSONRPCRequest) JSONRPCResponse {
 	params := req.Params
 	if params == nil {
 		return errorResponse(req.ID, -32602, "Missing params")
 	}
-
 	name, ok := params["name"].(string)
 	if !ok || name == "" {
 		return errorResponse(req.ID, -32602, "Missing or invalid tool name")
 	}
-
 	tool, found := s.tools[name]
 	if !found {
 		return errorResponse(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", name))
 	}
 
-	// Extract arguments
-	var args map[string]interface{}
+	args := make(map[string]interface{})
 	if rawArgs, ok := params["arguments"]; ok {
 		if argsMap, ok := rawArgs.(map[string]interface{}); ok {
 			args = argsMap
-		} else {
-			args = make(map[string]interface{})
 		}
-	} else {
-		args = make(map[string]interface{})
 	}
 
-	// Call the handler
 	text, err := tool.Handler(args)
 	if err != nil {
 		return JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      req.ID,
-			Result: toolCallResult{
-				Content: []contentItem{
-					{Type: "text", Text: fmt.Sprintf("Error: %v", err)},
-				},
-			},
+			JSONRPC: "2.0", ID: req.ID,
+			Result: toolCallResult{Content: []contentItem{{Type: "text", Text: fmt.Sprintf("Error: %v", err)}}},
 		}
 	}
-
-	result := toolCallResult{
-		Content: []contentItem{
-			{Type: "text", Text: text},
-		},
-	}
 	return JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      req.ID,
-		Result:  result,
+		JSONRPC: "2.0", ID: req.ID,
+		Result: toolCallResult{Content: []contentItem{{Type: "text", Text: text}}},
 	}
 }
 
-// resourceDescription is the JSON representation of a resource for
-// the resources/list response.
+// resourceDescription is the JSON representation of a resource.
 type resourceDescription struct {
 	URI         string `json:"uri"`
 	Name        string `json:"name"`
@@ -257,114 +234,77 @@ type resourceDescription struct {
 
 // RegisterResources registers MCP resources.
 func (s *Server) RegisterResources() {
-	// Graph resource
 	s.resources["agentvault://graph/{note_id}"] = Resource{
-		URI:         "agentvault://graph/{note_id}",
-		Name:        "Note Graph",
-		Description: "Adjacency subgraph centered on a note",
-		MimeType:    "application/json",
-		Handler:     s.handleGraphResource,
+		URI: "agentvault://graph/{note_id}", Name: "Note Graph",
+		Description: "Adjacency subgraph centered on a note", MimeType: "application/json",
+		Handler: s.handleGraphResource,
 	}
-	// Projects list
 	s.resources["agentvault://projects"] = Resource{
-		URI:         "agentvault://projects",
-		Name:        "Projects",
-		Description: "List of all projects in the vault",
-		MimeType:    "application/json",
-		Handler:     s.handleProjectsResource,
+		URI: "agentvault://projects", Name: "Projects",
+		Description: "List of all projects in the vault", MimeType: "application/json",
+		Handler: s.handleProjectsResource,
 	}
-	// Recent notes
 	s.resources["agentvault://notes/recent"] = Resource{
-		URI:         "agentvault://notes/recent",
-		Name:        "Recent Notes",
-		Description: "Most recently updated notes",
-		MimeType:    "application/json",
-		Handler:     s.handleRecentResource,
+		URI: "agentvault://notes/recent", Name: "Recent Notes",
+		Description: "Most recently updated notes", MimeType: "application/json",
+		Handler: s.handleRecentResource,
 	}
-	// Tags
 	s.resources["agentvault://tags"] = Resource{
-		URI:         "agentvault://tags",
-		Name:        "Tags",
-		Description: "All tags used in the vault",
-		MimeType:    "application/json",
-		Handler:     s.handleTagsResource,
+		URI: "agentvault://tags", Name: "Tags",
+		Description: "All tags used in the vault", MimeType: "application/json",
+		Handler: s.handleTagsResource,
 	}
 }
 
-// handleResourcesList handles the resources/list method.
 func (s *Server) handleResourcesList(req JSONRPCRequest) JSONRPCResponse {
 	descriptions := make([]resourceDescription, 0, len(s.resources))
-	for _, r := range s.resources {
+	for _, resource := range s.resources {
 		descriptions = append(descriptions, resourceDescription{
-			URI:         r.URI,
-			Name:        r.Name,
-			Description: r.Description,
-			MimeType:    r.MimeType,
+			URI: resource.URI, Name: resource.Name,
+			Description: resource.Description, MimeType: resource.MimeType,
 		})
 	}
-	result := map[string]interface{}{
-		"resources": descriptions,
-	}
 	return JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      req.ID,
-		Result:  result,
+		JSONRPC: "2.0", ID: req.ID,
+		Result: map[string]interface{}{"resources": descriptions},
 	}
 }
 
-// handleResourcesRead handles the resources/read method.
 func (s *Server) handleResourcesRead(req JSONRPCRequest) JSONRPCResponse {
 	params := req.Params
 	if params == nil {
 		return errorResponse(req.ID, -32602, "Missing params")
 	}
-
 	uri, ok := params["uri"].(string)
 	if !ok || uri == "" {
 		return errorResponse(req.ID, -32602, "Missing or invalid uri parameter")
 	}
 
-	// Try exact match first, then template match.
 	resource, found := s.resources[uri]
 	if !found {
-		// Check template resources like agentvault://graph/{note_id}.
-		for tmpl, r := range s.resources {
+		for tmpl, candidate := range s.resources {
 			if matchResourceTemplate(tmpl, uri) {
-				resource = r
+				resource = candidate
 				found = true
 				break
 			}
 		}
 	}
-
 	if !found {
 		return errorResponse(req.ID, -32602, fmt.Sprintf("Unknown resource: %s", uri))
 	}
-
 	text, err := resource.Handler(uri)
 	if err != nil {
 		return errorResponse(req.ID, -32603, fmt.Sprintf("Resource read error: %v", err))
 	}
-
-	result := map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"uri":      uri,
-				"mimeType": resource.MimeType,
-				"text":     text,
-			},
-		},
-	}
 	return JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      req.ID,
-		Result:  result,
+		JSONRPC: "2.0", ID: req.ID,
+		Result: map[string]interface{}{
+			"contents": []map[string]interface{}{{"uri": uri, "mimeType": resource.MimeType, "text": text}},
+		},
 	}
 }
 
-// matchResourceTemplate checks if a URI matches a template pattern like
-// "agentvault://graph/{note_id}". Returns true if the URI matches the
-// template structure (same scheme, host, path segments count).
 func matchResourceTemplate(tmpl, uri string) bool {
 	tmplParts := strings.Split(tmpl, "/")
 	uriParts := strings.Split(uri, "/")
@@ -373,7 +313,7 @@ func matchResourceTemplate(tmpl, uri string) bool {
 	}
 	for i := range tmplParts {
 		if strings.HasPrefix(tmplParts[i], "{") && strings.HasSuffix(tmplParts[i], "}") {
-			continue // template variable — matches anything.
+			continue
 		}
 		if tmplParts[i] != uriParts[i] {
 			return false
@@ -394,37 +334,30 @@ func (s *Server) ServeStdio() {
 		if line == "" {
 			continue
 		}
-
 		var req JSONRPCRequest
 		if err := json.Unmarshal([]byte(line), &req); err != nil {
-			resp := errorResponse(nil, -32700, fmt.Sprintf("Parse error: %v", err))
-			writeResponse(resp)
+			writeResponse(errorResponse(nil, -32700, fmt.Sprintf("Parse error: %v", err)))
 			continue
 		}
-
-		resp := s.Handle(ctx, req)
-		writeResponse(resp)
+		writeResponse(s.Handle(ctx, req))
 	}
-
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintf(os.Stderr, "stdin error: %v\n", err)
 	}
 }
 
-// ServeHTTP handles MCP requests over HTTP.
+// ServeHTTP handles authenticated MCP requests over HTTP.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	// Check auth token if set
 	if s.authToken != "" {
-		token := r.Header.Get("X-AgentVault-Token")
+		token := strings.TrimSpace(r.Header.Get("X-AgentVault-Token"))
 		if token == "" {
-			token = r.Header.Get("Authorization")
-			if strings.HasPrefix(token, "Bearer ") {
-				token = strings.TrimPrefix(token, "Bearer ")
+			token = strings.TrimSpace(r.Header.Get("Authorization"))
+			if len(token) >= 7 && strings.EqualFold(token[:7], "Bearer ") {
+				token = strings.TrimSpace(token[7:])
 			}
 		}
 		if token != s.authToken {
@@ -438,33 +371,24 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
-
-	// Try parsing as single request first
 	var req JSONRPCRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		// Try as batch
 		var reqs []JSONRPCRequest
 		if err := json.Unmarshal(body, &reqs); err != nil {
-			resp := errorResponse(nil, -32700, fmt.Sprintf("Parse error: %v", err))
-			writeHTTPResponse(w, resp)
+			writeHTTPResponse(w, errorResponse(nil, -32700, fmt.Sprintf("Parse error: %v", err)))
 			return
 		}
-		// Handle batch
 		responses := make([]JSONRPCResponse, 0, len(reqs))
-		for _, req := range reqs {
-			resp := s.Handle(r.Context(), req)
-			responses = append(responses, resp)
+		for _, item := range reqs {
+			responses = append(responses, s.Handle(r.Context(), item))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(responses)
+		_ = json.NewEncoder(w).Encode(responses)
 		return
 	}
-
-	resp := s.Handle(r.Context(), req)
-	writeHTTPResponse(w, resp)
+	writeHTTPResponse(w, s.Handle(r.Context(), req))
 }
 
-// writeResponse writes a JSON-RPC response to stdout.
 func writeResponse(resp JSONRPCResponse) {
 	data, err := json.Marshal(resp)
 	if err != nil {
@@ -474,55 +398,49 @@ func writeResponse(resp JSONRPCResponse) {
 	fmt.Println(string(data))
 }
 
-// writeHTTPResponse writes a JSON-RPC response to an HTTP response writer.
 func writeHTTPResponse(w http.ResponseWriter, resp JSONRPCResponse) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// errorResponse creates a JSON-RPC error response.
 func errorResponse(id interface{}, code int, message string) JSONRPCResponse {
 	return JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      id,
-		Error: &JSONRPCError{
-			Code:    code,
-			Message: message,
-		},
+		JSONRPC: "2.0", ID: id,
+		Error: &JSONRPCError{Code: code, Message: message},
 	}
 }
 
-// stringArg extracts a string argument from args map.
 func stringArg(args map[string]interface{}, key string) string {
-	if v, ok := args[key].(string); ok {
-		return v
+	if value, ok := args[key].(string); ok {
+		return value
 	}
 	return ""
 }
 
-// intArg extracts an int argument from args map with a default.
 func intArg(args map[string]interface{}, key string, defaultVal int) int {
-	if v, ok := args[key].(float64); ok {
-		return int(v)
+	if value, ok := args[key].(float64); ok {
+		return int(value)
 	}
-	if v, ok := args[key].(int); ok {
-		return v
+	if value, ok := args[key].(int); ok {
+		return value
 	}
 	return defaultVal
 }
 
-// stringSliceArg extracts a string slice argument from args map.
 func stringSliceArg(args map[string]interface{}, key string) []string {
 	raw, ok := args[key]
 	if !ok {
 		return nil
 	}
-	if arr, ok := raw.([]interface{}); ok {
-		var result []string
-		for _, v := range arr {
-			if s, ok := v.(string); ok {
-				result = append(result, s)
+	if values, ok := raw.([]string); ok {
+		return values
+	}
+	if values, ok := raw.([]interface{}); ok {
+		result := make([]string, 0, len(values))
+		for _, value := range values {
+			if str, ok := value.(string); ok {
+				result = append(result, str)
 			}
 		}
 		return result
@@ -530,7 +448,6 @@ func stringSliceArg(args map[string]interface{}, key string) []string {
 	return nil
 }
 
-// currentTimestamp returns the current time in RFC3339 format.
 func currentTimestamp() string {
 	return time.Now().UTC().Format(time.RFC3339)
 }

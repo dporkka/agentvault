@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/agentvault/core/internal/ai"
+	"github.com/agentvault/core/internal/authz"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/indexer"
@@ -61,22 +62,24 @@ const Version = "0.1.0"
 
 // Server is the HTTP API server for AgentVault.
 type Server struct {
-	vaultPath        string
-	db               *db.DB
-	searcher         *search.Searcher
-	indexer          *indexer.Indexer
-	knowledge        *knowledge.Store
-	mutations        *mutations.Engine
-	knowledgeInitErr error
-	mutationInitErr  error
-	mux              *http.ServeMux
-	server           *http.Server
-	addr             string
-	authToken        string
-	aiProvider       ai.AIProvider
-	aiProviderMu     sync.Mutex
-	rateLimiter      *simpleRateLimiter
-	watcher          *watcher.Watcher
+	vaultPath          string
+	db                 *db.DB
+	searcher           *search.Searcher
+	indexer            *indexer.Indexer
+	knowledge          *knowledge.Store
+	mutations          *mutations.Engine
+	knowledgeInitErr   error
+	mutationInitErr    error
+	capabilityRegistry *authz.Registry
+	capabilityInitErr  error
+	mux                *http.ServeMux
+	server             *http.Server
+	addr               string
+	authToken          string
+	aiProvider         ai.AIProvider
+	aiProviderMu       sync.Mutex
+	rateLimiter        *simpleRateLimiter
+	watcher            *watcher.Watcher
 }
 
 // NewServer creates a new API server. Structured machine-authored state is
@@ -85,7 +88,8 @@ type Server struct {
 // rebuildable through indexing. Interrupted filesystem mutations are then
 // reconciled against their durable before/after hashes. Mutation recovery
 // failures fail the mutation control plane closed without taking unrelated
-// knowledge/context endpoints offline.
+// knowledge/context endpoints offline. Capability registry failures similarly
+// fail scoped identities closed while preserving root-token administration.
 func NewServer(vaultPath string, database *db.DB) *Server {
 	mux := http.NewServeMux()
 	searcher := search.New(database)
@@ -100,18 +104,21 @@ func NewServer(vaultPath string, database *db.DB) *Server {
 			mutationInitErr = fmt.Errorf("mutation recovery failed: %w", errors.Join(recoveryErrors...))
 		}
 	}
+	capabilityRegistry, capabilityInitErr := authz.NewRegistry(vaultPath)
 	return &Server{
-		vaultPath:        vaultPath,
-		db:               database,
-		searcher:         searcher,
-		indexer:          idx,
-		knowledge:        knowledgeStore,
-		mutations:        mutationEngine,
-		knowledgeInitErr: knowledgeInitErr,
-		mutationInitErr:  mutationInitErr,
-		mux:              mux,
-		authToken:        generateAuthToken(),
-		rateLimiter:      newRateLimiter(30, time.Second),
+		vaultPath:          vaultPath,
+		db:                 database,
+		searcher:           searcher,
+		indexer:            idx,
+		knowledge:          knowledgeStore,
+		mutations:          mutationEngine,
+		knowledgeInitErr:   knowledgeInitErr,
+		mutationInitErr:    mutationInitErr,
+		capabilityRegistry: capabilityRegistry,
+		capabilityInitErr:  capabilityInitErr,
+		mux:                mux,
+		authToken:          generateAuthToken(),
+		rateLimiter:        newRateLimiter(30, time.Second),
 	}
 }
 
@@ -199,8 +206,11 @@ func (s *Server) RegisterRoutes() {
 	// Health check (no auth required)
 	s.mux.HandleFunc("GET /health", s.handleHealth)
 
-	// Auth verify (no auth required)
+	// Root auth verification plus root-only lifecycle for persistent scoped tokens.
 	s.mux.HandleFunc("GET /auth/verify", s.handleAuthVerify)
+	s.mux.HandleFunc("GET /auth/capabilities", s.withRootAuth(s.handleListCapabilities))
+	s.mux.HandleFunc("POST /auth/capabilities", s.withRootAuth(s.handleCreateCapability))
+	s.mux.HandleFunc("POST /auth/capabilities/{id}/revoke", s.withRootAuth(s.handleRevokeCapability))
 
 	// Vault status
 	s.mux.HandleFunc("GET /vault/status", s.handleVaultStatus)
@@ -269,15 +279,16 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("POST /sessions/{id}/events", s.withKnowledgeReady(s.handleAppendSessionEvent))
 	s.mux.HandleFunc("POST /sessions/{id}/close", s.withKnowledgeReady(s.handleCloseAgentSession))
 
-	// Transactional agent mutations. Proposal, approval, commit, and undo remain
-	// separate operations so an agent cannot silently collapse the review gate.
-	s.mux.HandleFunc("GET /mutations", s.withMutationReady(s.handleListMutations))
-	s.mux.HandleFunc("POST /mutations", s.withMutationReady(s.handleProposeMutation))
-	s.mux.HandleFunc("GET /mutations/{id}", s.withMutationReady(s.handleGetMutation))
-	s.mux.HandleFunc("POST /mutations/{id}/approve", s.withMutationReady(s.handleApproveMutation))
-	s.mux.HandleFunc("POST /mutations/{id}/commit", s.withMutationReady(s.handleCommitMutation))
-	s.mux.HandleFunc("POST /mutations/{id}/undo", s.withMutationReady(s.handleUndoMutation))
-	s.mux.HandleFunc("POST /mutations/{id}/reject", s.withMutationReady(s.handleRejectMutation))
+	// Transactional agent mutations. Authentication happens before readiness so
+	// unauthenticated callers cannot use subsystem state as an oracle. Resource
+	// scope is then enforced inside each handler against path/session/project.
+	s.mux.HandleFunc("GET /mutations", s.withMutationRead(s.withMutationReady(s.handleListMutations)))
+	s.mux.HandleFunc("POST /mutations", s.withMutationPropose(s.withMutationReady(s.handleProposeMutation)))
+	s.mux.HandleFunc("GET /mutations/{id}", s.withMutationRead(s.withMutationReady(s.handleGetMutation)))
+	s.mux.HandleFunc("POST /mutations/{id}/approve", s.withMutationApprove(s.withMutationReady(s.handleApproveMutation)))
+	s.mux.HandleFunc("POST /mutations/{id}/commit", s.withMutationCommit(s.withMutationReady(s.handleCommitMutation)))
+	s.mux.HandleFunc("POST /mutations/{id}/undo", s.withMutationUndo(s.withMutationReady(s.handleUndoMutation)))
+	s.mux.HandleFunc("POST /mutations/{id}/reject", s.withMutationReject(s.withMutationReady(s.handleRejectMutation)))
 
 	// Git status
 	s.mux.HandleFunc("GET /git/status", s.handleGitStatus)

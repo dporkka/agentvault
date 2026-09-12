@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/agentvault/core/internal/authz"
 )
 
 func TestMcpFlagsRegistered(t *testing.T) {
@@ -19,6 +21,9 @@ func TestMcpFlagsRegistered(t *testing.T) {
 	if mcpServeCmd.Flags().Lookup("allow-direct-writes") == nil {
 		t.Error("expected 'allow-direct-writes' flag to be registered on mcp serve")
 	}
+	if mcpServeCmd.Flags().Lookup("capability-token") == nil {
+		t.Error("expected 'capability-token' flag to be registered on mcp serve")
+	}
 }
 
 func TestRunMcpServeHTTPStartsAndStops(t *testing.T) {
@@ -26,13 +31,26 @@ func TestRunMcpServeHTTPStartsAndStops(t *testing.T) {
 	defer database.Close()
 	vaultPath = vp
 
+	registry, err := authz.NewRegistry(vp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued, err := registry.Mint(authz.MintRequest{
+		AgentID: "mcp-test", Capabilities: []authz.Capability{authz.MutationRead, authz.MutationPropose},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	mcpHTTP = true
 	mcpPort = 47322
 	mcpAllowDirectWrites = false
+	mcpCapabilityToken = issued.Token
 	defer func() {
 		mcpHTTP = false
 		mcpPort = 7777
 		mcpAllowDirectWrites = false
+		mcpCapabilityToken = ""
 	}()
 
 	stopCh := make(chan struct{})
@@ -54,22 +72,28 @@ func TestRunMcpServeHTTPStartsAndStops(t *testing.T) {
 		resp, err := http.Get(addr)
 		if err == nil {
 			resp.Body.Close()
+			lastErr = nil
 			break
 		}
 		lastErr = err
 		time.Sleep(50 * time.Millisecond)
 	}
-	if lastErr != nil && time.Now().After(deadline) {
+	if lastErr != nil {
 		t.Fatalf("MCP server did not start: %v", lastErr)
 	}
 
-	// Send a JSON-RPC initialize request.
 	reqBody, _ := json.Marshal(map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "initialize",
 	})
-	resp, err := http.Post(addr, "application/json", bytes.NewReader(reqBody))
+	req, err := http.NewRequest(http.MethodPost, addr, bytes.NewReader(reqBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+issued.Token)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("MCP request failed: %v", err)
 	}
