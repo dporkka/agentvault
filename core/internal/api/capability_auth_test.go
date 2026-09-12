@@ -122,9 +122,12 @@ func TestCapabilityScopedMutationLifecycle(t *testing.T) {
 		t.Fatalf("committed content=%q", got)
 	}
 
-	// A scoped mutation token must never become a generic API write token.
+	// A scoped mutation token must never become a generic vault credential.
 	if status := call(reviewer.Token, http.MethodPost, "/notes", map[string]interface{}{"title": "bypass"}, nil); status != http.StatusUnauthorized {
 		t.Fatalf("generic write with mutation token status=%d want 401", status)
+	}
+	if status := call(reviewer.Token, http.MethodGet, "/objects", nil, nil); status != http.StatusUnauthorized {
+		t.Fatalf("generic read with mutation token status=%d want 401", status)
 	}
 }
 
