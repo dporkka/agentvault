@@ -52,9 +52,10 @@ write MCP commands remain an explicit compatibility opt-in and cannot be
 combined with a capability identity.
 
 Scope support is capability-specific: mutation capabilities support path/project/
-session restrictions, knowledge:read supports project/session restrictions, and
-vault:read, context:compile, and ai:invoke remain global-only until their full
-retrieval paths can enforce narrower scope.
+session restrictions; knowledge:read and context:compile support project/session
+restrictions; path-scoped knowledge/context access remains unsupported; and
+vault:read plus ai:invoke remain global-only until their full retrieval paths can
+enforce narrower scope.
 
 Example:
   agentvault mcp serve
