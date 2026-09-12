@@ -110,6 +110,9 @@ func ParseReader(r io.Reader) (*ParsedDocument, error) {
 			if err := yaml.Unmarshal([]byte(rawFrontmatter), &frontmatter); err != nil {
 				return nil, fmt.Errorf("invalid YAML frontmatter: %w", err)
 			}
+			if err := validateMemoryFrontmatter(frontmatter.MemoryClass, frontmatter.MemoryKind); err != nil {
+				return nil, err
+			}
 			mirrorPreservedFields(&frontmatter)
 			body = strings.TrimSpace(strings.Join(lines[closeIdx+1:], "\n"))
 		} else {
@@ -127,6 +130,23 @@ func ParseReader(r io.Reader) (*ParsedDocument, error) {
 		RawFrontmatter: rawFrontmatter,
 		WikiLinks:      wikiLinks,
 	}, nil
+}
+
+func validateMemoryFrontmatter(memoryClass, memoryKind string) error {
+	memoryClass = strings.TrimSpace(memoryClass)
+	memoryKind = strings.TrimSpace(memoryKind)
+	if memoryClass == "" {
+		return nil
+	}
+	if memoryKind == "" {
+		return fmt.Errorf("memory_kind is required when memory_class is set")
+	}
+	switch memoryClass {
+	case "working", "episodic", "semantic", "procedural":
+		return nil
+	default:
+		return fmt.Errorf("unsupported memory_class %q", memoryClass)
+	}
 }
 
 // mirrorPreservedFields copies typed, non-core metadata into Extra so legacy
