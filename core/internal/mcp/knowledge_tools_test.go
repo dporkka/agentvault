@@ -142,7 +142,8 @@ func TestKnowledgeToolsEndToEnd(t *testing.T) {
 
 	call("agentvault.record_memory", map[string]interface{}{
 		"id":            "mem_mcp",
-		"memory_type":   "semantic",
+		"memory_class":  "semantic",
+		"memory_kind":   "fact",
 		"scope_type":    "project",
 		"scope_id":      "agentvault",
 		"content":       "AgentVault knowledge writes are journal-first.",
@@ -151,14 +152,16 @@ func TestKnowledgeToolsEndToEnd(t *testing.T) {
 	}, nil)
 
 	var memories []struct {
-		ID string `json:"id"`
+		ID          string `json:"id"`
+		MemoryClass string `json:"memoryClass"`
+		MemoryKind  string `json:"memoryKind"`
 	}
 	call("agentvault.list_memories", map[string]interface{}{
-		"scope_type":  "project",
-		"scope_id":    "agentvault",
-		"memory_type": "semantic",
+		"scope_type":   "project",
+		"scope_id":     "agentvault",
+		"memory_class": "semantic",
 	}, &memories)
-	if len(memories) != 1 || memories[0].ID != "mem_mcp" {
+	if len(memories) != 1 || memories[0].ID != "mem_mcp" || memories[0].MemoryClass != "semantic" || memories[0].MemoryKind != "fact" {
 		t.Fatalf("unexpected memories: %+v", memories)
 	}
 
@@ -171,7 +174,7 @@ func TestKnowledgeToolsEndToEnd(t *testing.T) {
 		"agent_id":  "backend-engineer",
 		"project":   "agentvault",
 		"objective": "Exercise the knowledge MCP surface",
-		"branch":    "feat/universal-knowledge-core",
+		"branch":    "feat/unified-memory-core",
 	}, &session)
 	if session.Status != "active" {
 		t.Fatalf("unexpected initial session: %+v", session)
