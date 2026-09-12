@@ -26,6 +26,7 @@ func (s *Server) prepareContextRequest(store *knowledge.Store, req contract.Comp
 	if len(principal.Scope.PathPrefixes) > 0 {
 		return req, nil, fmt.Errorf("%w: context:compile does not yet support path-prefix scope", authz.ErrForbidden)
 	}
+	scoped := authz.HasResourceScope(principal)
 
 	req.Project = strings.TrimSpace(req.Project)
 	req.WorkspaceID = strings.TrimSpace(req.WorkspaceID)
@@ -35,6 +36,9 @@ func (s *Server) prepareContextRequest(store *knowledge.Store, req contract.Comp
 	if req.SessionID != "" {
 		session, err := store.GetSession(req.SessionID)
 		if err != nil {
+			if scoped {
+				return req, nil, fmt.Errorf("%w: requested session is outside context scope", authz.ErrForbidden)
+			}
 			return req, nil, err
 		}
 		if req.Project != "" && session.Project != req.Project {
@@ -44,7 +48,7 @@ func (s *Server) prepareContextRequest(store *knowledge.Store, req contract.Comp
 			return req, nil, fmt.Errorf("%w: requested agent does not match durable session agent", authz.ErrForbidden)
 		}
 		if err := authz.Authorize(principal, authz.ContextCompile, authz.Resource{Project: session.Project, SessionID: session.ID}); err != nil {
-			return req, nil, err
+			return req, nil, fmt.Errorf("%w: requested session is outside context scope", authz.ErrForbidden)
 		}
 		req.Project = session.Project
 		req.AgentID = session.AgentID
@@ -60,7 +64,7 @@ func (s *Server) prepareContextRequest(store *knowledge.Store, req contract.Comp
 	}
 	if req.Project != "" {
 		if err := authorizeContextProjectResource(principal, req, req.Project, req.SessionID); err != nil {
-			return req, nil, err
+			return req, nil, fmt.Errorf("%w: requested project is outside context scope", authz.ErrForbidden)
 		}
 	}
 
@@ -72,7 +76,7 @@ func (s *Server) prepareContextRequest(store *knowledge.Store, req contract.Comp
 		}
 		if len(principal.Scope.Projects) > 0 {
 			if err := authorizeContextProjectResource(principal, req, req.WorkspaceID, req.SessionID); err != nil {
-				return req, nil, fmt.Errorf("%w: workspace is outside granted project scope", err)
+				return req, nil, fmt.Errorf("%w: workspace is outside granted project scope", authz.ErrForbidden)
 			}
 		}
 	}
@@ -84,10 +88,13 @@ func (s *Server) prepareContextRequest(store *knowledge.Store, req contract.Comp
 		}
 		object, err := store.GetObject(id)
 		if err != nil {
+			if scoped {
+				return req, nil, fmt.Errorf("%w: explicit object is outside context scope", authz.ErrForbidden)
+			}
 			return req, nil, err
 		}
 		if err := authorizeContextProjectResource(principal, req, object.Project, req.SessionID); err != nil {
-			return req, nil, fmt.Errorf("%w: explicit object %s is outside context scope", err, id)
+			return req, nil, fmt.Errorf("%w: explicit object is outside context scope", authz.ErrForbidden)
 		}
 	}
 	return req, &principal, nil
