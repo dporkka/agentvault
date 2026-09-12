@@ -165,11 +165,11 @@ func (s *Store) projectMemory(memory contract.MemoryRecord) error {
 	}
 	_, err = s.db.Exec(`
 		INSERT OR IGNORE INTO memory_records (
-			id, memory_type, scope_type, scope_id, content, object_id, provenance_id,
+			id, memory_class, memory_kind, scope_type, scope_id, content, object_id, provenance_id,
 			confidence, valid_from, valid_to, supersedes_id, metadata_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		memory.ID, memory.MemoryType, memory.ScopeType, memory.ScopeID, memory.Content,
-		nullIfEmpty(memory.ObjectID), nullIfEmpty(memory.ProvenanceID), memory.Confidence,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		memory.ID, memory.MemoryClass, nullIfEmpty(memory.MemoryKind), memory.ScopeType, memory.ScopeID,
+		memory.Content, nullIfEmpty(memory.ObjectID), nullIfEmpty(memory.ProvenanceID), memory.Confidence,
 		nullIfEmpty(memory.ValidFrom), nullIfEmpty(memory.ValidTo), nullIfEmpty(memory.SupersedesID),
 		string(metadata), memory.CreatedAt, memory.UpdatedAt,
 	)
