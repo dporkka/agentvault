@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/agentvault/core/internal/ai"
+	"github.com/agentvault/core/internal/authz"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/contextcompiler"
 	"github.com/agentvault/core/internal/contract"
@@ -33,14 +34,14 @@ func (s *Server) RegisterScopedAIInvokeTool() {
 		Name:        "agentvault.ask",
 		Description: "Ask the configured AI provider using only project/session context authorized by this capability identity.",
 		InputSchema: makeSchema(map[string]interface{}{
-			"question":      schemaString("Question to answer from authorized AgentVault context"),
-			"workspace_id":  schemaString("Optional memory workspace; constrained to authorized project/session context"),
-			"project":       schemaString("Optional authorized project; defaults when exactly one project is granted"),
-			"session_id":    schemaString("Optional/required durable session depending on capability scope"),
-			"object_ids":    schemaStringArray("Optional explicit objects; every object is pre-authorized"),
-			"token_budget":  schemaInt("Approximate Context Compiler token budget", 8000),
-			"max_items":     schemaInt("Maximum authorized context items", 40),
-			"as_of":         schemaString("Optional RFC3339 time for temporal resolution"),
+			"question":     schemaString("Question to answer from authorized AgentVault context"),
+			"workspace_id": schemaString("Optional memory workspace; constrained to authorized project/session context"),
+			"project":      schemaString("Optional authorized project; defaults when exactly one project is granted"),
+			"session_id":   schemaString("Optional/required durable session depending on capability scope"),
+			"object_ids":   schemaStringArray("Optional explicit objects; every object is pre-authorized"),
+			"token_budget": schemaInt("Approximate Context Compiler token budget", 8000),
+			"max_items":    schemaInt("Maximum authorized context items", 40),
+			"as_of":        schemaString("Optional RFC3339 time for temporal resolution"),
 		}, []string{"question"}),
 		Handler: func(args map[string]interface{}) (string, error) {
 			if initErr != nil {
