@@ -5,6 +5,7 @@ import (
 
 	"github.com/agentvault/core/internal/contextcompiler"
 	"github.com/agentvault/core/internal/contract"
+	"github.com/agentvault/core/internal/memory"
 )
 
 func (s *Server) handleCompileContext(w http.ResponseWriter, r *http.Request) {
@@ -13,7 +14,11 @@ func (s *Server) handleCompileContext(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
 		return
 	}
-	bundle, err := contextcompiler.New(s.searcher, s.knowledge).Compile(req)
+	bundle, err := contextcompiler.CompileUnified(
+		contextcompiler.New(s.searcher, s.knowledge),
+		memory.NewStore(s.db),
+		req,
+	)
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
