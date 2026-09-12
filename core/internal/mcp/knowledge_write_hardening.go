@@ -99,4 +99,17 @@ func (s *Server) HardenKnowledgeWriteTools() {
 		}
 		return nil
 	})
+
+	wrap("agentvault.close_session", func(args map[string]interface{}) error {
+		status := strings.ToLower(strings.TrimSpace(stringArg(args, "status")))
+		if status == "" {
+			return nil
+		}
+		switch status {
+		case "completed", "failed", "cancelled", "blocked":
+			return nil
+		default:
+			return fmt.Errorf("unsupported session terminal status %q", status)
+		}
+	})
 }
