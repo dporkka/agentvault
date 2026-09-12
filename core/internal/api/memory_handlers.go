@@ -61,7 +61,7 @@ func (s *Server) handleMemoryByID(w http.ResponseWriter, r *http.Request) {
 	if record.Kind == "" {
 		writeJSON(w, http.StatusNotFound, map[string]interface{}{
 			"error":  "not a memory",
-			"detail": fmt.Sprintf("note %s is not classified as semantic memory", id),
+			"detail": fmt.Sprintf("note %s is not classified as memory", id),
 		})
 		return
 	}
@@ -77,6 +77,19 @@ func memoryQueryFromRequest(r *http.Request) (memory.Query, error) {
 			AgentID:     strings.TrimSpace(params.Get("agent")),
 			SessionID:   strings.TrimSpace(params.Get("session")),
 		},
+	}
+
+	if rawClasses := strings.TrimSpace(params.Get("class")); rawClasses != "" {
+		for _, raw := range strings.Split(rawClasses, ",") {
+			class := memory.Class(strings.TrimSpace(raw))
+			if class == "" {
+				continue
+			}
+			if !class.Valid() {
+				return memory.Query{}, fmt.Errorf("unsupported memory class %q", class)
+			}
+			query.Classes = append(query.Classes, class)
+		}
 	}
 
 	if rawKinds := strings.TrimSpace(params.Get("kind")); rawKinds != "" {
