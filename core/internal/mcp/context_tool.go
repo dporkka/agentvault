@@ -7,18 +7,21 @@ import (
 	"github.com/agentvault/core/internal/contextcompiler"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/knowledge"
+	"github.com/agentvault/core/internal/memory"
 )
 
 // RegisterContextTool exposes deterministic context compilation to MCP clients.
 func (s *Server) RegisterContextTool() {
 	store := knowledge.New(s.db, s.vaultPath)
+	fileMemories := memory.NewStore(s.db)
 	initErr := store.ReplayJournal()
 	s.tools["agentvault.compile_context"] = Tool{
 		Name:        "agentvault.compile_context",
-		Description: "Compile evidence-backed, token-budgeted context for an agent task from notes, current memories, typed objects, temporal relations, and durable session history without making an LLM call.",
+		Description: "Compile evidence-backed, token-budgeted context for an agent task from Markdown and journal memories, notes, typed objects, temporal relations, and durable session history without making an LLM call.",
 		InputSchema: makeSchema(map[string]interface{}{
 			"task":         schemaString("Task or objective the context should support"),
-			"project":      schemaString("Optional project scope"),
+			"workspace_id": schemaString("Optional memory workspace scope; defaults to project when omitted"),
+			"project":      schemaString("Optional project content scope"),
 			"agent_id":     schemaString("Optional stable agent identity"),
 			"session_id":   schemaString("Optional current durable AgentVault session ID"),
 			"object_ids":   schemaStringArray("Optional stable object IDs that must receive priority"),
@@ -30,16 +33,21 @@ func (s *Server) RegisterContextTool() {
 			if initErr != nil {
 				return "", fmt.Errorf("knowledge projection is unavailable: %w", initErr)
 			}
-			bundle, err := contextcompiler.New(s.searcher, store).Compile(contract.CompileContextRequest{
-				Task:        stringArg(args, "task"),
-				Project:     stringArg(args, "project"),
-				AgentID:     stringArg(args, "agent_id"),
-				SessionID:   stringArg(args, "session_id"),
-				ObjectIDs:   stringSliceArg(args, "object_ids"),
-				TokenBudget: intArg(args, "token_budget", 8000),
-				MaxItems:    intArg(args, "max_items", 40),
-				AsOf:        stringArg(args, "as_of"),
-			})
+			bundle, err := contextcompiler.CompileUnified(
+				contextcompiler.New(s.searcher, store),
+				fileMemories,
+				contract.CompileContextRequest{
+					Task:        stringArg(args, "task"),
+					WorkspaceID: stringArg(args, "workspace_id"),
+					Project:     stringArg(args, "project"),
+					AgentID:     stringArg(args, "agent_id"),
+					SessionID:   stringArg(args, "session_id"),
+					ObjectIDs:   stringSliceArg(args, "object_ids"),
+					TokenBudget: intArg(args, "token_budget", 8000),
+					MaxItems:    intArg(args, "max_items", 40),
+					AsOf:        stringArg(args, "as_of"),
+				},
+			)
 			if err != nil {
 				return "", err
 			}
