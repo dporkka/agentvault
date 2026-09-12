@@ -322,8 +322,11 @@ func (s *Store) RelationsForObject(objectID string) ([]contract.ObjectRelation, 
 // RecordMemory creates a scoped memory record without mutating older memories.
 // Superseded records remain queryable for historical reconstruction.
 func (s *Store) RecordMemory(req contract.CreateMemoryRequest) (contract.MemoryRecord, error) {
-	if !validMemoryType(req.MemoryType) {
-		return contract.MemoryRecord{}, errors.New("memoryType must be working, episodic, semantic, or procedural")
+	if !validMemoryClass(req.MemoryClass) {
+		return contract.MemoryRecord{}, errors.New("memoryClass must be working, episodic, semantic, or procedural")
+	}
+	if req.MemoryKind != "" && !validMemoryKind(req.MemoryKind) {
+		return contract.MemoryRecord{}, errors.New("invalid memoryKind")
 	}
 	if strings.TrimSpace(req.ScopeType) == "" || strings.TrimSpace(req.ScopeID) == "" {
 		return contract.MemoryRecord{}, errors.New("scopeType and scopeId are required")
@@ -360,7 +363,8 @@ func (s *Store) RecordMemory(req contract.CreateMemoryRequest) (contract.MemoryR
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	memory := contract.MemoryRecord{
 		ID:           id,
-		MemoryType:   req.MemoryType,
+		MemoryClass:  req.MemoryClass,
+		MemoryKind:   req.MemoryKind,
 		ScopeType:    req.ScopeType,
 		ScopeID:      req.ScopeID,
 		Content:      req.Content,
@@ -387,12 +391,12 @@ func (s *Store) GetMemory(id string) (contract.MemoryRecord, error) {
 	var memory contract.MemoryRecord
 	var metadataJSON string
 	err := s.db.QueryRow(`
-		SELECT id, memory_type, scope_type, scope_id, content,
+		SELECT id, memory_class, COALESCE(memory_kind, ''), scope_type, scope_id, content,
 		       COALESCE(object_id, ''), COALESCE(provenance_id, ''), confidence,
 		       COALESCE(valid_from, ''), COALESCE(valid_to, ''), COALESCE(supersedes_id, ''),
 		       metadata_json, created_at, updated_at
 		FROM memory_records WHERE id = ?`, id).Scan(
-		&memory.ID, &memory.MemoryType, &memory.ScopeType, &memory.ScopeID, &memory.Content,
+		&memory.ID, &memory.MemoryClass, &memory.MemoryKind, &memory.ScopeType, &memory.ScopeID, &memory.Content,
 		&memory.ObjectID, &memory.ProvenanceID, &memory.Confidence, &memory.ValidFrom,
 		&memory.ValidTo, &memory.SupersedesID, &metadataJSON, &memory.CreatedAt, &memory.UpdatedAt,
 	)
@@ -405,28 +409,28 @@ func (s *Store) GetMemory(id string) (contract.MemoryRecord, error) {
 	return memory, nil
 }
 
-// ListMemories returns memories for a scope, optionally filtered by memoryType.
-func (s *Store) ListMemories(scopeType, scopeID, memoryType string, limit int) ([]contract.MemoryRecord, error) {
+// ListMemories returns memories for a scope, optionally filtered by memoryClass.
+func (s *Store) ListMemories(scopeType, scopeID, memoryClass string, limit int) ([]contract.MemoryRecord, error) {
 	if scopeType == "" || scopeID == "" {
 		return nil, errors.New("scopeType and scopeId are required")
 	}
-	if memoryType != "" && !validMemoryType(memoryType) {
-		return nil, errors.New("invalid memoryType")
+	if memoryClass != "" && !validMemoryClass(memoryClass) {
+		return nil, errors.New("invalid memoryClass")
 	}
 	if limit <= 0 || limit > 1000 {
 		limit = defaultLimit
 	}
 
 	query := `
-		SELECT id, memory_type, scope_type, scope_id, content,
+		SELECT id, memory_class, COALESCE(memory_kind, ''), scope_type, scope_id, content,
 		       COALESCE(object_id, ''), COALESCE(provenance_id, ''), confidence,
 		       COALESCE(valid_from, ''), COALESCE(valid_to, ''), COALESCE(supersedes_id, ''),
 		       metadata_json, created_at, updated_at
 		FROM memory_records WHERE scope_type = ? AND scope_id = ?`
 	args := []interface{}{scopeType, scopeID}
-	if memoryType != "" {
-		query += " AND memory_type = ?"
-		args = append(args, memoryType)
+	if memoryClass != "" {
+		query += " AND memory_class = ?"
+		args = append(args, memoryClass)
 	}
 	query += " ORDER BY updated_at DESC LIMIT ?"
 	args = append(args, limit)
@@ -442,7 +446,7 @@ func (s *Store) ListMemories(scopeType, scopeID, memoryType string, limit int) (
 		var memory contract.MemoryRecord
 		var metadataJSON string
 		if err := rows.Scan(
-			&memory.ID, &memory.MemoryType, &memory.ScopeType, &memory.ScopeID, &memory.Content,
+			&memory.ID, &memory.MemoryClass, &memory.MemoryKind, &memory.ScopeType, &memory.ScopeID, &memory.Content,
 			&memory.ObjectID, &memory.ProvenanceID, &memory.Confidence, &memory.ValidFrom,
 			&memory.ValidTo, &memory.SupersedesID, &metadataJSON, &memory.CreatedAt, &memory.UpdatedAt,
 		); err != nil {
@@ -671,9 +675,18 @@ func (s *Store) validateOptionalObject(id string) error {
 	return nil
 }
 
-func validMemoryType(value string) bool {
+func validMemoryClass(value string) bool {
 	switch value {
 	case "working", "episodic", "semantic", "procedural":
+		return true
+	default:
+		return false
+	}
+}
+
+func validMemoryKind(value string) bool {
+	switch value {
+	case "observation", "episode", "fact", "preference", "decision", "procedure", "constraint", "summary":
 		return true
 	default:
 		return false
