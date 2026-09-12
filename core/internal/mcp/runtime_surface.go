@@ -14,11 +14,9 @@ import (
 // explicit opt-in.
 //
 // Bound capability identities receive only explicitly granted tool families.
-// Mutation capabilities enforce path/project/session restrictions against
-// persisted proposal/session resources. knowledge:read, context:compile, and
-// durable machine-write families enforce project/session restrictions. Path-
-// prefix scope remains unsupported for structured knowledge/context writes and
-// reads; vault:read and ai:invoke remain global-only.
+// Structured knowledge/context families support project/session scope but not
+// path-prefix scope. Scoped AI invocation additionally requires context:compile
+// so provider execution cannot acquire vault retrieval authority implicitly.
 func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 	if s.capabilityPrincipal != nil {
 		if allowDirectWrites {
@@ -29,8 +27,8 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 			return authz.ErrUnauthenticated
 		}
 
-		if authz.HasAnyCapability(principal, authz.VaultRead, authz.AIInvoke) && authz.HasResourceScope(principal) {
-			return fmt.Errorf("vault:read and ai:invoke do not yet support path/project/session scope")
+		if authz.HasCapability(principal, authz.VaultRead) && authz.HasResourceScope(principal) {
+			return fmt.Errorf("vault:read does not yet support path/project/session scope")
 		}
 		if authz.HasAnyCapability(
 			principal,
@@ -39,8 +37,12 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 			authz.KnowledgeWrite,
 			authz.MemoryWrite,
 			authz.SessionWrite,
+			authz.AIInvoke,
 		) && len(principal.Scope.PathPrefixes) > 0 {
-			return fmt.Errorf("structured knowledge/context capabilities do not yet support path-prefix scope")
+			return fmt.Errorf("structured knowledge/context/AI capabilities do not yet support path-prefix scope")
+		}
+		if authz.HasCapability(principal, authz.AIInvoke) && authz.HasResourceScope(principal) && !authz.HasCapability(principal, authz.ContextCompile) {
+			return fmt.Errorf("scoped ai:invoke requires context:compile")
 		}
 
 		if authz.HasCapability(principal, authz.VaultRead) {
@@ -58,7 +60,11 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 			s.RegisterContextTool()
 		}
 		if authz.HasCapability(principal, authz.AIInvoke) {
-			s.RegisterAIInvokeTool()
+			if authz.HasResourceScope(principal) {
+				s.RegisterScopedAIInvokeTool()
+			} else {
+				s.RegisterAIInvokeTool()
+			}
 		}
 
 		if authz.HasAnyCapability(
@@ -72,7 +78,7 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 		) {
 			// Mutation registration performs crash recovery, so do it only for a
 			// principal that actually carries mutation authority. A principal with
-			// only knowledge/context authority must not reconcile file mutation state.
+			// only knowledge/context/AI authority must not reconcile file mutation state.
 			s.RegisterMutationTools()
 		}
 		return nil
