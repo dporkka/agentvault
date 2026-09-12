@@ -27,25 +27,33 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!title.trim()) return;
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) return;
+
+    const normalizedTags = tags
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(Boolean);
+    const normalizedProject = project.trim();
+
     setLoading(true);
     setError(null);
 
     try {
       if (isEdit) {
         const result = await api.updateNote(editNoteId!, {
-          title: title,
+          title: normalizedTitle,
           content: content || undefined,
-          tags: tags ? tags.split(',').map(t => t.trim()) : undefined,
+          tags: normalizedTags.length > 0 ? normalizedTags : undefined,
         });
         onCreated?.(result.id, result.path);
       } else {
-        // Create: first create the note, then update with content
+        // Create: first create the note, then update with content.
         const result = await api.createNote({
-          type: type,
-          title: title,
-          project: project || undefined,
-          tags: tags ? tags.split(',').map(t => t.trim()) : undefined,
+          type,
+          title: normalizedTitle,
+          project: normalizedProject || undefined,
+          tags: normalizedTags.length > 0 ? normalizedTags : undefined,
         });
         if (content) {
           await api.updateNote(result.id, { content });
@@ -69,6 +77,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           </h2>
           <input
             type="text"
+            aria-label="Note title"
             value={title}
             onChange={e => setTitle(e.target.value)}
             placeholder="Note title..."
@@ -100,6 +109,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           )}
           <button
             onClick={handleSubmit}
+            aria-label={isEdit ? 'Save note' : 'Create note'}
             disabled={loading || !title.trim()}
             className="px-4 py-1.5 text-sm rounded-md bg-vault-accent text-white disabled:opacity-50 hover:bg-vault-accent-hover transition-colors"
           >
@@ -113,6 +123,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         <div className="flex items-center gap-4 px-6 py-2 border-b border-vault-border flex-shrink-0 bg-vault-bg-tertiary/50">
           <input
             type="text"
+            aria-label="Project"
             value={project}
             onChange={e => setProject(e.target.value)}
             placeholder="Project (optional)"
@@ -120,6 +131,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           />
           <input
             type="text"
+            aria-label="Tags"
             value={tags}
             onChange={e => setTags(e.target.value)}
             placeholder="Tags (comma-separated)"

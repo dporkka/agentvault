@@ -36,6 +36,7 @@ func annotationsForTool(name string) ToolAnnotations {
 	case "agentvault.search",
 		"agentvault.read_note",
 		"agentvault.get_links",
+		"agentvault.recall_memories",
 		"agentvault.list_projects",
 		"agentvault.list_recent",
 		"agentvault.git_status":
