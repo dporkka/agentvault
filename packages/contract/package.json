@@ -13,6 +13,7 @@
     "./knowledge": "./src/knowledge.ts",
     "./context": "./src/context.ts",
     "./mutations": "./src/mutations.ts",
+    "./capabilities": "./src/capabilities.ts",
     "./knowledge-client": "./src/knowledge-client.ts"
   }
 }
