@@ -162,13 +162,12 @@ func TestRegisterRuntimeSurfaceExplicitReadFamilies(t *testing.T) {
 	}
 }
 
-func TestRegisterRuntimeSurfaceReadCapabilitiesFailClosedWithResourceScope(t *testing.T) {
+func TestRegisterRuntimeSurfaceGlobalOnlyFamiliesFailClosedWithResourceScope(t *testing.T) {
 	_, database, vault := setupKnowledgeMCPServer(t)
 	defer database.Close()
 
 	for _, capability := range []authz.Capability{
 		authz.VaultRead,
-		authz.KnowledgeRead,
 		authz.ContextCompile,
 		authz.AIInvoke,
 	} {
@@ -192,12 +191,74 @@ func TestRegisterRuntimeSurfaceReadCapabilitiesFailClosedWithResourceScope(t *te
 			}
 			err = server.RegisterRuntimeSurface(false)
 			if err == nil || !strings.Contains(err.Error(), "do not yet support") {
-				t.Fatalf("expected scoped read capability to fail closed, got %v", err)
+				t.Fatalf("expected scoped global-only capability to fail closed, got %v", err)
 			}
 			if len(server.tools) != 0 || len(server.resources) != 0 {
 				t.Fatalf("failed registration leaked tools=%d resources=%d", len(server.tools), len(server.resources))
 			}
 		})
+	}
+}
+
+func TestRegisterRuntimeSurfaceKnowledgeReadAllowsProjectAndSessionScope(t *testing.T) {
+	_, database, vault := setupKnowledgeMCPServer(t)
+	defer database.Close()
+
+	registry, err := authz.NewRegistry(vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued, err := registry.Mint(authz.MintRequest{
+		AgentID:      "knowledge-reader",
+		Capabilities: []authz.Capability{authz.KnowledgeRead},
+		Scope: authz.Scope{
+			Projects: []string{"alpha"},
+			Sessions: []string{"session-alpha"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServer(vault, database)
+	if err := server.SetCapabilityToken(issued.Token); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.RegisterRuntimeSurface(false); err != nil {
+		t.Fatalf("project/session-scoped knowledge:read should register: %v", err)
+	}
+	for _, expected := range []string{"agentvault.get_object", "agentvault.list_memories", "agentvault.get_session"} {
+		if _, ok := server.tools[expected]; !ok {
+			t.Errorf("scoped knowledge surface missing %s", expected)
+		}
+	}
+}
+
+func TestRegisterRuntimeSurfaceKnowledgeReadRejectsPathScope(t *testing.T) {
+	_, database, vault := setupKnowledgeMCPServer(t)
+	defer database.Close()
+
+	registry, err := authz.NewRegistry(vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued, err := registry.Mint(authz.MintRequest{
+		AgentID:      "knowledge-reader",
+		Capabilities: []authz.Capability{authz.KnowledgeRead},
+		Scope:        authz.Scope{PathPrefixes: []string{"30-projects/alpha"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(vault, database)
+	if err := server.SetCapabilityToken(issued.Token); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.RegisterRuntimeSurface(false); err == nil || !strings.Contains(err.Error(), "path-prefix") {
+		t.Fatalf("expected knowledge:read path scope to fail closed, got %v", err)
+	}
+	if len(server.tools) != 0 {
+		t.Fatalf("failed knowledge registration leaked %d tools", len(server.tools))
 	}
 }
 

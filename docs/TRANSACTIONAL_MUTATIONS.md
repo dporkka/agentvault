@@ -142,7 +142,14 @@ A capability-bound MCP process instead registers only explicitly granted familie
 
 Structured knowledge and session writes are not included in those grants. They remain unavailable to a bound capability identity until resource-aware write policies are implemented.
 
-The first non-mutation read-side families are deliberately **global-only**. If a principal combines `vault:read`, `knowledge:read`, `context:compile`, or `ai:invoke` with any path/project/session restriction, MCP runtime registration fails closed instead of silently ignoring that scope. Mutation-only principals may continue to use scoped restrictions because mutation handlers enforce them against persisted resources.
+Scope semantics are capability-specific:
+
+- `mutation:*` supports path-prefix, project, and durable-session restrictions.
+- `knowledge:read` supports project and durable-session restrictions. It authorizes persisted objects/sessions/memory scopes, filters cross-project relation edges, and deliberately does not let a session-only identity expand into project-wide object or memory reads.
+- `knowledge:read` does **not** yet support path-prefix restrictions because structured records without canonical file paths need an explicit policy.
+- `vault:read`, `context:compile`, and `ai:invoke` remain global-only. Any resource scope combined with those families fails MCP registration closed.
+
+Context Compiler remains global-only because project-filtered notes/memories are not its only evidence path: explicit object IDs, cross-object relations, and provenance records must also be filtered before scoped compilation can be claimed safely.
 
 A pure read-side capability identity does not initialize mutation tools or mutation crash recovery as a startup side effect.
 
@@ -172,4 +179,4 @@ Capability types, including MCP read-side capabilities, are exported from `@agen
 
 Before extending this protocol to multi-file proposals, add an explicit transaction manifest with ordered operations, durable per-operation progress, rollback material for every target, deterministic recovery, and an inter-process writer-coordination strategy.
 
-Before adding `knowledge:write`, memory/session write capabilities, or scoped read-side capability families, implement resource-aware policy at the persisted-object/session/memory boundary and adversarial tests that prove out-of-scope data cannot leak through alternate retrieval paths. A multi-file UI or a claim of fully least-privilege MCP should not ship ahead of those semantics.
+Before adding `knowledge:write`, memory/session write capabilities, or path-scoped structured reads, implement resource-aware policy at the persisted-object/session/memory boundary and adversarial tests that prove out-of-scope data cannot leak through alternate retrieval paths. Before scoped Context Compiler access, filter explicit objects, relations, provenance/evidence, notes, memories, and prior sessions against the principal. A multi-file UI or a claim of fully least-privilege MCP should not ship ahead of those semantics.
