@@ -258,22 +258,27 @@ func (c *candidateCollector) addMemories() error {
 			"semantic":   0.88,
 			"working":    0.82,
 			"episodic":   0.75,
-		}[memory.MemoryType]
+		}[memory.MemoryClass]
+		title := fmt.Sprintf("%s memory (%s:%s)", memory.MemoryClass, memory.ScopeType, memory.ScopeID)
+		if memory.MemoryKind != "" {
+			title = fmt.Sprintf("%s %s memory (%s:%s)", memory.MemoryClass, memory.MemoryKind, memory.ScopeType, memory.ScopeID)
+		}
 		c.add(contract.ContextItem{
 			Kind:       "memory",
 			ID:         memory.ID,
-			Title:      fmt.Sprintf("%s memory (%s:%s)", memory.MemoryType, memory.ScopeType, memory.ScopeID),
+			Title:      title,
 			Content:    memory.Content,
 			Score:      base + scopeBonus[memory.ID] + memory.Confidence*0.02,
 			ObjectIDs:  compactStrings(memory.ObjectID),
 			Provenance: c.provenanceFor(memory.ProvenanceID),
 			Metadata: map[string]interface{}{
-				"memoryType": memory.MemoryType,
-				"scopeType":  memory.ScopeType,
-				"scopeId":    memory.ScopeID,
-				"confidence": memory.Confidence,
-				"validFrom":  memory.ValidFrom,
-				"validTo":    memory.ValidTo,
+				"memoryClass": memory.MemoryClass,
+				"memoryKind":  memory.MemoryKind,
+				"scopeType":   memory.ScopeType,
+				"scopeId":     memory.ScopeID,
+				"confidence":  memory.Confidence,
+				"validFrom":   memory.ValidFrom,
+				"validTo":     memory.ValidTo,
 			},
 		})
 	}
@@ -354,8 +359,8 @@ func (c *candidateCollector) addObject(object contract.KnowledgeObject, score fl
 		ObjectIDs:  []string{object.ID},
 		Provenance: c.provenanceFor(object.ProvenanceID),
 		Metadata: map[string]interface{}{
-			"type":     object.Type,
-			"explicit": explicit,
+			"type":      object.Type,
+			"explicit":  explicit,
 			"updatedAt": object.UpdatedAt,
 		},
 	})
