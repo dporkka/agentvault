@@ -24,8 +24,8 @@ func requestToken(r *http.Request) string {
 		return token
 	}
 	token = strings.TrimSpace(r.Header.Get("Authorization"))
-	if strings.HasPrefix(token, "Bearer ") {
-		return strings.TrimSpace(strings.TrimPrefix(token, "Bearer "))
+	if len(token) >= 7 && strings.EqualFold(token[:7], "Bearer ") {
+		return strings.TrimSpace(token[7:])
 	}
 	return token
 }
