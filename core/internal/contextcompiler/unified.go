@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/memory"
+	"github.com/agentvault/core/internal/search"
 )
 
 // CompileUnified assembles one ranked context plane from both canonical memory
@@ -62,7 +64,11 @@ func CompileUnified(c *Compiler, fileMemories *memory.Store, req contract.Compil
 	if err := collector.addRelations(); err != nil {
 		return contract.ContextBundle{}, err
 	}
-	if err := collector.addNotes(); err != nil {
+	if fileMemories != nil {
+		if err := addNotesUnified(collector, fileMemories); err != nil {
+			return contract.ContextBundle{}, err
+		}
+	} else if err := collector.addNotes(); err != nil {
 		return contract.ContextBundle{}, err
 	}
 	if err := collector.addRecentSessions(); err != nil {
@@ -97,7 +103,7 @@ func CompileUnified(c *Compiler, fileMemories *memory.Store, req contract.Compil
 		Project:         req.Project,
 		AgentID:         req.AgentID,
 		SessionID:       req.SessionID,
-		AsOf:            asOf.Format("2006-01-02T15:04:05.999999999Z07:00"),
+		AsOf:            asOf.Format(time.RFC3339Nano),
 		TokenBudget:     budget,
 		EstimatedTokens: used,
 		Truncated:       truncated,
@@ -216,6 +222,60 @@ func addMarkdownMemories(c *candidateCollector, store *memory.Store) error {
 		})
 		// The same Markdown file would otherwise be added again as a generic note.
 		c.seen["note:"+record.NoteID] = true
+	}
+	return nil
+}
+
+// addNotesUnified preserves generic note search while ensuring that classified
+// memory notes can only enter through addMarkdownMemories, where workspace,
+// agent/session scope, validity, confidence, and supersession are enforced.
+func addNotesUnified(c *candidateCollector, store *memory.Store) error {
+	queryText := strings.Join(taskTerms(c.req.Task), " ")
+	if queryText == "" {
+		queryText = c.req.Task
+	}
+	results, err := c.compiler.searcher.Search(search.Query{
+		Q:       queryText,
+		Project: c.req.Project,
+		Limit:   24,
+	})
+	if err != nil {
+		return fmt.Errorf("search notes for context: %w", err)
+	}
+
+	for i, result := range results {
+		if c.seen["note:"+result.ID] {
+			continue
+		}
+		record, err := store.Get(context.Background(), result.ID)
+		if err != nil {
+			return fmt.Errorf("inspect note %s memory classification: %w", result.ID, err)
+		}
+		if record.Class != "" || record.Kind != "" {
+			// This is a memory note that was not visible in the current scoped
+			// memory query. Never reintroduce it through broad FTS search.
+			continue
+		}
+
+		detail, err := c.compiler.searcher.GetByID(result.ID)
+		if err != nil {
+			return fmt.Errorf("load note %s: %w", result.ID, err)
+		}
+		c.add(contract.ContextItem{
+			Kind:    "note",
+			ID:      result.ID,
+			Title:   result.Title,
+			Content: detail.Snippet,
+			Path:    result.Path,
+			Score:   0.84 - float64(i)*0.012,
+			Metadata: map[string]interface{}{
+				"type":      result.Type,
+				"project":   result.Project,
+				"status":    result.Status,
+				"tags":      result.Tags,
+				"updatedAt": result.UpdatedAt,
+			},
+		})
 	}
 	return nil
 }
