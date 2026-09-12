@@ -14,10 +14,11 @@ import (
 // explicit opt-in.
 //
 // Bound capability identities receive only explicitly granted tool families.
-// Mutation capabilities may retain path/project/session restrictions because
-// their handlers enforce those resources. The first non-mutation capability
-// families are intentionally global-only; if a principal combines one with any
-// resource scope, registration fails closed rather than silently ignoring it.
+// Mutation capabilities enforce path/project/session restrictions against
+// persisted proposal/session resources. knowledge:read can enforce project and
+// session restrictions against structured records, but path-prefix scope remains
+// unsupported for that family. vault:read, context:compile, and ai:invoke remain
+// global-only until every alternate retrieval path can enforce resource scope.
 func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 	if s.capabilityPrincipal != nil {
 		if allowDirectWrites {
@@ -28,15 +29,11 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 			return authz.ErrUnauthenticated
 		}
 
-		hasBroadReadCapability := authz.HasAnyCapability(
-			principal,
-			authz.VaultRead,
-			authz.KnowledgeRead,
-			authz.ContextCompile,
-			authz.AIInvoke,
-		)
-		if hasBroadReadCapability && authz.HasResourceScope(principal) {
-			return fmt.Errorf("non-mutation MCP capabilities do not yet support path/project/session scope")
+		if authz.HasAnyCapability(principal, authz.VaultRead, authz.ContextCompile, authz.AIInvoke) && authz.HasResourceScope(principal) {
+			return fmt.Errorf("vault:read, context:compile, and ai:invoke do not yet support path/project/session scope")
+		}
+		if authz.HasCapability(principal, authz.KnowledgeRead) && len(principal.Scope.PathPrefixes) > 0 {
+			return fmt.Errorf("knowledge:read does not yet support path-prefix scope")
 		}
 
 		if authz.HasCapability(principal, authz.VaultRead) {
