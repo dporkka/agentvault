@@ -29,6 +29,7 @@ describe('loadSettings', () => {
 
     const result = await loadSettings();
     expect(result).toEqual({
+      ...DEFAULT_APP_SETTINGS,
       serverUrl: 'http://custom.com',
       defaultProject: 'work',
       token: 'secure-token',
@@ -58,19 +59,33 @@ describe('persistSettings', () => {
   });
 
   it('writes non-sensitive settings to AsyncStorage and token to SecureStore', async () => {
-    const settings = { serverUrl: 'http://custom.com', defaultProject: 'work', token: 'secret' };
+    const settings = {
+      ...DEFAULT_APP_SETTINGS,
+      serverUrl: 'http://custom.com',
+      defaultProject: 'work',
+      token: 'secret',
+    };
 
     await persistSettings(settings);
 
     expect(AsyncStorage.setItem).toHaveBeenCalledWith(
       'agentvault_settings',
-      JSON.stringify({ serverUrl: 'http://custom.com', defaultProject: 'work' }),
+      JSON.stringify({
+        serverUrl: 'http://custom.com',
+        defaultProject: 'work',
+        autoSyncInterval: DEFAULT_APP_SETTINGS.autoSyncInterval,
+      }),
     );
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith('agentvault_token', 'secret');
   });
 
   it('deletes the secure token when the token is empty', async () => {
-    const settings = { serverUrl: 'http://custom.com', defaultProject: 'work', token: '' };
+    const settings = {
+      ...DEFAULT_APP_SETTINGS,
+      serverUrl: 'http://custom.com',
+      defaultProject: 'work',
+      token: '',
+    };
 
     await persistSettings(settings);
 
@@ -78,14 +93,24 @@ describe('persistSettings', () => {
   });
 
   it('does not throw when token deletion fails', async () => {
-    const settings = { serverUrl: 'http://custom.com', defaultProject: 'work', token: '' };
+    const settings = {
+      ...DEFAULT_APP_SETTINGS,
+      serverUrl: 'http://custom.com',
+      defaultProject: 'work',
+      token: '',
+    };
     (SecureStore.deleteItemAsync as jest.Mock).mockRejectedValue(new Error('not available'));
 
     await expect(persistSettings(settings)).resolves.toBeUndefined();
   });
 
   it('propagates errors when saving the token fails', async () => {
-    const settings = { serverUrl: 'http://custom.com', defaultProject: 'work', token: 'secret' };
+    const settings = {
+      ...DEFAULT_APP_SETTINGS,
+      serverUrl: 'http://custom.com',
+      defaultProject: 'work',
+      token: 'secret',
+    };
     (SecureStore.setItemAsync as jest.Mock).mockRejectedValue(new Error('locked'));
 
     await expect(persistSettings(settings)).rejects.toThrow('locked');
