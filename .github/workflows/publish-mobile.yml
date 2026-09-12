@@ -8,12 +8,12 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    tags:
-      - 'v*.*.*'
 
 permissions:
   contents: read
+
+env:
+  NODE_VERSION: '22'
 
 jobs:
   publish-mobile:
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: apps/mobile-expo/package-lock.json
       - name: Install Expo/EAS CLI
@@ -40,8 +40,10 @@ jobs:
       - name: Install dependencies
         working-directory: apps/mobile-expo
         run: npm ci
-      - name: Determine store submission availability
+      - name: Determine build and submission availability
+        shell: bash
         run: |
+          set -euo pipefail
           if [ -n "$EXPO_TOKEN" ]; then
             echo "EAS_BUILD_ENABLED=true" >> "$GITHUB_ENV"
           else
@@ -56,6 +58,11 @@ jobs:
             echo "ANDROID_SUBMIT_ENABLED=true" >> "$GITHUB_ENV"
           else
             echo "ANDROID_SUBMIT_ENABLED=false" >> "$GITHUB_ENV"
+          fi
+
+          if [ "${{ inputs.submit_to_stores }}" = "true" ] && [ -z "$EXPO_TOKEN" ]; then
+            echo "Store submission requires EXPO_TOKEN."
+            exit 1
           fi
       - name: Prepare mobile signing keys
         if: env.EAS_BUILD_ENABLED == 'true'
@@ -78,20 +85,20 @@ jobs:
             jq --arg appId "$ASC_APP_ID" '.submit.production.ios.ascAppId = $appId' eas.json > eas.json.tmp
             mv eas.json.tmp eas.json
           fi
-      - name: Build iOS (and submit if configured)
+      - name: Build iOS
         if: env.EAS_BUILD_ENABLED == 'true'
         working-directory: apps/mobile-expo
         run: |
-          if [ "$IOS_SUBMIT_ENABLED" == "true" ] && ( [ "${{ github.event_name }}" == "push" ] || [ "${{ inputs.submit_to_stores }}" == "true" ] ); then
+          if [ "${{ inputs.submit_to_stores }}" = "true" ] && [ "$IOS_SUBMIT_ENABLED" = "true" ]; then
             eas build --platform ios --profile production --auto-submit --non-interactive
           else
             eas build --platform ios --profile production --non-interactive
           fi
-      - name: Build Android (and submit if configured)
+      - name: Build Android
         if: env.EAS_BUILD_ENABLED == 'true'
         working-directory: apps/mobile-expo
         run: |
-          if [ "$ANDROID_SUBMIT_ENABLED" == "true" ] && ( [ "${{ github.event_name }}" == "push" ] || [ "${{ inputs.submit_to_stores }}" == "true" ] ); then
+          if [ "${{ inputs.submit_to_stores }}" = "true" ] && [ "$ANDROID_SUBMIT_ENABLED" = "true" ]; then
             eas build --platform android --profile production --auto-submit --non-interactive
           else
             eas build --platform android --profile production --non-interactive
@@ -100,8 +107,8 @@ jobs:
         if: env.EAS_BUILD_ENABLED == 'false'
         working-directory: apps/mobile-expo
         run: |
-          npx expo export --platform ios
-          npx expo export --platform android
+          npx expo export --platform ios --output-dir dist/ios
+          npx expo export --platform android --output-dir dist/android
       - name: Upload mobile bundle artifacts (fallback)
         if: env.EAS_BUILD_ENABLED == 'false'
         uses: actions/upload-artifact@v4

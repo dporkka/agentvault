@@ -4,10 +4,12 @@ import userEvent from '@testing-library/user-event';
 import NoteEditor from '../NoteEditor';
 
 const mockCreateNote = vi.hoisted(() => vi.fn());
+const mockUpdateNote = vi.hoisted(() => vi.fn());
 
 vi.mock('@/api/client', () => ({
   api: {
     createNote: mockCreateNote,
+    updateNote: mockUpdateNote,
   },
   ApiError: class extends Error {
     status: number;
@@ -21,6 +23,7 @@ vi.mock('@/api/client', () => ({
 describe('NoteEditor', () => {
   beforeEach(() => {
     mockCreateNote.mockReset();
+    mockUpdateNote.mockReset();
   });
 
   it('does not submit when the title is empty', async () => {
@@ -30,6 +33,7 @@ describe('NoteEditor', () => {
     render(<NoteEditor onCreated={onCreated} />);
 
     const submitButton = screen.getByRole('button', { name: /create note/i });
+    expect(submitButton).toBeDisabled();
     await user.click(submitButton);
 
     expect(mockCreateNote).not.toHaveBeenCalled();
@@ -43,9 +47,9 @@ describe('NoteEditor', () => {
 
     render(<NoteEditor onCreated={onCreated} />);
 
-    await user.type(screen.getByPlaceholderText('Note title'), '  My Note  ');
-    await user.type(screen.getByPlaceholderText('Project name (optional)'), '  work  ');
-    await user.type(screen.getByPlaceholderText('tag1, tag2, tag3'), '  a,  b,  ');
+    await user.type(screen.getByRole('textbox', { name: /note title/i }), '  My Note  ');
+    await user.type(screen.getByRole('textbox', { name: /^project$/i }), '  work  ');
+    await user.type(screen.getByRole('textbox', { name: /^tags$/i }), '  a,  b,  ');
 
     await user.click(screen.getByRole('button', { name: /meeting/i }));
     await user.click(screen.getByRole('button', { name: /create note/i }));
@@ -65,7 +69,7 @@ describe('NoteEditor', () => {
 
     render(<NoteEditor onCreated={vi.fn()} />);
 
-    await user.type(screen.getByPlaceholderText('Note title'), 'My Note');
+    await user.type(screen.getByRole('textbox', { name: /note title/i }), 'My Note');
     await user.click(screen.getByRole('button', { name: /create note/i }));
 
     expect(await screen.findByText('Server error')).toBeInTheDocument();

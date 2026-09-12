@@ -37,6 +37,7 @@ export default defineConfig({
     alias: {
       '@shared': resolve(__dirname, 'src/shared'),
       '@agentvault/contract': resolve(__dirname, '../../packages/contract/src'),
+      '@agentvault/ui/tokens.css': resolve(__dirname, '../../packages/ui/src/tokens.css'),
     },
   },
   publicDir: 'public',

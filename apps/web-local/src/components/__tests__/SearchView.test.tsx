@@ -56,7 +56,12 @@ describe('SearchView', () => {
     const input = screen.getByPlaceholderText('Search notes... (press / to focus)');
     fireEvent.change(input, { target: { value: 'hello' } });
 
-    await waitFor(() => expect(mockSearch).toHaveBeenCalledWith(expect.objectContaining({ q: 'hello' })));
+    await waitFor(() =>
+      expect(mockSearch).toHaveBeenCalledWith(
+        expect.objectContaining({ q: 'hello' }),
+        expect.anything(),
+      ),
+    );
     expect(await screen.findByText('Result')).toBeInTheDocument();
   });
 
@@ -75,7 +80,10 @@ describe('SearchView', () => {
     fireEvent.change(input, { target: { value: 'hello' } });
 
     await waitFor(() =>
-      expect(mockSearch).toHaveBeenCalledWith(expect.objectContaining({ q: 'hello', type: 'decision' })),
+      expect(mockSearch).toHaveBeenCalledWith(
+        expect.objectContaining({ q: 'hello', type: 'decision' }),
+        expect.anything(),
+      ),
     );
   });
 

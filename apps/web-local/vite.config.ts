@@ -5,6 +5,7 @@ import { resolve } from 'path';
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    dedupe: ['react', 'react-dom'],
     alias: {
       '@': resolve(__dirname, 'src'),
       '@agentvault/contract': resolve(__dirname, '../../packages/contract/src'),
