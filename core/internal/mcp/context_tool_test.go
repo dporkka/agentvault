@@ -16,12 +16,13 @@ func TestCompileContextTool(t *testing.T) {
 	store := knowledge.New(database, vault)
 	confidence := 0.95
 	if _, err := store.RecordMemory(contract.CreateMemoryRequest{
-		ID:         "mem_mcp_context",
-		MemoryType: "procedural",
-		ScopeType:  "project",
-		ScopeID:    "agentvault",
-		Content:    "Run focused tests before merging context compiler changes.",
-		Confidence: &confidence,
+		ID:          "mem_mcp_context",
+		MemoryClass: "procedural",
+		MemoryKind:  "procedure",
+		ScopeType:   "project",
+		ScopeID:     "agentvault",
+		Content:     "Run focused tests before merging context compiler changes.",
+		Confidence:  &confidence,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -51,6 +52,9 @@ func TestCompileContextTool(t *testing.T) {
 	for _, item := range bundle.Items {
 		if item.ID == "mem_mcp_context" {
 			found = true
+			if item.Metadata["memoryClass"] != "procedural" || item.Metadata["memoryKind"] != "procedure" {
+				t.Fatalf("unexpected memory metadata: %+v", item.Metadata)
+			}
 			break
 		}
 	}
