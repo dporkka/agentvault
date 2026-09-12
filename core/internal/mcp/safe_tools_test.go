@@ -12,6 +12,7 @@ func TestRegisterSafeToolsExcludesLegacyDirectFileWriters(t *testing.T) {
 
 	for _, expected := range []string{
 		"agentvault.search",
+		"agentvault.recall_memories",
 		"agentvault.read_note",
 		"agentvault.get_links",
 		"agentvault.list_projects",
