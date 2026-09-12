@@ -31,33 +31,38 @@ CREATE TABLE memory_supersessions (
 -- The legacy indexer already stores complete raw frontmatter as JSON. These
 -- triggers make memory_class a rebuildable projection without coupling the
 -- indexer to the new field immediately. Explicit supported memory_class values
--- are honored; legacy kind-only memories default to semantic.
+-- are honored; legacy kind-only memories default to semantic. Removing the kind
+-- clears the class so stale classification cannot survive a reindex.
 CREATE TRIGGER project_memory_class_after_insert
 AFTER INSERT ON notes
-WHEN NEW.memory_kind <> ''
 BEGIN
   UPDATE notes
-  SET memory_class = CASE COALESCE(json_extract(NEW.frontmatter_json, '$.memory_class'), '')
-    WHEN 'working' THEN 'working'
-    WHEN 'episodic' THEN 'episodic'
-    WHEN 'semantic' THEN 'semantic'
-    WHEN 'procedural' THEN 'procedural'
-    ELSE 'semantic'
+  SET memory_class = CASE
+    WHEN NEW.memory_kind = '' THEN ''
+    ELSE CASE COALESCE(json_extract(NEW.frontmatter_json, '$.memory_class'), '')
+      WHEN 'working' THEN 'working'
+      WHEN 'episodic' THEN 'episodic'
+      WHEN 'semantic' THEN 'semantic'
+      WHEN 'procedural' THEN 'procedural'
+      ELSE 'semantic'
+    END
   END
   WHERE id = NEW.id;
 END;
 
 CREATE TRIGGER project_memory_class_after_update
 AFTER UPDATE OF frontmatter_json, memory_kind ON notes
-WHEN NEW.memory_kind <> ''
 BEGIN
   UPDATE notes
-  SET memory_class = CASE COALESCE(json_extract(NEW.frontmatter_json, '$.memory_class'), '')
-    WHEN 'working' THEN 'working'
-    WHEN 'episodic' THEN 'episodic'
-    WHEN 'semantic' THEN 'semantic'
-    WHEN 'procedural' THEN 'procedural'
-    ELSE 'semantic'
+  SET memory_class = CASE
+    WHEN NEW.memory_kind = '' THEN ''
+    ELSE CASE COALESCE(json_extract(NEW.frontmatter_json, '$.memory_class'), '')
+      WHEN 'working' THEN 'working'
+      WHEN 'episodic' THEN 'episodic'
+      WHEN 'semantic' THEN 'semantic'
+      WHEN 'procedural' THEN 'procedural'
+      ELSE 'semantic'
+    END
   END
   WHERE id = NEW.id;
 END;
