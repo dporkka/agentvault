@@ -97,7 +97,8 @@ func TestObjectRelationMemoryLifecycle(t *testing.T) {
 	}
 
 	memory, err := store.RecordMemory(contract.CreateMemoryRequest{
-		MemoryType:   "semantic",
+		MemoryClass:  "semantic",
+		MemoryKind:   "decision",
 		ScopeType:    "project",
 		ScopeID:      "adacavo",
 		Content:      "Authorization decisions use OpenFGA.",
@@ -108,7 +109,7 @@ func TestObjectRelationMemoryLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecordMemory: %v", err)
 	}
-	if memory.ID == "" || memory.MemoryType != "semantic" {
+	if memory.ID == "" || memory.MemoryClass != "semantic" || memory.MemoryKind != "decision" {
 		t.Fatalf("unexpected memory: %+v", memory)
 	}
 
@@ -116,7 +117,7 @@ func TestObjectRelationMemoryLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMemories: %v", err)
 	}
-	if len(memories) != 1 || memories[0].ID != memory.ID {
+	if len(memories) != 1 || memories[0].ID != memory.ID || memories[0].MemoryKind != "decision" {
 		t.Fatalf("unexpected memories: %+v", memories)
 	}
 
@@ -233,7 +234,8 @@ func TestJournalReplayRestoresRebuiltProjection(t *testing.T) {
 	}
 	memory, err := store.RecordMemory(contract.CreateMemoryRequest{
 		ID:           "mem_restore",
-		MemoryType:   "semantic",
+		MemoryClass:  "semantic",
+		MemoryKind:   "fact",
 		ScopeType:    "project",
 		ScopeID:      "agentvault",
 		Content:      "SQLite is a projection, not the canonical machine-state store.",
@@ -329,7 +331,7 @@ func TestJournalReplayRestoresRebuiltProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMemories after rebuild: %v", err)
 	}
-	if len(restoredMemories) != 1 || restoredMemories[0].ID != memory.ID || restoredMemories[0].CreatedAt != memory.CreatedAt {
+	if len(restoredMemories) != 1 || restoredMemories[0].ID != memory.ID || restoredMemories[0].CreatedAt != memory.CreatedAt || restoredMemories[0].MemoryKind != "fact" {
 		t.Fatalf("memory was not restored exactly: %+v", restoredMemories)
 	}
 
@@ -345,17 +347,28 @@ func TestJournalReplayRestoresRebuiltProjection(t *testing.T) {
 	}
 }
 
-func TestRecordMemoryRejectsUnknownType(t *testing.T) {
+func TestRecordMemoryRejectsUnknownClassAndKind(t *testing.T) {
 	store, database, _ := setupStore(t)
 	defer database.Close()
 
 	_, err := store.RecordMemory(contract.CreateMemoryRequest{
-		MemoryType: "mystery",
-		ScopeType:  "project",
-		ScopeID:    "agentvault",
-		Content:    "invalid",
+		MemoryClass: "mystery",
+		ScopeType:   "project",
+		ScopeID:     "agentvault",
+		Content:     "invalid",
 	})
 	if err == nil {
-		t.Fatal("expected invalid memory type to fail")
+		t.Fatal("expected invalid memory class to fail")
+	}
+
+	_, err = store.RecordMemory(contract.CreateMemoryRequest{
+		MemoryClass: "semantic",
+		MemoryKind:  "mystery",
+		ScopeType:   "project",
+		ScopeID:     "agentvault",
+		Content:     "invalid",
+	})
+	if err == nil {
+		t.Fatal("expected invalid memory kind to fail")
 	}
 }
