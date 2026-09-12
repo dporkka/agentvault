@@ -94,32 +94,33 @@ func (s *Server) RegisterKnowledgeTools() {
 
 	s.tools["agentvault.record_memory"] = Tool{
 		Name:        "agentvault.record_memory",
-		Description: "Persist a scoped working, episodic, semantic, or procedural memory with confidence, provenance, temporal validity, and supersession history.",
+		Description: "Persist a scoped machine-authored memory with explicit lifecycle class, optional semantic kind, confidence, provenance, temporal validity, and supersession history.",
 		InputSchema: makeSchema(map[string]interface{}{
-			"id":             schemaString("Optional stable memory ID"),
-			"memory_type":    schemaStringEnum("Memory class", []string{"working", "episodic", "semantic", "procedural"}),
-			"scope_type":     schemaString("Scope class such as user, organization, project, agent, or session"),
-			"scope_id":       schemaString("Scope identifier"),
-			"content":        schemaString("Memory content"),
-			"object_id":      schemaString("Optional related knowledge object ID"),
-			"provenance_id":  schemaString("Optional provenance record"),
-			"confidence":     schemaNumber("Confidence from 0 to 1", 1),
-			"valid_from":     schemaString("Optional validity start"),
-			"valid_to":       schemaString("Optional validity end"),
-			"supersedes_id":  schemaString("Optional older memory superseded by this one"),
-			"metadata":       schemaObject("Optional memory metadata"),
-		}, []string{"memory_type", "scope_type", "scope_id", "content"}),
+			"id":            schemaString("Optional stable memory ID"),
+			"memory_class":  schemaStringEnum("Memory class", []string{"working", "episodic", "semantic", "procedural"}),
+			"memory_kind":   schemaStringEnum("Optional semantic kind", []string{"observation", "episode", "fact", "preference", "decision", "procedure", "constraint", "summary"}),
+			"scope_type":    schemaString("Scope class such as user, organization, project, agent, or session"),
+			"scope_id":      schemaString("Scope identifier"),
+			"content":       schemaString("Memory content"),
+			"object_id":     schemaString("Optional related knowledge object ID"),
+			"provenance_id": schemaString("Optional provenance record"),
+			"confidence":    schemaNumber("Confidence from 0 to 1", 1),
+			"valid_from":    schemaString("Optional validity start"),
+			"valid_to":      schemaString("Optional validity end"),
+			"supersedes_id": schemaString("Optional older memory superseded by this one"),
+			"metadata":      schemaObject("Optional memory metadata"),
+		}, []string{"memory_class", "scope_type", "scope_id", "content"}),
 		Handler: withStore(handleRecordMemoryTool),
 	}
 
 	s.tools["agentvault.list_memories"] = Tool{
 		Name:        "agentvault.list_memories",
-		Description: "List durable memories for a specific scope, optionally filtered by memory class.",
+		Description: "List durable machine-authored memories for a specific scope, optionally filtered by memory class.",
 		InputSchema: makeSchema(map[string]interface{}{
-			"scope_type":  schemaString("Scope class such as user, organization, project, agent, or session"),
-			"scope_id":    schemaString("Scope identifier"),
-			"memory_type": schemaStringEnum("Optional memory class", []string{"working", "episodic", "semantic", "procedural"}),
-			"limit":       schemaInt("Maximum memories to return", 100),
+			"scope_type":   schemaString("Scope class such as user, organization, project, agent, or session"),
+			"scope_id":     schemaString("Scope identifier"),
+			"memory_class": schemaStringEnum("Optional memory class", []string{"working", "episodic", "semantic", "procedural"}),
+			"limit":        schemaInt("Maximum memories to return", 100),
 		}, []string{"scope_type", "scope_id"}),
 		Handler: withStore(handleListMemoriesTool),
 	}
@@ -270,7 +271,8 @@ func handleRecordMemoryTool(store *knowledge.Store, args map[string]interface{})
 	}
 	memory, err := store.RecordMemory(contract.CreateMemoryRequest{
 		ID:           stringArg(args, "id"),
-		MemoryType:   stringArg(args, "memory_type"),
+		MemoryClass:  stringArg(args, "memory_class"),
+		MemoryKind:   stringArg(args, "memory_kind"),
 		ScopeType:    stringArg(args, "scope_type"),
 		ScopeID:      stringArg(args, "scope_id"),
 		Content:      stringArg(args, "content"),
@@ -292,7 +294,7 @@ func handleListMemoriesTool(store *knowledge.Store, args map[string]interface{})
 	memories, err := store.ListMemories(
 		stringArg(args, "scope_type"),
 		stringArg(args, "scope_id"),
-		stringArg(args, "memory_type"),
+		stringArg(args, "memory_class"),
 		intArg(args, "limit", 100),
 	)
 	if err != nil {
