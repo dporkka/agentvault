@@ -15,9 +15,10 @@ import (
 //
 // Bound capability identities receive only explicitly granted tool families.
 // Mutation capabilities enforce path/project/session restrictions against
-// persisted proposal/session resources. knowledge:read and context:compile can
-// enforce project/session restrictions, but path-prefix scope remains unsupported
-// for those structured families. vault:read and ai:invoke remain global-only.
+// persisted proposal/session resources. knowledge:read, context:compile, and
+// durable machine-write families enforce project/session restrictions. Path-
+// prefix scope remains unsupported for structured knowledge/context writes and
+// reads; vault:read and ai:invoke remain global-only.
 func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 	if s.capabilityPrincipal != nil {
 		if allowDirectWrites {
@@ -31,8 +32,15 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 		if authz.HasAnyCapability(principal, authz.VaultRead, authz.AIInvoke) && authz.HasResourceScope(principal) {
 			return fmt.Errorf("vault:read and ai:invoke do not yet support path/project/session scope")
 		}
-		if authz.HasAnyCapability(principal, authz.KnowledgeRead, authz.ContextCompile) && len(principal.Scope.PathPrefixes) > 0 {
-			return fmt.Errorf("knowledge:read and context:compile do not yet support path-prefix scope")
+		if authz.HasAnyCapability(
+			principal,
+			authz.KnowledgeRead,
+			authz.ContextCompile,
+			authz.KnowledgeWrite,
+			authz.MemoryWrite,
+			authz.SessionWrite,
+		) && len(principal.Scope.PathPrefixes) > 0 {
+			return fmt.Errorf("structured knowledge/context capabilities do not yet support path-prefix scope")
 		}
 
 		if authz.HasCapability(principal, authz.VaultRead) {
@@ -41,6 +49,9 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 		}
 		if authz.HasCapability(principal, authz.KnowledgeRead) {
 			s.RegisterKnowledgeReadTools()
+		}
+		if authz.HasAnyCapability(principal, authz.KnowledgeWrite, authz.MemoryWrite, authz.SessionWrite) {
+			s.RegisterKnowledgeWriteTools()
 		}
 		if authz.HasCapability(principal, authz.ContextCompile) {
 			s.RegisterContextTool()
@@ -59,8 +70,8 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 			authz.MutationReject,
 		) {
 			// Mutation registration performs crash recovery, so do it only for a
-			// principal that actually carries mutation authority. A pure read-side
-			// identity must not reconcile mutation lifecycle state as a startup side effect.
+			// principal that actually carries mutation authority. A principal with
+			// only knowledge/context authority must not reconcile file mutation state.
 			s.RegisterMutationTools()
 		}
 		return nil
