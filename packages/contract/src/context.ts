@@ -2,6 +2,7 @@ import type { ProvenanceEvidence } from './knowledge';
 
 export interface CompileContextRequest {
   task: string;
+  workspaceId?: string;
   project?: string;
   agentId?: string;
   sessionId?: string;
@@ -46,6 +47,7 @@ export interface ContextBundleStats {
 export interface ContextBundle {
   version: string;
   task: string;
+  workspaceId?: string;
   project?: string;
   agentId?: string;
   sessionId?: string;
