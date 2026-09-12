@@ -52,10 +52,11 @@ mutation:* lifecycle capabilities. Legacy direct-write MCP commands remain an
 explicit compatibility opt-in and cannot be combined with a capability identity.
 
 Scope support is capability-specific: mutation capabilities support path/project/
-session restrictions; structured knowledge read/write, memory writes, session
-writes, and context compilation support project/session restrictions; path-scoped
-structured access remains unsupported; and vault:read plus ai:invoke remain
-global-only until their full retrieval paths can enforce narrower scope.
+session restrictions; structured knowledge/context and durable machine writes
+support project/session restrictions but not path-prefix scope; vault:read is
+still global-only. Capability-bound ai:invoke always requires context:compile and
+uses only Context Compiler output, so project/session-scoped model invocation is
+supported without implicitly granting broad vault retrieval.
 
 Example:
   agentvault mcp serve
@@ -75,8 +76,10 @@ mutations. Supplying a capability token binds the process to that identity and
 registers only explicitly granted tool families. HTTP transport requires a
 capability token and uses that same token as the transport credential.
 
-Durable machine-authored knowledge/session writes use their own capability
-families and do not grant direct writes to user-authored vault files.
+Capability-bound AI invocation requires both ai:invoke and context:compile;
+provider execution receives only the context authorized by that identity.
+Durable machine-authored knowledge/session writes use their own capabilities and
+do not grant direct writes to user-authored vault files.
 
 --allow-direct-writes is mutually exclusive with a capability token so a scoped
 identity can never regain legacy unreviewed file-writing tools by accident.
