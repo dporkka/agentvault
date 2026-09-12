@@ -84,7 +84,8 @@ func TestKnowledgeHTTPAPIEndToEnd(t *testing.T) {
 
 	request(http.MethodPost, "/memory", map[string]interface{}{
 		"id":           "mem_http",
-		"memoryType":   "semantic",
+		"memoryClass":  "semantic",
+		"memoryKind":   "decision",
 		"scopeType":    "project",
 		"scopeId":      "agentvault",
 		"content":      "Other products consume AgentVault through stable integration boundaries.",
@@ -93,10 +94,12 @@ func TestKnowledgeHTTPAPIEndToEnd(t *testing.T) {
 	}, nil, http.StatusCreated)
 
 	var memories []struct {
-		ID string `json:"id"`
+		ID          string `json:"id"`
+		MemoryClass string `json:"memoryClass"`
+		MemoryKind  string `json:"memoryKind"`
 	}
-	request(http.MethodGet, "/memory?scopeType=project&scopeId=agentvault&memoryType=semantic", nil, &memories, http.StatusOK)
-	if len(memories) != 1 || memories[0].ID != "mem_http" {
+	request(http.MethodGet, "/memory?scopeType=project&scopeId=agentvault&memoryClass=semantic", nil, &memories, http.StatusOK)
+	if len(memories) != 1 || memories[0].ID != "mem_http" || memories[0].MemoryClass != "semantic" || memories[0].MemoryKind != "decision" {
 		t.Fatalf("unexpected memories: %+v", memories)
 	}
 
