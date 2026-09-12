@@ -53,7 +53,7 @@ This handles process failure between recording intent, filesystem mutation, and 
 
 ## Path safety
 
-The engine accepts vault-relative paths only. It rejects traversal outside the vault, `.agentvault`, `.git`, the canonical knowledge journal, symlink path components, non-regular existing targets, non-UTF-8 content, and oversized snapshots.
+The engine accepts vault-relative paths only. It rejects traversal outside the vault, absolute/volume paths, `.agentvault`, `.git`, the canonical knowledge journal, symlink path components, non-regular existing targets, non-UTF-8 content, and oversized snapshots. Protected internal path checks are case-insensitive so case variants cannot bypass the invariant on case-insensitive filesystems.
 
 Creates use an atomic installation step that refuses to overwrite a destination created concurrently. Replacements use a same-directory temporary file, preserve file permissions, fsync the temporary content, and rename it into place.
 
@@ -69,10 +69,12 @@ Within normal AgentVault usage, callers should route authoritative agent writes 
 
 ## Capability identities
 
-The local API has two credential classes:
+The local HTTP API has two credential classes:
 
 1. The per-process **root token** remains the credential for generic AgentVault data access/writes and capability administration.
-2. Persistent **capability tokens** are deliberately narrow credentials accepted only by transactional mutation routes.
+2. Persistent **capability tokens** are deliberately narrow HTTP credentials accepted only by transactional mutation routes.
+
+The same persistent identities can also bind an MCP process, where additional explicit read-side capability families control tool registration. See `MCP_CAPABILITIES.md`.
 
 Supported mutation capabilities are:
 
@@ -91,7 +93,7 @@ Capability scopes may restrict:
 - projects
 - durable session IDs
 
-Restrictions are **intersected**. For example, a token scoped to path `30-projects/acme`, project `acme`, and session `session_123` must satisfy all three constraints. An empty scope dimension means unrestricted for that dimension, but only within the explicitly granted lifecycle capability.
+Restrictions are **intersected**. For example, a mutation token scoped to path `30-projects/acme`, project `acme`, and session `session_123` must satisfy all three constraints. An empty scope dimension means unrestricted for that dimension, but only within the explicitly granted lifecycle capability.
 
 Path-prefix matching is segment-aware: a prefix `foo/bar` permits `foo/bar/note.md` but not `foo/barista/note.md`.
 
@@ -101,7 +103,7 @@ A scoped proposer cannot spoof `agentId`; AgentVault binds proposal `agentId` to
 
 ## HTTP security boundary
 
-All data-bearing non-mutation API routes retain the unified core's root-token authentication, including reads. Capability tokens are not generic vault credentials.
+All data-bearing non-mutation API routes retain the unified core's root-token authentication, including reads. Capability tokens are not generic HTTP vault credentials.
 
 Mutation proposals contain complete before/after rollback snapshots, so mutation reads are separately authenticated. `GET /mutations` and `GET /mutations/{id}` require the root token or `mutation:read`.
 
@@ -117,7 +119,7 @@ Each lifecycle route requires its exact capability:
 | `POST /mutations/{id}/undo` | `mutation:undo` |
 | `POST /mutations/{id}/reject` | `mutation:reject` |
 
-A mutation capability token cannot read or write generic notes, memories, sessions, objects, graph/search data, or capability identities through the HTTP API. Those surfaces continue to require the root server token.
+A capability token cannot use its MCP read-side grants to read or write generic notes, memories, sessions, objects, graph/search data, or capability identities through the HTTP API. Those surfaces continue to require the root server token.
 
 Capability administration is root-only:
 
@@ -129,15 +131,26 @@ The raw token returned by `POST /auth/capabilities` should be stored as a secret
 
 ## MCP security boundary
 
-Unscoped **stdio** MCP preserves the conservative compatibility behavior from the transactional-mutation layer: mutation tools are proposal/read-only, and legacy direct user-file writers remain disabled by default. Read-only Markdown memory recall is retained.
+Unbound **stdio** MCP preserves the conservative local compatibility behavior: mutation tools are proposal/read-only, legacy direct user-file writers remain disabled by default, and the established safe local read/AI/knowledge/context surface remains available.
 
-A scoped MCP process can be bound with `AGENTVAULT_CAPABILITY_TOKEN` or `--capability-token`. Its mutation tool registry is reduced to the capabilities actually granted to that principal. For example, a proposer receives proposal/read tools but not commit; a reviewer with `mutation:approve` and `mutation:commit` receives those lifecycle tools subject to the same path/project/session policy checks.
+A capability-bound MCP process instead registers only explicitly granted families. In addition to the mutation lifecycle capabilities above, the current read-side families are:
+
+- `vault:read` — indexed/file-backed vault reads and read-only MCP resources
+- `knowledge:read` — structured object/memory/session reads only
+- `context:compile` — Context Compiler only
+- `ai:invoke` — `agentvault.ask` only
+
+Structured knowledge and session writes are not included in those grants. They remain unavailable to a bound capability identity until resource-aware write policies are implemented.
+
+The first non-mutation read-side families are deliberately **global-only**. If a principal combines `vault:read`, `knowledge:read`, `context:compile`, or `ai:invoke` with any path/project/session restriction, MCP runtime registration fails closed instead of silently ignoring that scope. Mutation-only principals may continue to use scoped restrictions because mutation handlers enforce them against persisted resources.
+
+A pure read-side capability identity does not initialize mutation tools or mutation crash recovery as a startup side effect.
 
 HTTP MCP requires a capability token and requires that same token on each HTTP request through `Authorization: Bearer ...` or `X-AgentVault-Token`. The token is revalidated against the registry before every MCP dispatch, so expiry or revocation takes effect without restarting the process.
 
-`--allow-direct-writes` is mutually exclusive with a capability token. This prevents a scoped identity from accidentally regaining legacy unreviewed file-writing tools.
+`--allow-direct-writes` is mutually exclusive with a capability token. This prevents a capability identity from regaining legacy unreviewed file-writing tools.
 
-Capability enforcement in this slice is intentionally **mutation-specific**. Existing safe non-mutation MCP tools—search/read/AI, structured knowledge/session operations, and Context Compiler—retain their current trust model. A bound mutation capability does not yet mean every MCP tool is least-privilege. Extending the capability namespace across those tool families is the next security layer and must happen before describing AgentVault MCP as fully least-privilege.
+The complete capability-to-tool mapping and current scope limitations are documented in `MCP_CAPABILITIES.md`.
 
 ## Registry durability boundary
 
@@ -153,10 +166,10 @@ This does not yet provide an inter-process compare-and-swap protocol for two ind
 - `mintCapability()`
 - `revokeCapability()`
 
-Types are exported from `@agentvault/contract/capabilities`.
+Capability types, including MCP read-side capabilities, are exported from `@agentvault/contract/capabilities`.
 
 ## Next durability and security steps
 
 Before extending this protocol to multi-file proposals, add an explicit transaction manifest with ordered operations, durable per-operation progress, rollback material for every target, deterministic recovery, and an inter-process writer-coordination strategy.
 
-Before broadening autonomous MCP access, extend capability enforcement to non-mutation tools and separate read/search, knowledge-write, session, AI/provider, and filesystem privileges. A multi-file UI or a claim of fully least-privilege MCP should not ship ahead of those semantics.
+Before adding `knowledge:write`, memory/session write capabilities, or scoped read-side capability families, implement resource-aware policy at the persisted-object/session/memory boundary and adversarial tests that prove out-of-scope data cannot leak through alternate retrieval paths. A multi-file UI or a claim of fully least-privilege MCP should not ship ahead of those semantics.
