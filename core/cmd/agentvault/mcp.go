@@ -51,9 +51,10 @@ context:compile, ai:invoke, and mutation:* lifecycle capabilities. Legacy direct
 write MCP commands remain an explicit compatibility opt-in and cannot be
 combined with a capability identity.
 
-The first non-mutation capability families are global-only. A token combining
-those families with path/project/session scope is rejected until that family can
-enforce the scope precisely.
+Scope support is capability-specific: mutation capabilities support path/project/
+session restrictions, knowledge:read supports project/session restrictions, and
+vault:read, context:compile, and ai:invoke remain global-only until their full
+retrieval paths can enforce narrower scope.
 
 Example:
   agentvault mcp serve
