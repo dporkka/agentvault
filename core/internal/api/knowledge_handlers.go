@@ -89,12 +89,27 @@ func (s *Server) handleObjectRelations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateProvenance(w http.ResponseWriter, r *http.Request) {
-	var req contract.ProvenanceRecord
+	var req contract.CreateProvenanceRequest
 	if err := decodeKnowledgeJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
 		return
 	}
-	record, err := s.knowledge.CreateProvenance(req)
+	confidence := 1.0
+	if req.Confidence != nil {
+		confidence = *req.Confidence
+	}
+	record, err := s.knowledge.CreateProvenance(contract.ProvenanceRecord{
+		ID:         req.ID,
+		SourceType: req.SourceType,
+		SourceID:   req.SourceID,
+		AgentID:    req.AgentID,
+		SessionID:  req.SessionID,
+		Model:      req.Model,
+		Confidence: confidence,
+		ObservedAt: req.ObservedAt,
+		Evidence:   req.Evidence,
+		Metadata:   req.Metadata,
+	})
 	if err != nil {
 		writeKnowledgeError(w, err)
 		return
@@ -127,10 +142,11 @@ func (s *Server) handleCreateMemory(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListMemories(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	memories, err := s.knowledge.ListMemories(
+	memories, err := s.knowledge.ListMemoriesFiltered(
 		r.URL.Query().Get("scopeType"),
 		r.URL.Query().Get("scopeId"),
 		r.URL.Query().Get("memoryClass"),
+		r.URL.Query().Get("memoryKind"),
 		limit,
 	)
 	if err != nil {
