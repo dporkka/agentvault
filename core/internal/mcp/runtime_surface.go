@@ -15,8 +15,9 @@ import (
 //
 // Bound capability identities receive only explicitly granted tool families.
 // Structured knowledge/context families support project/session scope but not
-// path-prefix scope. Scoped AI invocation additionally requires context:compile
-// so provider execution cannot acquire vault retrieval authority implicitly.
+// path-prefix scope. Capability-bound AI invocation always requires
+// context:compile so provider execution cannot acquire vault retrieval authority
+// implicitly, even for an otherwise unscoped principal.
 func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 	if s.capabilityPrincipal != nil {
 		if allowDirectWrites {
@@ -41,8 +42,8 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 		) && len(principal.Scope.PathPrefixes) > 0 {
 			return fmt.Errorf("structured knowledge/context/AI capabilities do not yet support path-prefix scope")
 		}
-		if authz.HasCapability(principal, authz.AIInvoke) && authz.HasResourceScope(principal) && !authz.HasCapability(principal, authz.ContextCompile) {
-			return fmt.Errorf("scoped ai:invoke requires context:compile")
+		if authz.HasCapability(principal, authz.AIInvoke) && !authz.HasCapability(principal, authz.ContextCompile) {
+			return fmt.Errorf("capability-bound ai:invoke requires context:compile")
 		}
 
 		if authz.HasCapability(principal, authz.VaultRead) {
@@ -60,11 +61,7 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 			s.RegisterContextTool()
 		}
 		if authz.HasCapability(principal, authz.AIInvoke) {
-			if authz.HasResourceScope(principal) {
-				s.RegisterScopedAIInvokeTool()
-			} else {
-				s.RegisterAIInvokeTool()
-			}
+			s.RegisterScopedAIInvokeTool()
 		}
 
 		if authz.HasAnyCapability(
