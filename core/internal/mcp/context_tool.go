@@ -11,13 +11,16 @@ import (
 )
 
 // RegisterContextTool exposes deterministic context compilation to MCP clients.
+// When the MCP process is capability-bound, project/session scope is resolved
+// from durable AgentVault state before retrieval and every returned evidence item
+// is authorized/sanitized before it crosses the MCP boundary.
 func (s *Server) RegisterContextTool() {
 	store := knowledge.New(s.db, s.vaultPath)
 	fileMemories := memory.NewStore(s.db)
 	initErr := store.ReplayJournal()
 	s.tools["agentvault.compile_context"] = Tool{
 		Name:        "agentvault.compile_context",
-		Description: "Compile evidence-backed, token-budgeted context for an agent task from Markdown and journal memories, notes, typed objects, temporal relations, and durable session history without making an LLM call.",
+		Description: "Compile evidence-backed, token-budgeted context for an agent task from authorized Markdown and journal memories, notes, typed objects, temporal relations, and durable session history without making an LLM call.",
 		InputSchema: makeSchema(map[string]interface{}{
 			"task":         schemaString("Task or objective the context should support"),
 			"workspace_id": schemaString("Optional memory workspace scope; defaults to project when omitted"),
@@ -33,24 +36,30 @@ func (s *Server) RegisterContextTool() {
 			if initErr != nil {
 				return "", fmt.Errorf("knowledge projection is unavailable: %w", initErr)
 			}
+			request := contract.CompileContextRequest{
+				Task:        stringArg(args, "task"),
+				WorkspaceID: stringArg(args, "workspace_id"),
+				Project:     stringArg(args, "project"),
+				AgentID:     stringArg(args, "agent_id"),
+				SessionID:   stringArg(args, "session_id"),
+				ObjectIDs:   stringSliceArg(args, "object_ids"),
+				TokenBudget: intArg(args, "token_budget", 8000),
+				MaxItems:    intArg(args, "max_items", 40),
+				AsOf:        stringArg(args, "as_of"),
+			}
+			request, principal, err := s.prepareContextRequest(store, request)
+			if err != nil {
+				return "", err
+			}
 			bundle, err := contextcompiler.CompileUnified(
 				contextcompiler.New(s.searcher, store),
 				fileMemories,
-				contract.CompileContextRequest{
-					Task:        stringArg(args, "task"),
-					WorkspaceID: stringArg(args, "workspace_id"),
-					Project:     stringArg(args, "project"),
-					AgentID:     stringArg(args, "agent_id"),
-					SessionID:   stringArg(args, "session_id"),
-					ObjectIDs:   stringSliceArg(args, "object_ids"),
-					TokenBudget: intArg(args, "token_budget", 8000),
-					MaxItems:    intArg(args, "max_items", 40),
-					AsOf:        stringArg(args, "as_of"),
-				},
+				request,
 			)
 			if err != nil {
 				return "", err
 			}
+			bundle = filterContextBundle(store, principal, request, bundle)
 			data, err := json.MarshalIndent(bundle, "", "  ")
 			if err != nil {
 				return "", fmt.Errorf("encode context bundle: %w", err)

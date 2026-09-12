@@ -166,11 +166,7 @@ func TestRegisterRuntimeSurfaceGlobalOnlyFamiliesFailClosedWithResourceScope(t *
 	_, database, vault := setupKnowledgeMCPServer(t)
 	defer database.Close()
 
-	for _, capability := range []authz.Capability{
-		authz.VaultRead,
-		authz.ContextCompile,
-		authz.AIInvoke,
-	} {
+	for _, capability := range []authz.Capability{authz.VaultRead, authz.AIInvoke} {
 		t.Run(string(capability), func(t *testing.T) {
 			registry, err := authz.NewRegistry(vault)
 			if err != nil {
@@ -234,7 +230,7 @@ func TestRegisterRuntimeSurfaceKnowledgeReadAllowsProjectAndSessionScope(t *test
 	}
 }
 
-func TestRegisterRuntimeSurfaceKnowledgeReadRejectsPathScope(t *testing.T) {
+func TestRegisterRuntimeSurfaceContextCompileAllowsProjectAndSessionScope(t *testing.T) {
 	_, database, vault := setupKnowledgeMCPServer(t)
 	defer database.Close()
 
@@ -243,9 +239,12 @@ func TestRegisterRuntimeSurfaceKnowledgeReadRejectsPathScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	issued, err := registry.Mint(authz.MintRequest{
-		AgentID:      "knowledge-reader",
-		Capabilities: []authz.Capability{authz.KnowledgeRead},
-		Scope:        authz.Scope{PathPrefixes: []string{"30-projects/alpha"}},
+		AgentID:      "context-reader",
+		Capabilities: []authz.Capability{authz.ContextCompile},
+		Scope: authz.Scope{
+			Projects: []string{"alpha"},
+			Sessions: []string{"session-alpha"},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -254,11 +253,43 @@ func TestRegisterRuntimeSurfaceKnowledgeReadRejectsPathScope(t *testing.T) {
 	if err := server.SetCapabilityToken(issued.Token); err != nil {
 		t.Fatal(err)
 	}
-	if err := server.RegisterRuntimeSurface(false); err == nil || !strings.Contains(err.Error(), "path-prefix") {
-		t.Fatalf("expected knowledge:read path scope to fail closed, got %v", err)
+	if err := server.RegisterRuntimeSurface(false); err != nil {
+		t.Fatalf("project/session-scoped context:compile should register: %v", err)
 	}
-	if len(server.tools) != 0 {
-		t.Fatalf("failed knowledge registration leaked %d tools", len(server.tools))
+	if _, ok := server.tools["agentvault.compile_context"]; !ok {
+		t.Fatal("scoped context surface missing compile_context")
+	}
+}
+
+func TestRegisterRuntimeSurfaceStructuredReadsRejectPathScope(t *testing.T) {
+	_, database, vault := setupKnowledgeMCPServer(t)
+	defer database.Close()
+
+	for _, capability := range []authz.Capability{authz.KnowledgeRead, authz.ContextCompile} {
+		t.Run(string(capability), func(t *testing.T) {
+			registry, err := authz.NewRegistry(vault)
+			if err != nil {
+				t.Fatal(err)
+			}
+			issued, err := registry.Mint(authz.MintRequest{
+				AgentID:      "structured-reader-" + strings.ReplaceAll(string(capability), ":", "-"),
+				Capabilities: []authz.Capability{capability},
+				Scope:        authz.Scope{PathPrefixes: []string{"30-projects/alpha"}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			server := NewServer(vault, database)
+			if err := server.SetCapabilityToken(issued.Token); err != nil {
+				t.Fatal(err)
+			}
+			if err := server.RegisterRuntimeSurface(false); err == nil || !strings.Contains(err.Error(), "path-prefix") {
+				t.Fatalf("expected %s path scope to fail closed, got %v", capability, err)
+			}
+			if len(server.tools) != 0 {
+				t.Fatalf("failed structured-read registration leaked %d tools", len(server.tools))
+			}
+		})
 	}
 }
 

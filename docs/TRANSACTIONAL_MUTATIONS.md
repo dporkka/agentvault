@@ -146,10 +146,11 @@ Scope semantics are capability-specific:
 
 - `mutation:*` supports path-prefix, project, and durable-session restrictions.
 - `knowledge:read` supports project and durable-session restrictions. It authorizes persisted objects/sessions/memory scopes, filters cross-project relation edges, and deliberately does not let a session-only identity expand into project-wide object or memory reads.
-- `knowledge:read` does **not** yet support path-prefix restrictions because structured records without canonical file paths need an explicit policy.
-- `vault:read`, `context:compile`, and `ai:invoke` remain global-only. Any resource scope combined with those families fails MCP registration closed.
+- `context:compile` supports project and durable-session restrictions. Scoped requests are first bound to persisted session/project state; explicit object IDs are pre-authorized; every returned object, relation, note, memory, current/prior session, and session event is filtered; hidden-candidate statistics are recomputed; and provenance evidence/source routing is redacted under scoped compilation.
+- `knowledge:read` and `context:compile` do **not** yet support path-prefix restrictions because structured records without canonical file paths need an explicit policy.
+- `vault:read` and `ai:invoke` remain global-only. Any resource scope combined with those families fails MCP registration closed.
 
-Context Compiler remains global-only because project-filtered notes/memories are not its only evidence path: explicit object IDs, cross-object relations, and provenance records must also be filtered before scoped compilation can be claimed safely.
+A session-scoped Context Compiler can use project context for the authorized durable session, but it cannot include another session's history or objects from another project. Unknown future context item kinds fail closed until their resource semantics are explicitly defined. Scoped lookup failures are normalized to authorization failures rather than revealing whether an out-of-scope stable ID exists.
 
 A pure read-side capability identity does not initialize mutation tools or mutation crash recovery as a startup side effect.
 
@@ -179,4 +180,4 @@ Capability types, including MCP read-side capabilities, are exported from `@agen
 
 Before extending this protocol to multi-file proposals, add an explicit transaction manifest with ordered operations, durable per-operation progress, rollback material for every target, deterministic recovery, and an inter-process writer-coordination strategy.
 
-Before adding `knowledge:write`, memory/session write capabilities, or path-scoped structured reads, implement resource-aware policy at the persisted-object/session/memory boundary and adversarial tests that prove out-of-scope data cannot leak through alternate retrieval paths. Before scoped Context Compiler access, filter explicit objects, relations, provenance/evidence, notes, memories, and prior sessions against the principal. A multi-file UI or a claim of fully least-privilege MCP should not ship ahead of those semantics.
+Before adding `knowledge:write`, memory/session write capabilities, or path-scoped structured reads, implement resource-aware policy at the persisted-object/session/memory boundary and adversarial tests that prove out-of-scope data cannot leak through alternate retrieval paths. Before scoped `vault:read` or `ai:invoke`, make every underlying search/resource/RAG path enforce the same authoritative scope. A multi-file UI or a claim of fully least-privilege MCP should not ship ahead of those semantics.
