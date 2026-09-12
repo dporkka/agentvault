@@ -3,7 +3,6 @@ package doctor
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -171,7 +170,10 @@ func (d *Doctor) CheckDatabase() CheckResult {
 	}
 }
 
-// CheckMigrations verifies that schema migrations have been applied.
+// CheckMigrations verifies that the migration ledger exactly matches the
+// versioned migrations embedded in this binary. Checking only MAX(version) can
+// miss holes (for example [1, 3]), which leaves the database in an ambiguous
+// state even though the reported latest version looks current.
 func (d *Doctor) CheckMigrations() CheckResult {
 	if d.db == nil {
 		return CheckResult{
@@ -181,36 +183,80 @@ func (d *Doctor) CheckMigrations() CheckResult {
 		}
 	}
 
-	var version int
-	err := d.db.QueryRow("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1").Scan(&version)
+	rows, err := d.db.Query("SELECT version FROM schema_migrations ORDER BY version")
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return CheckResult{
-				Name:    "Migrations",
-				Status:  "error",
-				Message: "No migrations have been applied",
-				Details: []string{"Run 'agentvault init' to apply migrations."},
-			}
-		}
 		return CheckResult{
 			Name:    "Migrations",
 			Status:  "error",
 			Message: fmt.Sprintf("Failed to query migrations: %v", err),
 		}
 	}
+	defer rows.Close()
 
-	if version < 1 {
+	var applied []int
+	for rows.Next() {
+		var version int
+		if err := rows.Scan(&version); err != nil {
+			return CheckResult{
+				Name:    "Migrations",
+				Status:  "error",
+				Message: fmt.Sprintf("Failed to read migration history: %v", err),
+			}
+		}
+		applied = append(applied, version)
+	}
+	if err := rows.Err(); err != nil {
 		return CheckResult{
 			Name:    "Migrations",
-			Status:  "warn",
-			Message: fmt.Sprintf("Migration version %d may be incomplete", version),
+			Status:  "error",
+			Message: fmt.Sprintf("Failed to read migration history: %v", err),
+		}
+	}
+	if len(applied) == 0 {
+		return CheckResult{
+			Name:    "Migrations",
+			Status:  "error",
+			Message: "No migrations have been applied",
+			Details: []string{"Run 'agentvault init' to apply migrations."},
 		}
 	}
 
+	expected, err := db.ExpectedMigrationVersions()
+	if err != nil {
+		return CheckResult{
+			Name:    "Migrations",
+			Status:  "error",
+			Message: fmt.Sprintf("Could not inspect embedded migrations: %v", err),
+		}
+	}
+
+	matches := len(applied) == len(expected)
+	if matches {
+		for i := range expected {
+			if applied[i] != expected[i] {
+				matches = false
+				break
+			}
+		}
+	}
+	if !matches {
+		return CheckResult{
+			Name:    "Migrations",
+			Status:  "warn",
+			Message: "Migration history is incomplete or does not match this AgentVault build",
+			Details: []string{
+				fmt.Sprintf("Expected versions: %v", expected),
+				fmt.Sprintf("Applied versions: %v", applied),
+				"Run 'agentvault init' to apply any missing migrations before writing new data.",
+			},
+		}
+	}
+
+	latest := applied[len(applied)-1]
 	return CheckResult{
 		Name:    "Migrations",
 		Status:  "ok",
-		Message: fmt.Sprintf("Migration version %d is applied", version),
+		Message: fmt.Sprintf("Migration version %d is applied", latest),
 	}
 }
 

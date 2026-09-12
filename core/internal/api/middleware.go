@@ -40,21 +40,22 @@ func generateAuthToken() string {
 	return hex.EncodeToString(b)
 }
 
-// corsMiddleware adds CORS headers for localhost origins.
+// corsMiddleware adds CORS headers for explicitly allowed local or extension origins.
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		// Allow localhost origins and file://, browser-extension origins.
-		// Match the host exactly (not substring) so origins like
-		// "http://localhost.evil.com" are not mistakenly allowed.
-		if origin == "" {
+		switch {
+		case origin == "":
+			// Non-browser clients do not send Origin. Keep the historical wildcard
+			// response for compatibility, but never combine '*' with credentials.
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-		} else if isAllowedOrigin(origin) {
+		case isAllowedOrigin(origin):
 			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-AgentVault-Token")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -65,29 +66,45 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// authMiddleware checks the X-AgentVault-Token header for write endpoints.
+// isPublicEndpoint identifies endpoints that intentionally do not require the
+// vault token. Health exposes only process status, while auth/verify validates a
+// presented token itself. All vault data endpoints require authentication.
+func isPublicEndpoint(r *http.Request) bool {
+	if r.Method == http.MethodOptions {
+		return true
+	}
+	if r.Method != http.MethodGet {
+		return false
+	}
+	return r.URL.Path == "/health" || r.URL.Path == "/auth/verify"
+}
+
+func requestAuthToken(r *http.Request) string {
+	token := strings.TrimSpace(r.Header.Get("X-AgentVault-Token"))
+	if token != "" {
+		return token
+	}
+
+	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+	if len(authHeader) >= 7 && strings.EqualFold(authHeader[:7], "Bearer ") {
+		return strings.TrimSpace(authHeader[7:])
+	}
+	return authHeader
+}
+
+// authMiddleware requires the vault token for all data-bearing endpoints,
+// including reads. Only health, auth verification, and CORS preflights are public.
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Read endpoints are open (GET)
-		if r.Method == http.MethodGet {
+		if isPublicEndpoint(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// POST endpoints require auth token
-		token := r.Header.Get("X-AgentVault-Token")
-		if token == "" {
-			token = r.Header.Get("Authorization")
-			// Support "Bearer <token>" format
-			if strings.HasPrefix(token, "Bearer ") {
-				token = strings.TrimPrefix(token, "Bearer ")
-			}
-		}
-
-		if token != s.authToken {
+		if requestAuthToken(r) != s.authToken {
 			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
 				"error":  "unauthorized",
-				"detail": "Valid X-AgentVault-Token header required",
+				"detail": "Valid X-AgentVault-Token or Bearer token required",
 			})
 			return
 		}

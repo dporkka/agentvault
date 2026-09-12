@@ -1,6 +1,6 @@
 # AgentVault Local HTTP API Contract
 
-Last updated: 2026-07-07
+Last updated: 2026-09-10
 
 This is the single source of truth for the local HTTP API exposed by
 `agentvault serve` (package `core/internal/api`). It documents every route, its
@@ -41,17 +41,25 @@ CI time.
 ## Connecting clients
 
 When `agentvault serve` starts it prints an auth token to the terminal. Local
-clients store this token and send it on every write request via the
-`X-AgentVault-Token` header or `Authorization: Bearer <token>`.
+clients store this token and send it on every protected request, including
+vault-data reads, via either:
 
-Clients can check a stored token without making a write operation by calling
-`GET /auth/verify`. The response includes:
+- `X-AgentVault-Token: <token>`, or
+- `Authorization: Bearer <token>`.
+
+Only `GET /health`, `GET /auth/verify`, and CORS `OPTIONS` preflights are
+intentionally public. `GET /auth/verify` may include a token so a client can
+check whether its stored token still matches the server's current token. The
+response includes:
 
 - `hasToken`: whether the client sent a token header.
 - `tokenValid`: whether the sent token matches the server's current token.
 
-A missing or incorrect token on a write endpoint returns `401` with
-`{"error":"unauthorized","detail":"Valid X-AgentVault-Token header required"}`.
+A missing or incorrect token on a protected endpoint returns `401` with:
+
+```json
+{"error":"unauthorized","detail":"Valid X-AgentVault-Token or Bearer token required"}
+```
 
 ## Conventions
 
@@ -59,22 +67,24 @@ A missing or incorrect token on a write endpoint returns `401` with
   loopback only).
 - **Content type:** all responses are `application/json`. Request bodies for
   `POST` endpoints must be JSON.
-- **Auth:** `GET` endpoints are open. Every non-`GET` (write) endpoint requires
-  the auth token, sent as either:
+- **Auth:** every data-bearing endpoint requires the auth token, regardless of
+  HTTP method. The only public routes are `GET /health`, `GET /auth/verify`,
+  and CORS `OPTIONS` preflights. Send the token as either:
   - `X-AgentVault-Token: <token>`, or
   - `Authorization: Bearer <token>`.
 
   The token is generated per server start and printed at startup; clients store
-  it locally. A missing/incorrect token on a write endpoint returns `401` with
-  `{"error":"unauthorized","detail":"Valid X-AgentVault-Token header required"}`.
-- **CORS:** the server reflects the request `Origin` when it is `file://`,
-  `chrome-extension://`, `moz-extension://`, or an `http(s)` origin whose host is
-  exactly `localhost`, `127.0.0.1`, or `::1` (any port). Spoofed hosts such as
-  `http://localhost.evil.com` are rejected (host-exact, not substring). Allowed
-  methods: `GET, POST, OPTIONS`. Allowed headers:
-  `Content-Type, Authorization, X-AgentVault-Token`.
-  `Access-Control-Allow-Credentials` is set to `true`. Preflight `OPTIONS` returns
-  `200` with no body.
+  it locally. A missing/incorrect token on a protected endpoint returns `401`.
+- **CORS:** for browser requests the server reflects the request `Origin` only
+  when it is `file://`, `chrome-extension://`, `moz-extension://`, or an
+  `http(s)` origin whose host is exactly `localhost`, `127.0.0.1`, or `::1`
+  (any port). Spoofed hosts such as `http://localhost.evil.com` are rejected
+  (host-exact, not substring). Allowed methods: `GET, POST, PUT, DELETE,
+  OPTIONS`. Allowed headers: `Content-Type, Authorization,
+  X-AgentVault-Token`. `Access-Control-Allow-Credentials: true` is emitted only
+  for an explicitly allowed origin; non-browser requests with no `Origin` may
+  receive `Access-Control-Allow-Origin: *`, but never together with credentials.
+  Preflight `OPTIONS` returns `200` with no body.
 - **Rate limiting:** a token-bucket limiter allows bursts of up to ~30 requests;
   exceeding the limit returns `429 Too Many Requests` with
   `{"error":"rate limit exceeded"}`.
@@ -87,17 +97,17 @@ A missing or incorrect token on a write endpoint returns `401` with
 | --- | --- | --- | --- | --- |
 | GET | `/health` | no | 200 | camelCase |
 | GET | `/auth/verify` | no | 200 | camelCase |
-| GET | `/vault/status` | no | 200 | camelCase |
+| GET | `/vault/status` | yes | 200 | camelCase |
 | POST | `/vault/index` | yes | 200 | camelCase (`IndexResult`) |
-| GET | `/search` | no | 200 | camelCase (`[]search.Result`) |
-| GET | `/notes/{id}` | no | 200 / 400 / 403 / 404 | camelCase |
+| GET | `/search` | yes | 200 | camelCase (`[]search.Result`) |
+| GET | `/notes/{id}` | yes | 200 / 400 / 403 / 404 | camelCase |
 | POST | `/notes` | yes | 200 | camelCase |
 | POST | `/capture` | yes | 200 | camelCase |
 | POST | `/ask` | yes | 200 / 400 / 500 / 502 | camelCase (`rag.Answer`) |
-| GET | `/projects` | no | 200 | bare `string[]` |
-| GET | `/recent` | no | 200 | camelCase (`[]search.Result`) |
-| GET | `/stale` | no | 200 | camelCase (`[]search.Result`) |
-| GET | `/git/status` | no | 200 | camelCase |
+| GET | `/projects` | yes | 200 | bare `string[]` |
+| GET | `/recent` | yes | 200 | camelCase (`[]search.Result`) |
+| GET | `/stale` | yes | 200 | camelCase (`[]search.Result`) |
+| GET | `/git/status` | yes | 200 | camelCase |
 
 ---
 
@@ -111,9 +121,9 @@ No auth. Liveness + identity probe.
 
 ## GET /auth/verify
 
-No auth. Allows clients to check whether their stored token is still valid
-without making a write operation. Returns the server's current token validity
-status:
+No auth required. Allows clients to check whether their stored token is still
+valid without making a data-bearing request. If a token is supplied, the
+endpoint reports whether it matches the server's current token:
 
 ```json
 {
@@ -130,7 +140,8 @@ status:
 
 ## GET /vault/status
 
-No auth. `noteCount` and `version` are only populated when the path is a vault.
+Auth required. `noteCount` and `version` are only populated when the path is a
+vault.
 
 ```json
 {
@@ -164,9 +175,10 @@ when empty.
 
 ## GET /search
 
-No auth. Query params (all optional except that an empty `q` returns recent-style
-results): `q`, `type`, `project`, `tag`, `status`, `limit` (default 20),
-`offset`. Returns a JSON **array** of `search.Result` serialized with camelCase `json` tags:
+Auth required. Query params (all optional except that an empty `q` returns
+recent-style results): `q`, `type`, `project`, `tag`, `status`, `limit`
+(default 20), `offset`. Returns a JSON **array** of `search.Result` serialized
+with camelCase `json` tags:
 
 Query parameters (all optional):
 - `q`: search text
@@ -206,7 +218,7 @@ server's `hybrid_weight` query key before sending the request.
 
 ## GET /notes/{id}
 
-No auth. Looks up a note by ID and returns its metadata plus the full file
+Auth required. Looks up a note by ID and returns its metadata plus the full file
 contents. `400` if the id segment is missing, `404` if no note matches, `403`
 if the resolved file path escapes the vault (path traversal). Uses
 `contract.NoteDetail`, so fields are camelCase:
@@ -264,6 +276,7 @@ Response (path always under `00-inbox/`):
 
 If more than 999 captures are created for the same day, the endpoint returns
 `409 Conflict` with `{"error":"too many captures for today"}`.
+
 ## POST /ask
 
 Auth required. Source-grounded RAG answer over the vault. Returns `400` if
@@ -296,8 +309,8 @@ Each source carries both `id` and `path`; clients navigate to `/note/{id}`.
 
 ## GET /projects
 
-No auth. Bare JSON array of distinct non-empty project names (sorted). Empty
-result serializes to `[]`, never `null`:
+Auth required. Bare JSON array of distinct non-empty project names (sorted).
+Empty result serializes to `[]`, never `null`:
 
 ```json
 ["personal", "test-project", "work"]
@@ -305,16 +318,16 @@ result serializes to `[]`, never `null`:
 
 ## GET /recent
 
-No auth. `limit` query param (default 10). Same camelCase `[]search.Result`
-shape as [`/search`](#get-search).
+Auth required. `limit` query param (default 10). Same camelCase
+`[]search.Result` shape as [`/search`](#get-search).
 
 Query parameters (all optional):
 - `limit`: max results (default 10)
 
 ## GET /stale
 
-No auth. `days` query param (default 30) — notes not updated within that window.
-Same camelCase `[]search.Result` shape as [`/search`](#get-search).
+Auth required. `days` query param (default 30) — notes not updated within that
+window. Same camelCase `[]search.Result` shape as [`/search`](#get-search).
 
 Query parameters (all optional):
 - `days`: staleness window in days (default 30)
@@ -322,9 +335,9 @@ Query parameters (all optional):
 
 ## GET /git/status
 
-No auth. Reports real vault VCS state via `internal/git.Status`. A non-versioned
-vault is a valid state and returns `isGitRepo: false` (not an error). Uses
-`contract.GitStatus`, so fields are camelCase:
+Auth required. Reports real vault VCS state via `internal/git.Status`. A
+non-versioned vault is a valid state and returns `isGitRepo: false` (not an
+error). Uses `contract.GitStatus`, so fields are camelCase:
 
 ```json
 {
@@ -365,8 +378,9 @@ every client and the server now produce.
   `isGitRepo`/`branch`/`clean`/`aheadBehind`/`modifiedFiles`/`untrackedFiles`
   instead of a hand-written `map[string]interface{}`. — New
   `contract.GitStatus` and `contract.GitModifiedFile`.
-- `/auth/verify` is wired and typed in the contract package even though
-  no client (besides the optional `verifyAuth()` helper) calls it.
+- `/auth/verify` is wired and typed in the contract package.
+- Protected read requests now use the same token boundary as writes, and the
+  shared TypeScript client attaches the configured token to those GETs.
 - Web, extension, mobile, and Wails desktop all import
   `SearchResult`/`Answer`/`Source` from `@agentvault/contract`, so the
   `decision.status || 'active'` line in the Wails DecisionDashboard now
@@ -377,5 +391,6 @@ every client and the server now produce.
   frontend checks `vaultStatus?.isVault`.
 
 All endpoints are now aligned across server, tests, and clients:
-`/health`, `/vault/status`, `/vault/index`, `/search`, `/notes/{id}`, `/notes`
-(POST), `/capture`, `/ask`, `/projects`, `/recent`, `/stale`, and `/git/status`.
+`/health`, `/auth/verify`, `/vault/status`, `/vault/index`, `/search`,
+`/notes/{id}`, `/notes` (POST), `/capture`, `/ask`, `/projects`, `/recent`,
+`/stale`, and `/git/status`.

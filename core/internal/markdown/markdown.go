@@ -13,19 +13,42 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Provenance describes the canonical source metadata for a semantic memory.
+// It lives in Markdown frontmatter so the SQLite memory projection is fully
+// rebuildable from files.
+type Provenance struct {
+	SourceType string `yaml:"source_type"`
+	SourceRef  string `yaml:"source_ref"`
+	Actor      string `yaml:"actor"`
+	Model      string `yaml:"model"`
+	CapturedAt string `yaml:"captured_at"`
+}
+
 // Frontmatter holds the YAML frontmatter from a note.
 type Frontmatter struct {
-	ID            string                 `yaml:"id"`
-	Type          string                 `yaml:"type"`
-	Title         string                 `yaml:"title"`
-	Status        string                 `yaml:"status"`
-	Project       string                 `yaml:"project"`
-	Tags          []string               `yaml:"tags"`
-	Entities      []string               `yaml:"entities"`
-	Created       string                 `yaml:"created"`
-	Updated       string                 `yaml:"updated"`
-	SourceQuality string                 `yaml:"source_quality"`
-	Extra         map[string]interface{} `yaml:",inline"`
+	ID                 string                 `yaml:"id"`
+	Type               string                 `yaml:"type"`
+	Title              string                 `yaml:"title"`
+	Status             string                 `yaml:"status"`
+	Project            string                 `yaml:"project"`
+	Tags               []string               `yaml:"tags"`
+	Entities           []string               `yaml:"entities"`
+	Created            string                 `yaml:"created"`
+	Updated            string                 `yaml:"updated"`
+	SourceQuality      string                 `yaml:"source_quality"`
+	WorkspaceID        string                 `yaml:"workspace_id"`
+	AgentID            string                 `yaml:"agent_id"`
+	SessionID          string                 `yaml:"session_id"`
+	MemoryClass        string                 `yaml:"memory_class"`
+	MemoryKind         string                 `yaml:"memory_kind"`
+	MemoryConfidence   *float64               `yaml:"memory_confidence"`
+	Provenance         Provenance             `yaml:"provenance"`
+	ObservedAt         string                 `yaml:"observed_at"`
+	ValidFrom          string                 `yaml:"valid_from"`
+	ValidTo            string                 `yaml:"valid_to"`
+	Supersedes         []string               `yaml:"supersedes"`
+	SupersessionReason string                 `yaml:"supersession_reason"`
+	Extra              map[string]interface{} `yaml:",inline"`
 }
 
 // WikiLink represents a [[wiki link]].
@@ -87,6 +110,10 @@ func ParseReader(r io.Reader) (*ParsedDocument, error) {
 			if err := yaml.Unmarshal([]byte(rawFrontmatter), &frontmatter); err != nil {
 				return nil, fmt.Errorf("invalid YAML frontmatter: %w", err)
 			}
+			if err := validateMemoryFrontmatter(frontmatter.MemoryClass, frontmatter.MemoryKind); err != nil {
+				return nil, err
+			}
+			mirrorPreservedFields(&frontmatter)
 			body = strings.TrimSpace(strings.Join(lines[closeIdx+1:], "\n"))
 		} else {
 			body = str
@@ -103,6 +130,97 @@ func ParseReader(r io.Reader) (*ParsedDocument, error) {
 		RawFrontmatter: rawFrontmatter,
 		WikiLinks:      wikiLinks,
 	}, nil
+}
+
+func validateMemoryFrontmatter(memoryClass, memoryKind string) error {
+	memoryClass = strings.TrimSpace(memoryClass)
+	memoryKind = strings.TrimSpace(memoryKind)
+	if memoryClass == "" {
+		return nil
+	}
+	if memoryKind == "" {
+		return fmt.Errorf("memory_kind is required when memory_class is set")
+	}
+	switch memoryClass {
+	case "working", "episodic", "semantic", "procedural":
+		return nil
+	default:
+		return fmt.Errorf("unsupported memory_class %q", memoryClass)
+	}
+}
+
+// mirrorPreservedFields copies typed, non-core metadata into Extra so legacy
+// note mutation paths that rebuild frontmatter from the core fields plus Extra
+// do not silently erase information they do not understand. Typed fields remain
+// authoritative for reads/indexing; Extra here is a round-trip compatibility
+// layer until all writers share a single canonical serializer.
+func mirrorPreservedFields(frontmatter *Frontmatter) {
+	if frontmatter.Extra == nil {
+		frontmatter.Extra = make(map[string]interface{})
+	}
+
+	if len(frontmatter.Entities) > 0 {
+		frontmatter.Extra["entities"] = append([]string(nil), frontmatter.Entities...)
+	}
+	if frontmatter.SourceQuality != "" {
+		frontmatter.Extra["source_quality"] = frontmatter.SourceQuality
+	}
+	if frontmatter.WorkspaceID != "" {
+		frontmatter.Extra["workspace_id"] = frontmatter.WorkspaceID
+	}
+	if frontmatter.AgentID != "" {
+		frontmatter.Extra["agent_id"] = frontmatter.AgentID
+	}
+	if frontmatter.SessionID != "" {
+		frontmatter.Extra["session_id"] = frontmatter.SessionID
+	}
+	if frontmatter.MemoryClass != "" {
+		frontmatter.Extra["memory_class"] = frontmatter.MemoryClass
+	}
+	if frontmatter.MemoryKind != "" {
+		frontmatter.Extra["memory_kind"] = frontmatter.MemoryKind
+	}
+	if frontmatter.MemoryConfidence != nil {
+		frontmatter.Extra["memory_confidence"] = *frontmatter.MemoryConfidence
+	}
+	if provenance := provenanceMap(frontmatter.Provenance); len(provenance) > 0 {
+		frontmatter.Extra["provenance"] = provenance
+	}
+	if frontmatter.ObservedAt != "" {
+		frontmatter.Extra["observed_at"] = frontmatter.ObservedAt
+	}
+	if frontmatter.ValidFrom != "" {
+		frontmatter.Extra["valid_from"] = frontmatter.ValidFrom
+	}
+	if frontmatter.ValidTo != "" {
+		frontmatter.Extra["valid_to"] = frontmatter.ValidTo
+	}
+	if len(frontmatter.Supersedes) > 0 {
+		frontmatter.Extra["supersedes"] = append([]string(nil), frontmatter.Supersedes...)
+	}
+	if frontmatter.SupersessionReason != "" {
+		frontmatter.Extra["supersession_reason"] = frontmatter.SupersessionReason
+	}
+}
+
+func provenanceMap(provenance Provenance) map[string]interface{} {
+	result := make(map[string]interface{})
+	if provenance.SourceType != "" {
+		result["source_type"] = provenance.SourceType
+	}
+	if provenance.SourceRef != "" {
+		result["source_ref"] = provenance.SourceRef
+	}
+	if provenance.Actor != "" {
+		result["actor"] = provenance.Actor
+	}
+	if provenance.Model != "" {
+		result["model"] = provenance.Model
+	}
+	if provenance.CapturedAt != "" {
+		result["captured_at"] = provenance.CapturedAt
+	}
+	return result
 }
 
 // isFenceLine reports whether a line is a YAML frontmatter fence: three or

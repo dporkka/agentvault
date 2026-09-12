@@ -30,7 +30,7 @@ type DB struct {
 // Open opens the SQLite database at <vaultPath>/.agentvault/agentvault.db.
 func Open(vaultPath string) (*DB, error) {
 	dbPath := filepath.Join(vaultPath, ".agentvault", "agentvault.db")
-	conn, err := sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)")
+	conn, err := sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database at %s: %w", dbPath, err)
 	}
@@ -40,6 +40,8 @@ func Open(vaultPath string) (*DB, error) {
 
 	// Configure connection pool for better performance.
 	// WAL mode allows concurrent readers; writes are serialized by SQLite.
+	// busy_timeout gives short-lived concurrent writes time to complete instead
+	// of immediately failing with SQLITE_BUSY.
 	conn.SetMaxOpenConns(16)
 	conn.SetMaxIdleConns(4)
 	conn.SetConnMaxLifetime(time.Hour)
@@ -127,6 +129,12 @@ func (d *DB) runEmbeddedMigrations(entries []fs.DirEntry) error {
 	sort.Slice(migrationsList, func(i, j int) bool {
 		return migrationsList[i].version < migrationsList[j].version
 	})
+	for i := 1; i < len(migrationsList); i++ {
+		if migrationsList[i-1].version == migrationsList[i].version {
+			return fmt.Errorf("duplicate migration version %d in %s and %s",
+				migrationsList[i].version, migrationsList[i-1].name, migrationsList[i].name)
+		}
+	}
 
 	// Ensure the migration tracking table exists before querying it.
 	if _, err := d.conn.Exec(`
@@ -138,31 +146,84 @@ func (d *DB) runEmbeddedMigrations(entries []fs.DirEntry) error {
 		return fmt.Errorf("failed to create schema_migrations: %w", err)
 	}
 
-	var currentVersion int
-	row := d.conn.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations")
-	if err := row.Scan(&currentVersion); err != nil {
-		return fmt.Errorf("failed to query current migration version: %w", err)
+	rows, err := d.conn.Query("SELECT version FROM schema_migrations ORDER BY version")
+	if err != nil {
+		return fmt.Errorf("failed to query migration history: %w", err)
+	}
+	var applied []int
+	for rows.Next() {
+		var version int
+		if err := rows.Scan(&version); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("failed to scan migration history: %w", err)
+		}
+		applied = append(applied, version)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("failed to read migration history: %w", err)
+	}
+	_ = rows.Close()
+
+	// An applied migration history must be an exact prefix of the migrations
+	// available in this build. Using MAX(version) alone can hide a missing
+	// intermediate migration (for example [1, 3]); applying version 2 after 3
+	// may violate schema dependencies, so fail explicitly instead of guessing.
+	if len(applied) > len(migrationsList) {
+		return fmt.Errorf("database migration history has %d versions but this build only knows %d",
+			len(applied), len(migrationsList))
+	}
+	for i, version := range applied {
+		expected := migrationsList[i].version
+		if version != expected {
+			return fmt.Errorf("migration history gap: expected version %d at position %d, found version %d; refusing out-of-order repair",
+				expected, i+1, version)
+		}
 	}
 
-	for _, m := range migrationsList {
-		if m.version <= currentVersion {
-			continue
-		}
-		if _, err := d.conn.Exec(m.sql); err != nil {
-			return fmt.Errorf("failed to run migration %s: %w", m.name, err)
-		}
-		if _, err := d.conn.Exec(
-			`INSERT OR REPLACE INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))`,
-			m.version,
-		); err != nil {
-			return fmt.Errorf("failed to record migration %s: %w", m.name, err)
+	for _, m := range migrationsList[len(applied):] {
+		if err := d.applyMigration(m); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-// runInlineMigrations creates the schema directly when migration files aren't found.
+// applyMigration applies the schema change and records its version in the same
+// transaction. A failed migration therefore cannot leave the schema advanced
+// while schema_migrations still reports an older version (or vice versa).
+func (d *DB) applyMigration(m migration) error {
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin migration %s: %w", m.name, err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err := tx.Exec(m.sql); err != nil {
+		return fmt.Errorf("failed to run migration %s: %w", m.name, err)
+	}
+	if _, err := tx.Exec(
+		`INSERT OR REPLACE INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))`,
+		m.version,
+	); err != nil {
+		return fmt.Errorf("failed to record migration %s: %w", m.name, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit migration %s: %w", m.name, err)
+	}
+	committed = true
+	return nil
+}
+
+// runInlineMigrations creates the latest schema directly when migration files
+// are unavailable. This fallback is primarily for fresh/test vaults; normal
+// upgrades use the embedded versioned migrations above.
 func (d *DB) runInlineMigrations() error {
 	schema := `
 CREATE TABLE IF NOT EXISTS files (
@@ -186,6 +247,17 @@ CREATE TABLE IF NOT EXISTS notes (
   source_quality TEXT,
   frontmatter_json TEXT,
   body TEXT,
+  workspace_id TEXT NOT NULL DEFAULT '',
+  agent_id TEXT NOT NULL DEFAULT '',
+  session_id TEXT NOT NULL DEFAULT '',
+  memory_class TEXT NOT NULL DEFAULT ''
+    CHECK(memory_class IN ('', 'working', 'episodic', 'semantic', 'procedural')),
+  memory_kind TEXT NOT NULL DEFAULT '',
+  confidence REAL CHECK(confidence IS NULL OR (confidence >= 0.0 AND confidence <= 1.0)),
+  provenance_json TEXT,
+  observed_at TEXT,
+  valid_from TEXT,
+  valid_to TEXT,
   FOREIGN KEY(file_id) REFERENCES files(id)
 );
 
@@ -261,6 +333,64 @@ CREATE TABLE IF NOT EXISTS captures (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS conversations (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT 'New conversation',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  sources_json TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_supersessions (
+  superseding_note_id TEXT NOT NULL,
+  superseded_note_id TEXT NOT NULL,
+  reason TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (superseding_note_id, superseded_note_id)
+);
+
+CREATE TRIGGER IF NOT EXISTS project_memory_class_after_insert
+AFTER INSERT ON notes
+BEGIN
+  UPDATE notes
+  SET memory_class = CASE
+    WHEN NEW.memory_kind = '' THEN ''
+    ELSE CASE COALESCE(json_extract(NEW.frontmatter_json, '$.memory_class'), '')
+      WHEN 'working' THEN 'working'
+      WHEN 'episodic' THEN 'episodic'
+      WHEN 'semantic' THEN 'semantic'
+      WHEN 'procedural' THEN 'procedural'
+      ELSE 'semantic'
+    END
+  END
+  WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS project_memory_class_after_update
+AFTER UPDATE OF frontmatter_json, memory_kind ON notes
+BEGIN
+  UPDATE notes
+  SET memory_class = CASE
+    WHEN NEW.memory_kind = '' THEN ''
+    ELSE CASE COALESCE(json_extract(NEW.frontmatter_json, '$.memory_class'), '')
+      WHEN 'working' THEN 'working'
+      WHEN 'episodic' THEN 'episodic'
+      WHEN 'semantic' THEN 'semantic'
+      WHEN 'procedural' THEN 'procedural'
+      ELSE 'semantic'
+    END
+  END
+  WHERE id = NEW.id;
+END;
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL
@@ -274,14 +404,35 @@ CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
 CREATE INDEX IF NOT EXISTS idx_links_from ON links(from_note_id);
 CREATE INDEX IF NOT EXISTS idx_links_to ON links(to_note_id);
 CREATE INDEX IF NOT EXISTS idx_captures_project ON captures(project);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation
+  ON conversation_messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_notes_memory_scope
+  ON notes(workspace_id, agent_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_notes_memory_class
+  ON notes(memory_class);
+CREATE INDEX IF NOT EXISTS idx_notes_memory_kind
+  ON notes(memory_kind);
+CREATE INDEX IF NOT EXISTS idx_notes_memory_confidence
+  ON notes(confidence);
+CREATE INDEX IF NOT EXISTS idx_notes_memory_validity
+  ON notes(valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS idx_memory_supersessions_superseded
+  ON memory_supersessions(superseded_note_id);
 `
-	_, err := d.conn.Exec(schema)
-	if err != nil {
-		return fmt.Errorf("failed to run inline migrations: %w", err)
+	if _, err := d.conn.Exec(schema); err != nil {
+		return fmt.Errorf("failed to run inline base migrations: %w", err)
 	}
-	_, err = d.conn.Exec(
-		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, datetime('now'))`,
-	)
+	if _, err := d.conn.Exec(inlineKnowledgeSchema); err != nil {
+		return fmt.Errorf("failed to run inline knowledge migrations: %w", err)
+	}
+	_, err := d.conn.Exec(`
+		INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+		VALUES
+			(1, datetime('now')),
+			(2, datetime('now')),
+			(3, datetime('now')),
+			(4, datetime('now'))
+	`)
 	return err
 }
 

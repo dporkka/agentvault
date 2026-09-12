@@ -55,12 +55,12 @@ func TestRunMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 2 {
-		t.Errorf("Expected migration version 2, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected migration version 4, got %d", version)
 	}
 
 	// Verify tables exist
-	tables := []string{"files", "notes", "tags", "entities", "links", "schema_migrations"}
+	tables := []string{"files", "notes", "tags", "entities", "links", "conversations", "memory_supersessions", "provenance_records", "objects", "object_relations", "memory_records", "agent_sessions", "session_events", "schema_migrations"}
 	for _, table := range tables {
 		var name string
 		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
@@ -153,8 +153,8 @@ func TestRunMigrationsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 2 {
-		t.Errorf("Expected migration version 2, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected migration version 4, got %d", version)
 	}
 }
 
@@ -163,15 +163,14 @@ func TestEmbeddedMigrationsPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read embedded migrations: %v", err)
 	}
-	found := false
+	found := map[string]bool{}
 	for _, e := range entries {
-		if e.Name() == "001_init.sql" {
-			found = true
-			break
-		}
+		found[e.Name()] = true
 	}
-	if !found {
-		t.Error("Expected 001_init.sql to be embedded")
+	for _, name := range []string{"001_init.sql", "002_conversations.sql", "003_memory_semantics.sql", "004_universal_knowledge.sql"} {
+		if !found[name] {
+			t.Errorf("Expected %s to be embedded", name)
+		}
 	}
 }
 
@@ -208,7 +207,7 @@ func TestRunInlineMigrations(t *testing.T) {
 	}
 
 	// Verify the inline schema created expected tables.
-	tables := []string{"files", "notes", "tags", "entities", "links", "chunks", "schema_migrations"}
+	tables := []string{"files", "notes", "tags", "entities", "links", "chunks", "conversations", "conversation_messages", "memory_supersessions", "provenance_records", "objects", "object_relations", "memory_records", "agent_sessions", "session_events", "schema_migrations"}
 	for _, table := range tables {
 		var name string
 		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
@@ -224,14 +223,14 @@ func TestRunInlineMigrations(t *testing.T) {
 		t.Errorf("Expected notes_fts virtual table to exist: %v", err)
 	}
 
-	// Verify migration version was recorded.
+	// Verify latest migration version was recorded.
 	var version int
-	err = db.QueryRow("SELECT version FROM schema_migrations LIMIT 1").Scan(&version)
+	err = db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version)
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 1 {
-		t.Errorf("Expected migration version 1, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected migration version 4, got %d", version)
 	}
 }
 
@@ -256,12 +255,12 @@ func TestRunMigrationsInlineFallback(t *testing.T) {
 	}
 
 	var version int
-	err = db.QueryRow("SELECT version FROM schema_migrations LIMIT 1").Scan(&version)
+	err = db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version)
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 1 {
-		t.Errorf("Expected inline migration version 1, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected inline migration version 4, got %d", version)
 	}
 }
 
