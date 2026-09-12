@@ -45,8 +45,9 @@ Exposes AgentVault tools to AI agents via the Model Context Protocol.
 Supports stdio (default) and authenticated HTTP transports.
 
 User-authored file writes are proposal-only by default. A persistent capability
-token can bind the MCP process to a scoped agent identity and selectively expose
-approve, commit, reject, or undo tools. Legacy direct-write MCP commands remain
+token can bind the MCP process to a scoped agent identity. Bound identities see
+only mutation tools covered by their granted mutation capabilities until broader
+MCP capability families are introduced. Legacy direct-write MCP commands remain
 an explicit compatibility opt-in and cannot be combined with a scoped identity.
 
 Example:
@@ -62,13 +63,14 @@ var mcpServeCmd = &cobra.Command{
 	Short: "Start MCP server for AI agent integration",
 	Long: `Starts an MCP server that exposes AgentVault tools to AI agents.
 
-Stdio may run without a capability token and then exposes only the legacy safe
-proposal/read mutation subset. Supplying a capability token binds the process to
-that identity and its mutation scopes. HTTP transport requires a capability token
-and uses the same token as Bearer/X-AgentVault-Token transport authentication.
+Unbound stdio exposes the existing safe local surface plus proposal/read
+mutations. Supplying a capability token binds the process to that identity and
+registers only mutation tools represented by its granted capabilities. HTTP
+transport requires a capability token and uses that same token as the transport
+credential.
 
 --allow-direct-writes is mutually exclusive with a capability token so a scoped
-identity can never regain the legacy unreviewed file-writing tools by accident.
+identity can never regain legacy unreviewed file-writing tools by accident.
 Prefer AGENTVAULT_CAPABILITY_TOKEN over a command-line token when process-list
 visibility is a concern.`,
 	Run: runMcpServe,
@@ -114,15 +116,10 @@ func runMcpServe(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 	}
-	if mcpAllowDirectWrites {
-		server.RegisterTools()
-	} else {
-		server.RegisterSafeTools()
+	if err := server.RegisterRuntimeSurface(mcpAllowDirectWrites); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: configure MCP authorization surface: %v\n", err)
+		os.Exit(1)
 	}
-	server.RegisterKnowledgeTools()
-	server.RegisterContextTool()
-	server.RegisterMutationTools()
-	server.RegisterResources()
 
 	if mcpHTTP {
 		addr := fmt.Sprintf("127.0.0.1:%d", mcpPort)
