@@ -39,6 +39,7 @@ type Frontmatter struct {
 	WorkspaceID        string                 `yaml:"workspace_id"`
 	AgentID            string                 `yaml:"agent_id"`
 	SessionID          string                 `yaml:"session_id"`
+	MemoryClass        string                 `yaml:"memory_class"`
 	MemoryKind         string                 `yaml:"memory_kind"`
 	MemoryConfidence   *float64               `yaml:"memory_confidence"`
 	Provenance         Provenance             `yaml:"provenance"`
@@ -152,6 +153,9 @@ func mirrorPreservedFields(frontmatter *Frontmatter) {
 	}
 	if frontmatter.SessionID != "" {
 		frontmatter.Extra["session_id"] = frontmatter.SessionID
+	}
+	if frontmatter.MemoryClass != "" {
+		frontmatter.Extra["memory_class"] = frontmatter.MemoryClass
 	}
 	if frontmatter.MemoryKind != "" {
 		frontmatter.Extra["memory_kind"] = frontmatter.MemoryKind
