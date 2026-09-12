@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/agentvault/core/internal/authz"
@@ -47,6 +48,7 @@ func TestRegisterRuntimeSurfaceScopedRegistersOnlyGrantedMutationTools(t *testin
 			authz.MutationRead,
 			authz.MutationApprove,
 		},
+		Scope: authz.Scope{Projects: []string{"alpha"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -88,6 +90,161 @@ func TestRegisterRuntimeSurfaceScopedRegistersOnlyGrantedMutationTools(t *testin
 	}
 	if err := server.RegisterRuntimeSurface(true); err == nil {
 		t.Fatal("scoped identity must reject direct-write compatibility mode")
+	}
+}
+
+func TestRegisterRuntimeSurfaceExplicitReadFamilies(t *testing.T) {
+	_, database, vault := setupKnowledgeMCPServer(t)
+	defer database.Close()
+
+	registry, err := authz.NewRegistry(vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued, err := registry.Mint(authz.MintRequest{
+		AgentID: "reader",
+		Capabilities: []authz.Capability{
+			authz.VaultRead,
+			authz.KnowledgeRead,
+			authz.ContextCompile,
+			authz.AIInvoke,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServer(vault, database)
+	if err := server.SetCapabilityToken(issued.Token); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.RegisterRuntimeSurface(false); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, expected := range []string{
+		"agentvault.search",
+		"agentvault.recall_memories",
+		"agentvault.read_note",
+		"agentvault.get_links",
+		"agentvault.list_projects",
+		"agentvault.list_recent",
+		"agentvault.git_status",
+		"agentvault.get_object",
+		"agentvault.list_memories",
+		"agentvault.get_session",
+		"agentvault.compile_context",
+		"agentvault.ask",
+	} {
+		if _, ok := server.tools[expected]; !ok {
+			t.Errorf("read-capability surface missing %s", expected)
+		}
+	}
+	for _, forbidden := range []string{
+		"agentvault.create_note",
+		"agentvault.create_provenance",
+		"agentvault.upsert_object",
+		"agentvault.create_relation",
+		"agentvault.record_memory",
+		"agentvault.start_session",
+		"agentvault.append_session_event",
+		"agentvault.close_session",
+		"agentvault.propose_mutation",
+		"agentvault.approve_mutation",
+		"agentvault.commit_mutation",
+	} {
+		if _, ok := server.tools[forbidden]; ok {
+			t.Errorf("read-capability surface unexpectedly exposes %s", forbidden)
+		}
+	}
+	if len(server.resources) == 0 {
+		t.Fatal("vault:read should expose read-only MCP resources")
+	}
+}
+
+func TestRegisterRuntimeSurfaceReadCapabilitiesFailClosedWithResourceScope(t *testing.T) {
+	_, database, vault := setupKnowledgeMCPServer(t)
+	defer database.Close()
+
+	for _, capability := range []authz.Capability{
+		authz.VaultRead,
+		authz.KnowledgeRead,
+		authz.ContextCompile,
+		authz.AIInvoke,
+	} {
+		t.Run(string(capability), func(t *testing.T) {
+			registry, err := authz.NewRegistry(vault)
+			if err != nil {
+				t.Fatal(err)
+			}
+			issued, err := registry.Mint(authz.MintRequest{
+				AgentID: "reader-" + strings.ReplaceAll(string(capability), ":", "-"),
+				Capabilities: []authz.Capability{capability},
+				Scope: authz.Scope{Projects: []string{"alpha"}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			server := NewServer(vault, database)
+			if err := server.SetCapabilityToken(issued.Token); err != nil {
+				t.Fatal(err)
+			}
+			err = server.RegisterRuntimeSurface(false)
+			if err == nil || !strings.Contains(err.Error(), "do not yet support") {
+				t.Fatalf("expected scoped read capability to fail closed, got %v", err)
+			}
+			if len(server.tools) != 0 || len(server.resources) != 0 {
+				t.Fatalf("failed registration leaked tools=%d resources=%d", len(server.tools), len(server.resources))
+			}
+		})
+	}
+}
+
+func TestRegisterRuntimeSurfaceUnscopedReadAndMutationCapabilitiesCompose(t *testing.T) {
+	_, database, vault := setupKnowledgeMCPServer(t)
+	defer database.Close()
+
+	registry, err := authz.NewRegistry(vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued, err := registry.Mint(authz.MintRequest{
+		AgentID: "builder",
+		Capabilities: []authz.Capability{
+			authz.VaultRead,
+			authz.ContextCompile,
+			authz.MutationRead,
+			authz.MutationPropose,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServer(vault, database)
+	if err := server.SetCapabilityToken(issued.Token); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.RegisterRuntimeSurface(false); err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"agentvault.search",
+		"agentvault.compile_context",
+		"agentvault.get_mutation",
+		"agentvault.list_mutations",
+		"agentvault.propose_mutation",
+	} {
+		if _, ok := server.tools[expected]; !ok {
+			t.Errorf("composed capability surface missing %s", expected)
+		}
+	}
+	if _, ok := server.tools["agentvault.ask"]; ok {
+		t.Fatal("ai:invoke was not granted")
+	}
+	if _, ok := server.tools["agentvault.get_object"]; ok {
+		t.Fatal("knowledge:read was not granted")
 	}
 }
 
