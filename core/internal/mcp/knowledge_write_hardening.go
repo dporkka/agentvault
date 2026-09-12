@@ -14,6 +14,14 @@ import (
 // change remains attributable to an authorized durable session.
 func (s *Server) HardenKnowledgeWriteTools() {
 	store := knowledge.New(s.db, s.vaultPath)
+	principal, principalOK := s.capabilityIdentity()
+	if principalOK && authz.HasCapability(principal, authz.SessionWrite) && len(principal.Scope.Sessions) > 0 {
+		// A session restriction can authorize only already-existing durable
+		// sessions, so advertising start_session would be misleading and broader
+		// than the identity's actual authority.
+		delete(s.tools, "agentvault.start_session")
+	}
+
 	wrap := func(name string, check func(map[string]interface{}) error) {
 		tool, ok := s.tools[name]
 		if !ok || tool.Handler == nil {
