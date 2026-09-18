@@ -15,7 +15,7 @@
     "@agentvault/contract": "file:../../packages/contract",
     "@agentvault/ui": "file:../../packages/ui",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react-dom": "^19.2.7",
     "react-markdown": "^9.0.1",
     "react-router-dom": "^6.30.4"
   },
@@ -26,7 +26,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "autoprefixer": "^10.4.19",
     "jsdom": "^24.1.3",
