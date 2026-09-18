@@ -36,7 +36,7 @@
     "expo-haptics": "~56.0.3",
     "expo-secure-store": "~56.0.4",
     "expo-splash-screen": "~56.0.10",
-    "expo-status-bar": "56.0.4",
+    "expo-status-bar": "57.0.0",
     "is-arrayish": "^0.3.4",
     "promise": "^8.3.0",
     "react": "19.2.3",
