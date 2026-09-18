@@ -13,14 +13,14 @@
   },
   "dependencies": {
     "@agentvault/contract": "file:../../packages/contract",
-    "react": "^18.3.1",
+    "react": "^19.2.7",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/chrome": "^0.0.268",
-    "@types/react": "^18.3.3",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^18.3.0",
     "jsdom": "^29.1.1",
     "typescript": "^5.4.5",
