@@ -161,13 +161,15 @@ func contextItemAuthorized(store *knowledge.Store, principal authz.Principal, re
 		}
 		return true
 	case "episode":
-		scopeType := strings.ToLower(metadataString(item.Metadata, "scopeType"))
-		scopeID := metadataString(item.Metadata, "scopeId")
-		switch scopeType {
+		episode, err := store.GetEpisode(item.ID)
+		if err != nil {
+			return false
+		}
+		switch strings.ToLower(strings.TrimSpace(episode.ScopeType)) {
 		case "session":
-			return contextSessionAuthorized(store, principal, scopeID)
+			return contextSessionAuthorized(store, principal, episode.ScopeID)
 		case "project":
-			return authorizeContextProjectResource(principal, req, scopeID, req.SessionID) == nil
+			return authorizeContextProjectResource(principal, req, episode.ScopeID, req.SessionID) == nil
 		default:
 			// Agent/global episodes do not carry an authoritative project binding.
 			return false
