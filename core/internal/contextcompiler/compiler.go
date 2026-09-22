@@ -74,7 +74,13 @@ func (c *Compiler) Compile(req contract.CompileContextRequest) (contract.Context
 	if err := collector.addMemories(); err != nil {
 		return contract.ContextBundle{}, err
 	}
+	if err := collector.addEpisodes(); err != nil {
+		return contract.ContextBundle{}, err
+	}
 	if err := collector.addObjects(); err != nil {
+		return contract.ContextBundle{}, err
+	}
+	if err := collector.addFacts(); err != nil {
 		return contract.ContextBundle{}, err
 	}
 	if err := collector.addRelations(); err != nil {
