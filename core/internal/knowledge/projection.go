@@ -54,6 +54,18 @@ func (s *Store) projectJournalEvent(event JournalEvent) error {
 			return err
 		}
 		return s.projectRelation(relation)
+	case eventEpisodeRecorded:
+		var episode contract.EpisodeRecord
+		if err := json.Unmarshal(event.Payload, &episode); err != nil {
+			return err
+		}
+		return s.projectEpisode(episode)
+	case eventFactRecorded:
+		var fact contract.TemporalFact
+		if err := json.Unmarshal(event.Payload, &fact); err != nil {
+			return err
+		}
+		return s.projectFact(fact)
 	case eventMemoryRecorded:
 		var memory contract.MemoryRecord
 		if err := json.Unmarshal(event.Payload, &memory); err != nil {
