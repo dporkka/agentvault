@@ -199,6 +199,23 @@ edited to make an old inference appear supported by new evidence.
 Confidence is in `[0, 1]` and defaults to `1` only when omitted. An explicit
 zero is valid and must be preserved.
 
+### Exact source spans
+
+A `ProvenanceEvidence` record can optionally identify the exact source version
+and location that supports a claim:
+
+- `contentHash` binds evidence to a specific source version;
+- `chunkId` preserves the retrieval/index chunk identity when applicable;
+- `span.startLine` / `span.endLine` are 1-based inclusive line bounds;
+- `span.startByte` / `span.endByte` are 0-based half-open byte bounds.
+
+Line and byte ranges are independently optional, but each range must provide
+both endpoints. Existing path/quote-only provenance remains valid.
+
+Source spans are part of canonical provenance evidence and therefore survive
+journal replay. They are not inferred later from a quote, because files may
+have changed by the time a fact is inspected.
+
 ## 5. Memory model
 
 AgentVault separates **memory class** from **memory kind**.
