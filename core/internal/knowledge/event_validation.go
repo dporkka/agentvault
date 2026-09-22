@@ -9,6 +9,18 @@ import (
 
 func validateJournalPayload(eventType string, payload interface{}) error {
 	switch eventType {
+	case eventEpisodeRecorded:
+		episode, ok := payload.(contract.EpisodeRecord)
+		if !ok {
+			return fmt.Errorf("%s payload must be EpisodeRecord", eventType)
+		}
+		return validateTemporalInterval(episode.OccurredAt, episode.EndedAt)
+	case eventFactRecorded:
+		fact, ok := payload.(contract.TemporalFact)
+		if !ok {
+			return fmt.Errorf("%s payload must be TemporalFact", eventType)
+		}
+		return validateTemporalInterval(fact.ValidFrom, fact.ValidTo)
 	case eventRelationCreated:
 		relation, ok := payload.(contract.ObjectRelation)
 		if !ok {
