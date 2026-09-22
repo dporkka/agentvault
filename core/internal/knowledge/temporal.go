@@ -295,6 +295,52 @@ func (s *Store) FactsForObject(objectID string, limit int) ([]contract.TemporalF
 }
 
 
+
+// FactsForSubject returns facts asserted about one subject. Unlike
+// FactsForObject it does not include inbound references where the object is
+// only the value/target of another subject's fact.
+func (s *Store) FactsForSubject(subjectID string, limit int) ([]contract.TemporalFact, error) {
+	if strings.TrimSpace(subjectID) == "" {
+		return nil, errors.New("subject id is required")
+	}
+	if limit <= 0 || limit > 1000 {
+		limit = defaultLimit
+	}
+	rows, err := s.db.Query(`
+		SELECT id, subject_id, predicate, COALESCE(object_id, ''), COALESCE(value, ''),
+		       COALESCE(provenance_id, ''), confidence, COALESCE(valid_from, ''),
+		       COALESCE(valid_to, ''), COALESCE(supersedes_id, ''),
+		       COALESCE(superseded_at, ''), COALESCE(superseded_by, ''),
+		       metadata_json, created_at, updated_at
+		FROM temporal_facts
+		WHERE subject_id = ?
+		ORDER BY updated_at DESC
+		LIMIT ?`, subjectID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list facts for subject: %w", err)
+	}
+	defer rows.Close()
+
+	facts := make([]contract.TemporalFact, 0)
+	for rows.Next() {
+		var fact contract.TemporalFact
+		var metadataJSON string
+		if err := rows.Scan(
+			&fact.ID, &fact.SubjectID, &fact.Predicate, &fact.ObjectID, &fact.Value,
+			&fact.ProvenanceID, &fact.Confidence, &fact.ValidFrom, &fact.ValidTo,
+			&fact.SupersedesID, &fact.SupersededAt, &fact.SupersededBy,
+			&metadataJSON, &fact.CreatedAt, &fact.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(metadataJSON), &fact.Metadata); err != nil {
+			return nil, fmt.Errorf("decode fact metadata: %w", err)
+		}
+		facts = append(facts, fact)
+	}
+	return facts, rows.Err()
+}
+
 func (s *Store) FactsForProject(project string, limit int) ([]contract.TemporalFact, error) {
 	if strings.TrimSpace(project) == "" {
 		return nil, errors.New("project is required")
