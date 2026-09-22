@@ -37,16 +37,13 @@ func (s *Store) BuildEntityProfile(objectID string, asOf time.Time, maxFacts int
 		maxFacts = maximumProfileFacts
 	}
 
-	rows, err := s.FactsForObject(objectID, 1000)
+	rows, err := s.FactsForSubject(objectID, 1000)
 	if err != nil {
 		return contract.EntityProfile{}, err
 	}
 	facts := make([]contract.TemporalFact, 0, min(maxFacts, len(rows)))
 	for _, fact := range rows {
-		// FactsForObject also returns records where this object is the target.
-		// Profiles describe the subject itself, so target-only facts do not
-		// become standing attributes of the target.
-		if fact.SubjectID != objectID || !FactVisibleAt(fact, asOf) {
+		if !FactVisibleAt(fact, asOf) {
 			continue
 		}
 		facts = append(facts, fact)
