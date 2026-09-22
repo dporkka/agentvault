@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Store) projectEpisode(episode contract.EpisodeRecord) error {
-	objectIDs, err := json.Marshal(orEmptySlice(episode.ObjectIDs))
+	objectIDs, err := json.Marshal(normalizeIDs(episode.ObjectIDs))
 	if err != nil {
 		return fmt.Errorf("marshal episode object ids: %w", err)
 	}
