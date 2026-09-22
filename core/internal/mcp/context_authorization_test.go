@@ -94,6 +94,19 @@ func TestFilterContextBundleDropsAlternatePathLeaksAndRedactsProvenance(t *testi
 		t.Fatal(err)
 	}
 
+	if _, err := store.RecordEpisode(contract.CreateEpisodeRequest{
+		ID: "episode_alpha", ScopeType: "project", ScopeID: "alpha",
+		EventType: "status.changed", Summary: "Alpha changed.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordEpisode(contract.CreateEpisodeRequest{
+		ID: "episode_beta", ScopeType: "project", ScopeID: "beta",
+		EventType: "status.changed", Summary: "Beta changed.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 	principal := authz.Principal{Capabilities: []authz.Capability{authz.ContextCompile}, Scope: authz.Scope{Projects: []string{"alpha"}}}
 	req := contract.CompileContextRequest{Task: "alpha", Project: "alpha", WorkspaceID: "alpha"}
 	provenance := &contract.ContextProvenance{
