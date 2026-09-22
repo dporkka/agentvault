@@ -111,3 +111,50 @@ func TestTemporalFactSupersessionAndEpisodeReplay(t *testing.T) {
 		t.Fatalf("unexpected episodes after replay: %+v", episodes)
 	}
 }
+
+
+func TestProjectFactRejectsCrossPredicateSupersessionOnReplay(t *testing.T) {
+	store, database, _ := setupStore(t)
+	defer database.Close()
+
+	subject, err := store.UpsertObject(contract.UpsertKnowledgeObjectRequest{
+		ID:      "obj_projection_guard",
+		Type:    "project",
+		Title:   "Projection Guard",
+		Project: "agentvault",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.RecordFact(contract.CreateTemporalFactRequest{
+		ID:        "fact_projection_guard",
+		SubjectID: subject.ID,
+		Predicate: "deployment.target",
+		Value:     "cloud-run",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = store.projectFact(contract.TemporalFact{
+		ID:           "fact_corrupt_replay",
+		SubjectID:    subject.ID,
+		Predicate:    "different.predicate",
+		Value:        "should-not-supersede",
+		SupersedesID: first.ID,
+		Confidence:   1,
+		CreatedAt:    "2026-09-22T12:00:00Z",
+		UpdatedAt:    "2026-09-22T12:00:00Z",
+	})
+	if err == nil {
+		t.Fatal("expected projection to reject cross-predicate supersession")
+	}
+
+	loaded, err := store.GetFact(first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.SupersededBy != "" {
+		t.Fatalf("corrupt replay mutated original fact: %+v", loaded)
+	}
+}
