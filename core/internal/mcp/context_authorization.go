@@ -144,6 +144,34 @@ func contextItemAuthorized(store *knowledge.Store, principal authz.Principal, re
 	case "object":
 		object, err := store.GetObject(item.ID)
 		return err == nil && authorizeContextProjectResource(principal, req, object.Project, req.SessionID) == nil
+	case "fact":
+		fact, err := store.GetFact(item.ID)
+		if err != nil {
+			return false
+		}
+		subject, err := store.GetObject(fact.SubjectID)
+		if err != nil || authorizeContextProjectResource(principal, req, subject.Project, req.SessionID) != nil {
+			return false
+		}
+		if fact.ObjectID != "" {
+			object, err := store.GetObject(fact.ObjectID)
+			if err != nil || authorizeContextProjectResource(principal, req, object.Project, req.SessionID) != nil {
+				return false
+			}
+		}
+		return true
+	case "episode":
+		scopeType := strings.ToLower(metadataString(item.Metadata, "scopeType"))
+		scopeID := metadataString(item.Metadata, "scopeId")
+		switch scopeType {
+		case "session":
+			return contextSessionAuthorized(store, principal, scopeID)
+		case "project":
+			return authorizeContextProjectResource(principal, req, scopeID, req.SessionID) == nil
+		default:
+			// Agent/global episodes do not carry an authoritative project binding.
+			return false
+		}
 	case "relation":
 		if len(item.ObjectIDs) == 0 {
 			return false
