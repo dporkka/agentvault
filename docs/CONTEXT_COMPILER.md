@@ -34,7 +34,7 @@ slightly differently, so callers should keep a small model-window reserve.
 
 ## Retrieval order
 
-The unified compiler gathers candidates from nine layers:
+The unified compiler gathers candidates from ten layers:
 
 1. current durable session and its most recent events;
 2. journal-backed session/project/agent machine memories after temporal and
@@ -43,10 +43,11 @@ The unified compiler gathers candidates from nine layers:
 4. Markdown-backed human/file memories after workspace/agent/session visibility,
    temporal validity, contextual supersession, and optional project filtering;
 5. explicitly requested and task-relevant project knowledge objects;
-6. temporal facts whose validity and knowledge-time windows contain `asOf`;
-7. currently valid object relations;
-8. project/task-relevant indexed notes that are not classified memories;
-9. recent matching agent sessions for execution history.
+6. standing profiles for profileable objects already admitted by the object layer;
+7. temporal facts whose validity and knowledge-time windows contain `asOf`;
+8. currently valid object relations;
+9. project/task-relevant indexed notes that are not classified memories;
+10. recent matching agent sessions for execution history.
 
 Gathering order does not determine output order. Candidates receive local,
 deterministic relevance scores and are sorted by score, kind, then stable ID.
@@ -107,6 +108,28 @@ past `asOf` and recover knowledge that was valid then.
 For Markdown memory, scope inheritance is explicit: global memory is visible to
 narrower contexts, while workspace-, agent-, or session-scoped memory is only
 visible when each populated scope dimension matches the compilation context.
+
+
+## Standing profiles
+
+A standing profile is a compact derived context item for a person/user, agent,
+project, organization/team, or repository object that has current temporal
+facts. It is not stored separately.
+
+Profile facts use exactly the same bi-temporal visibility function as ordinary
+fact candidates. Profile lines retain their durable fact IDs so downstream
+inspection can trace the compact view back to canonical claims.
+
+Profiles are compiled only for objects already admitted by explicit selection
+or task/project relevance. An explicitly requested object receives a stronger
+profile score so its standing attributes remain available even when those
+attributes do not lexically match the current task.
+
+For project-scoped compilation, an object-target fact is omitted from profile
+text when its target belongs to another project. Scoped MCP filtering then
+reloads the persisted profile subject and authorizes every embedded object ID
+before returning the item. Profiles therefore cannot become an alternate path
+around object-level authorization.
 
 ## Episodes and temporal facts
 
