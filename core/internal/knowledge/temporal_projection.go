@@ -62,8 +62,10 @@ func (s *Store) projectFact(fact contract.TemporalFact) error {
 		result, err := tx.Exec(`
 			UPDATE temporal_facts
 			SET superseded_at = ?, superseded_by = ?, updated_at = ?
-			WHERE id = ? AND (superseded_by IS NULL OR superseded_by = '' OR superseded_by = ?)`,
-			fact.CreatedAt, fact.ID, fact.CreatedAt, fact.SupersedesID, fact.ID,
+			WHERE id = ? AND subject_id = ? AND predicate = ?
+			  AND (superseded_by IS NULL OR superseded_by = '' OR superseded_by = ?)`,
+			fact.CreatedAt, fact.ID, fact.CreatedAt, fact.SupersedesID,
+			fact.SubjectID, fact.Predicate, fact.ID,
 		)
 		if err != nil {
 			return fmt.Errorf("project fact supersession: %w", err)
