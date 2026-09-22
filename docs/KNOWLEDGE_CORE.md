@@ -161,6 +161,28 @@ an older fact remains visible before its supersession boundary and disappears
 from current context afterward. History is never rewritten to make new
 knowledge appear retroactively known.
 
+
+### Standing entity profiles
+
+Profiles are deterministic views, not a third canonical representation.
+`EntityProfile` is rebuilt from a durable `KnowledgeObject` plus the temporal
+facts about that subject that are valid and known at the requested `asOf`
+time.
+
+The initial profileable object classes are:
+
+- person / user
+- agent
+- project
+- organization / team
+- repository
+
+This gives agents a compact block of stable context without requiring every
+important attribute to win semantic search on every turn. Because the profile
+contains fact IDs and is regenerated from canonical facts, contradiction and
+supersession semantics remain centralized in the temporal fact model rather
+than being copied into profile storage.
+
 ## 4. Provenance
 
 Machine-created knowledge should answer:
@@ -263,6 +285,7 @@ evidence-backed context from:
 - scoped immutable episodes;
 - Markdown-backed scoped memories;
 - typed objects;
+- standing entity profiles derived from current temporal facts;
 - temporal facts valid and known at the requested `asOf` time;
 - currently valid object relations;
 - ordinary indexed notes;
