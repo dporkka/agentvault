@@ -34,10 +34,22 @@ type CreateProvenanceRequest struct {
 
 // ProvenanceEvidence points at concrete evidence supporting a record.
 type ProvenanceEvidence struct {
-	Source string `json:"source"`
-	ID     string `json:"id,omitempty"`
-	Path   string `json:"path,omitempty"`
-	Quote  string `json:"quote,omitempty"`
+	Source      string      `json:"source"`
+	ID          string      `json:"id,omitempty"`
+	Path        string      `json:"path,omitempty"`
+	Quote       string      `json:"quote,omitempty"`
+	ContentHash string      `json:"contentHash,omitempty"`
+	ChunkID     string      `json:"chunkId,omitempty"`
+	Span        *SourceSpan `json:"span,omitempty"`
+}
+
+// SourceSpan identifies an exact location inside evidence. Line numbers are
+// 1-based and inclusive. Byte offsets are 0-based and half-open [start, end).
+type SourceSpan struct {
+	StartLine int    `json:"startLine,omitempty"`
+	EndLine   int    `json:"endLine,omitempty"`
+	StartByte *int64 `json:"startByte,omitempty"`
+	EndByte   *int64 `json:"endByte,omitempty"`
 }
 
 // KnowledgeObject is the universal typed envelope shared by notes, projects,
