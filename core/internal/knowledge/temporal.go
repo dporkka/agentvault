@@ -66,7 +66,7 @@ func (s *Store) RecordEpisode(req contract.CreateEpisodeRequest) (contract.Episo
 		ScopeID:      req.ScopeID,
 		EventType:    req.EventType,
 		Summary:      req.Summary,
-		ObjectIDs:    compactStrings(req.ObjectIDs...),
+		ObjectIDs:    normalizeIDs(req.ObjectIDs),
 		ProvenanceID: req.ProvenanceID,
 		OccurredAt:   occurredAt,
 		EndedAt:      req.EndedAt,
@@ -298,4 +298,63 @@ func (s *Store) FactsForObject(objectID string, limit int) ([]contract.TemporalF
 // helper used by tests and callers that need to distinguish missing records.
 func isMissingTemporalRecord(err error) bool {
 	return errors.Is(err, sql.ErrNoRows)
+}
+
+
+func (s *Store) FactsForProject(project string, limit int) ([]contract.TemporalFact, error) {
+	if strings.TrimSpace(project) == "" {
+		return nil, errors.New("project is required")
+	}
+	if limit <= 0 || limit > 1000 {
+		limit = defaultLimit
+	}
+	rows, err := s.db.Query(`
+		SELECT f.id, f.subject_id, f.predicate, COALESCE(f.object_id, ''), COALESCE(f.value, ''),
+		       COALESCE(f.provenance_id, ''), f.confidence, COALESCE(f.valid_from, ''),
+		       COALESCE(f.valid_to, ''), COALESCE(f.supersedes_id, ''),
+		       COALESCE(f.superseded_at, ''), COALESCE(f.superseded_by, ''),
+		       f.metadata_json, f.created_at, f.updated_at
+		FROM temporal_facts f
+		JOIN objects subject ON subject.id = f.subject_id
+		LEFT JOIN objects object_value ON object_value.id = f.object_id
+		WHERE subject.project = ? OR object_value.project = ?
+		ORDER BY f.updated_at DESC
+		LIMIT ?`, project, project, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list project facts: %w", err)
+	}
+	defer rows.Close()
+
+	facts := make([]contract.TemporalFact, 0)
+	for rows.Next() {
+		var fact contract.TemporalFact
+		var metadataJSON string
+		if err := rows.Scan(
+			&fact.ID, &fact.SubjectID, &fact.Predicate, &fact.ObjectID, &fact.Value,
+			&fact.ProvenanceID, &fact.Confidence, &fact.ValidFrom, &fact.ValidTo,
+			&fact.SupersedesID, &fact.SupersededAt, &fact.SupersededBy,
+			&metadataJSON, &fact.CreatedAt, &fact.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(metadataJSON), &fact.Metadata); err != nil {
+			return nil, fmt.Errorf("decode fact metadata: %w", err)
+		}
+		facts = append(facts, fact)
+	}
+	return facts, rows.Err()
+}
+
+func normalizeIDs(values []string) []string {
+	result := make([]string, 0, len(values))
+	seen := make(map[string]bool)
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		result = append(result, value)
+	}
+	return result
 }
