@@ -57,6 +57,9 @@ func validateJournalPayload(eventType string, payload interface{}) error {
 		if !ok {
 			return fmt.Errorf("%s payload must be ProvenanceRecord", eventType)
 		}
+		if err := validateProvenanceEvidence(record.Evidence); err != nil {
+			return err
+		}
 		if record.ObservedAt == "" {
 			return nil
 		}

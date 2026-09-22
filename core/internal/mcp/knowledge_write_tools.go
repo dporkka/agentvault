@@ -46,10 +46,21 @@ func (s *Server) RegisterKnowledgeWriteTools() {
 				"evidence": schemaArray("Supporting evidence records", map[string]interface{}{
 					"type": "object",
 					"properties": map[string]interface{}{
-						"source": schemaString("Evidence source class"),
-						"id":     schemaString("Optional source identifier"),
-						"path":   schemaString("Optional vault-relative path"),
-						"quote":  schemaString("Optional short evidence excerpt"),
+						"source":      schemaString("Evidence source class"),
+						"id":          schemaString("Optional source identifier"),
+						"path":        schemaString("Optional vault-relative path"),
+						"quote":       schemaString("Optional short evidence excerpt"),
+						"contentHash": schemaString("Optional hash of the exact source version"),
+						"chunkId":     schemaString("Optional retrieval/index chunk identity"),
+						"span": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"startLine": map[string]interface{}{"type": "integer", "minimum": 1},
+								"endLine":   map[string]interface{}{"type": "integer", "minimum": 1},
+								"startByte": map[string]interface{}{"type": "integer", "minimum": 0},
+								"endByte":   map[string]interface{}{"type": "integer", "minimum": 0},
+							},
+						},
 					},
 				}),
 				"metadata": schemaObject("Optional machine-readable provenance metadata"),
