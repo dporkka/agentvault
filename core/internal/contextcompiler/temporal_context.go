@@ -34,7 +34,16 @@ func (c *candidateCollector) addEpisodes() error {
 			if err != nil || occurredAt.After(c.asOf) {
 				continue
 			}
+			if episode.CreatedAt != "" {
+				createdAt, err := parseFlexibleTime(episode.CreatedAt)
+				if err != nil || createdAt.After(c.asOf) {
+					continue
+				}
+			}
 			relevance := lexicalRelevance(terms, episode.EventType+" "+episode.Summary)
+			if relevance == 0 && currentScope.typeName != "session" {
+				continue
+			}
 			score := 0.64 + currentScope.bonus + relevance*0.20
 			c.add(contract.ContextItem{
 				Kind:       "episode",
@@ -91,6 +100,10 @@ func (c *candidateCollector) addFacts() error {
 		}
 		content := fmt.Sprintf("%s --%s--> %s", fact.SubjectID, fact.Predicate, value)
 		relevance := lexicalRelevance(terms, fact.Predicate+" "+fact.Value)
+		objectRelevant := c.objectSeen[fact.SubjectID] || (fact.ObjectID != "" && c.objectSeen[fact.ObjectID])
+		if relevance == 0 && !objectRelevant {
+			continue
+		}
 		c.add(contract.ContextItem{
 			Kind:       "fact",
 			ID:         fact.ID,
