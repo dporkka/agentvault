@@ -80,6 +80,9 @@ func (c *Compiler) Compile(req contract.CompileContextRequest) (contract.Context
 	if err := collector.addObjects(); err != nil {
 		return contract.ContextBundle{}, err
 	}
+	if err := collector.addProfiles(); err != nil {
+		return contract.ContextBundle{}, err
+	}
 	if err := collector.addFacts(); err != nil {
 		return contract.ContextBundle{}, err
 	}
