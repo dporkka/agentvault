@@ -89,6 +89,50 @@ func (s *Server) HardenKnowledgeWriteTools() {
 		return nil
 	})
 
+
+	wrap("agentvault.record_fact", func(args map[string]interface{}) error {
+		principal, err := s.requireWritePrincipal(authz.KnowledgeWrite)
+		if err != nil || !authz.HasResourceScope(principal) {
+			return err
+		}
+		if strings.TrimSpace(stringArg(args, "provenance_id")) == "" {
+			return fmt.Errorf("%w: scoped fact writes require session-bound provenance", authz.ErrForbidden)
+		}
+		if len(principal.Scope.Sessions) == 0 {
+			return nil
+		}
+		sessionID := strings.TrimSpace(stringArg(args, "session_id"))
+		for _, key := range []string{"subject_id", "object_id"} {
+			id := strings.TrimSpace(stringArg(args, key))
+			if id == "" {
+				continue
+			}
+			object, err := store.GetObject(id)
+			if err != nil {
+				return scopedWriteLookupError(err, "fact object")
+			}
+			if object.ProvenanceID == "" {
+				return fmt.Errorf("%w: session-scoped fact objects require session ownership provenance", authz.ErrForbidden)
+			}
+			if err := authorizeWriteProvenance(store, principal, authz.KnowledgeWrite, object.ProvenanceID, object.Project, sessionID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+
+	wrap("agentvault.record_episode", func(args map[string]interface{}) error {
+		principal, err := s.requireWritePrincipal(authz.MemoryWrite)
+		if err != nil || !authz.HasResourceScope(principal) {
+			return err
+		}
+		if strings.TrimSpace(stringArg(args, "provenance_id")) == "" {
+			return fmt.Errorf("%w: scoped episode writes require session-bound provenance", authz.ErrForbidden)
+		}
+		return nil
+	})
+
 	wrap("agentvault.record_memory", func(args map[string]interface{}) error {
 		principal, err := s.requireWritePrincipal(authz.MemoryWrite)
 		if err != nil || !authz.HasResourceScope(principal) {
