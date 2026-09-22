@@ -250,9 +250,161 @@ func (s *Server) RegisterKnowledgeWriteTools() {
 				return prettyJSON(relation)
 			}),
 		}
+
+
+		s.tools["agentvault.record_fact"] = Tool{
+			Name:        "agentvault.record_fact",
+			Description: "Record a provenance-backed temporal fact about an authorized object.",
+			InputSchema: makeSchema(map[string]interface{}{
+				"id":             schemaString("Optional stable fact ID; resource-scoped identities must omit it"),
+				"subject_id":     schemaString("Subject object ID"),
+				"predicate":      schemaString("Fact predicate"),
+				"object_id":      schemaString("Optional object-valued target"),
+				"value":          schemaString("Optional scalar/text value"),
+				"session_id":     schemaString("Authorization session for a session-scoped identity"),
+				"provenance_id":  schemaString("Optional provenance record"),
+				"confidence":     schemaNumber("Confidence from 0 to 1", 1),
+				"valid_from":     schemaString("Optional domain-validity start"),
+				"valid_to":       schemaString("Optional domain-validity end"),
+				"supersedes_id":  schemaString("Optional older fact superseded by this claim"),
+				"metadata":       schemaObject("Optional fact metadata"),
+			}, []string{"subject_id", "predicate"}),
+			Handler: withStore(func(store *knowledge.Store, args map[string]interface{}) (string, error) {
+				current, err := s.requireWritePrincipal(authz.KnowledgeWrite)
+				if err != nil {
+					return "", err
+				}
+				confidence, err := optionalConfidence(args, "confidence")
+				if err != nil {
+					return "", err
+				}
+				req := contract.CreateTemporalFactRequest{
+					ID:           strings.TrimSpace(stringArg(args, "id")),
+					SubjectID:    strings.TrimSpace(stringArg(args, "subject_id")),
+					Predicate:    strings.TrimSpace(stringArg(args, "predicate")),
+					ObjectID:     strings.TrimSpace(stringArg(args, "object_id")),
+					Value:        stringArg(args, "value"),
+					ProvenanceID: strings.TrimSpace(stringArg(args, "provenance_id")),
+					Confidence:   confidence,
+					ValidFrom:    strings.TrimSpace(stringArg(args, "valid_from")),
+					ValidTo:      strings.TrimSpace(stringArg(args, "valid_to")),
+					SupersedesID: strings.TrimSpace(stringArg(args, "supersedes_id")),
+					Metadata:     mapArg(args, "metadata"),
+				}
+				sessionID := strings.TrimSpace(stringArg(args, "session_id"))
+				if authz.HasResourceScope(current) {
+					if req.ID != "" {
+						return "", fmt.Errorf("%w: resource-scoped fact writes must use server-generated IDs", authz.ErrForbidden)
+					}
+					subject, err := store.GetObject(req.SubjectID)
+					if err != nil {
+						return "", scopedWriteLookupError(err, "fact subject")
+					}
+					project, err := authorizeWriteProject(store, current, authz.KnowledgeWrite, subject.Project, sessionID)
+					if err != nil {
+						return "", err
+					}
+					if project == "" {
+						return "", fmt.Errorf("%w: scoped fact subject must belong to an authorized project", authz.ErrForbidden)
+					}
+					if req.ObjectID != "" {
+						target, err := store.GetObject(req.ObjectID)
+						if err != nil {
+							return "", scopedWriteLookupError(err, "fact object")
+						}
+						targetProject, err := authorizeWriteProject(store, current, authz.KnowledgeWrite, target.Project, sessionID)
+						if err != nil {
+							return "", err
+						}
+						if targetProject == "" || targetProject != project {
+							return "", fmt.Errorf("%w: fact subject and object must share one authorized project", authz.ErrForbidden)
+						}
+					}
+					if err := authorizeWriteProvenance(store, current, authz.KnowledgeWrite, req.ProvenanceID, project, sessionID); err != nil {
+						return "", err
+					}
+					if req.SupersedesID != "" {
+						previous, err := store.GetFact(req.SupersedesID)
+						if err != nil {
+							return "", scopedWriteLookupError(err, "superseded fact")
+						}
+						if previous.SubjectID != req.SubjectID || previous.Predicate != req.Predicate {
+							return "", fmt.Errorf("%w: scoped fact may supersede only the same subject and predicate", authz.ErrForbidden)
+						}
+					}
+				}
+				fact, err := store.RecordFact(req)
+				if err != nil {
+					return "", err
+				}
+				return prettyJSON(fact)
+			}),
+		}
 	}
 
 	if authz.HasCapability(principal, authz.MemoryWrite) {
+
+		s.tools["agentvault.record_episode"] = Tool{
+			Name:        "agentvault.record_episode",
+			Description: "Record an immutable episode within an authorized project/session memory scope.",
+			InputSchema: makeSchema(map[string]interface{}{
+				"id":            schemaString("Optional stable episode ID; resource-scoped identities must omit it"),
+				"scope_type":    schemaString("Scope class: project, session, agent, or other unscoped class"),
+				"scope_id":      schemaString("Scope identifier"),
+				"event_type":    schemaString("Episode event type"),
+				"summary":       schemaString("Concise occurrence summary"),
+				"object_ids":    schemaArray("Related object IDs", map[string]interface{}{"type": "string"}),
+				"provenance_id": schemaString("Optional provenance record"),
+				"occurred_at":   schemaString("Optional occurrence time; defaults to provenance observation time or now"),
+				"ended_at":      schemaString("Optional occurrence end time"),
+				"metadata":      schemaObject("Optional episode metadata"),
+			}, []string{"scope_type", "scope_id", "event_type", "summary"}),
+			Handler: withStore(func(store *knowledge.Store, args map[string]interface{}) (string, error) {
+				current, err := s.requireWritePrincipal(authz.MemoryWrite)
+				if err != nil {
+					return "", err
+				}
+				req := contract.CreateEpisodeRequest{
+					ID:           strings.TrimSpace(stringArg(args, "id")),
+					ScopeType:    strings.ToLower(strings.TrimSpace(stringArg(args, "scope_type"))),
+					ScopeID:      strings.TrimSpace(stringArg(args, "scope_id")),
+					EventType:    strings.TrimSpace(stringArg(args, "event_type")),
+					Summary:      stringArg(args, "summary"),
+					ObjectIDs:    stringSliceArg(args, "object_ids"),
+					ProvenanceID: strings.TrimSpace(stringArg(args, "provenance_id")),
+					OccurredAt:   strings.TrimSpace(stringArg(args, "occurred_at")),
+					EndedAt:      strings.TrimSpace(stringArg(args, "ended_at")),
+					Metadata:     mapArg(args, "metadata"),
+				}
+				if authz.HasResourceScope(current) {
+					if req.ID != "" {
+						return "", fmt.Errorf("%w: resource-scoped episode writes must use server-generated IDs", authz.ErrForbidden)
+					}
+					project, sessionID, err := authorizeMemoryWriteScope(store, current, req.ScopeType, req.ScopeID)
+					if err != nil {
+						return "", err
+					}
+					for _, objectID := range req.ObjectIDs {
+						object, err := store.GetObject(objectID)
+						if err != nil {
+							return "", scopedWriteLookupError(err, "episode object")
+						}
+						if object.Project == "" || object.Project != project {
+							return "", fmt.Errorf("%w: episode object is outside the episode scope", authz.ErrForbidden)
+						}
+					}
+					if err := authorizeWriteProvenance(store, current, authz.MemoryWrite, req.ProvenanceID, project, sessionID); err != nil {
+						return "", err
+					}
+				}
+				episode, err := store.RecordEpisode(req)
+				if err != nil {
+					return "", err
+				}
+				return prettyJSON(episode)
+			}),
+		}
+
 		s.tools["agentvault.record_memory"] = Tool{
 			Name:        "agentvault.record_memory",
 			Description: "Record durable machine memory within the identity's authorized project/session scope.",
