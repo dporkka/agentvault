@@ -67,6 +67,18 @@ func TestScopedKnowledgeWriteAuthorizesGraphResources(t *testing.T) {
 		"source_type": "agent-session",
 		"session_id":  alphaSession.ID,
 		"confidence":  0.9,
+		"evidence": []interface{}{map[string]interface{}{
+			"source": "file",
+			"path": "docs/architecture.md",
+			"contentHash": "sha256:span-test",
+			"chunkId": "chunk_span_test",
+			"span": map[string]interface{}{
+				"startLine": 10,
+				"endLine": 12,
+				"startByte": 100,
+				"endByte": 180,
+			},
+		}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -77,6 +89,15 @@ func TestScopedKnowledgeWriteAuthorizesGraphResources(t *testing.T) {
 	}
 	if provenance.AgentID != "writer" || provenance.SessionID != alphaSession.ID {
 		t.Fatalf("provenance identity was not bound: %+v", provenance)
+	}
+	if len(provenance.Evidence) != 1 || provenance.Evidence[0].Span == nil {
+		t.Fatalf("provenance source span was not decoded: %+v", provenance.Evidence)
+	}
+	if provenance.Evidence[0].ContentHash != "sha256:span-test" ||
+		provenance.Evidence[0].ChunkID != "chunk_span_test" ||
+		provenance.Evidence[0].Span.StartLine != 10 ||
+		provenance.Evidence[0].Span.EndLine != 12 {
+		t.Fatalf("unexpected MCP provenance evidence: %+v", provenance.Evidence[0])
 	}
 
 	createObject := func(title string) contract.KnowledgeObject {
