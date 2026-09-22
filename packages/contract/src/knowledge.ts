@@ -190,3 +190,63 @@ export interface AppendSessionEventRequest {
 export interface CloseAgentSessionRequest {
   status?: string;
 }
+
+
+export interface EpisodeRecord {
+  id: string;
+  scopeType: string;
+  scopeId: string;
+  eventType: string;
+  summary: string;
+  objectIds?: string[];
+  provenanceId?: string;
+  occurredAt: string;
+  endedAt?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface CreateEpisodeRequest {
+  id?: string;
+  scopeType: string;
+  scopeId: string;
+  eventType: string;
+  summary: string;
+  objectIds?: string[];
+  provenanceId?: string;
+  occurredAt?: string;
+  endedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TemporalFact {
+  id: string;
+  subjectId: string;
+  predicate: string;
+  objectId?: string;
+  value?: string;
+  provenanceId?: string;
+  confidence: number;
+  validFrom?: string;
+  validTo?: string;
+  supersedesId?: string;
+  supersededAt?: string;
+  supersededBy?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTemporalFactRequest {
+  id?: string;
+  subjectId: string;
+  predicate: string;
+  objectId?: string;
+  value?: string;
+  provenanceId?: string;
+  confidence?: number;
+  validFrom?: string;
+  validTo?: string;
+  supersedesId?: string;
+  metadata?: Record<string, unknown>;
+}
