@@ -1,7 +1,6 @@
 package knowledge
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -295,11 +294,6 @@ func (s *Store) FactsForObject(objectID string, limit int) ([]contract.TemporalF
 	return facts, rows.Err()
 }
 
-// helper used by tests and callers that need to distinguish missing records.
-func isMissingTemporalRecord(err error) bool {
-	return errors.Is(err, sql.ErrNoRows)
-}
-
 
 func (s *Store) FactsForProject(project string, limit int) ([]contract.TemporalFact, error) {
 	if strings.TrimSpace(project) == "" {
@@ -316,10 +310,9 @@ func (s *Store) FactsForProject(project string, limit int) ([]contract.TemporalF
 		       f.metadata_json, f.created_at, f.updated_at
 		FROM temporal_facts f
 		JOIN objects subject ON subject.id = f.subject_id
-		LEFT JOIN objects object_value ON object_value.id = f.object_id
-		WHERE subject.project = ? OR object_value.project = ?
+		WHERE subject.project = ?
 		ORDER BY f.updated_at DESC
-		LIMIT ?`, project, project, limit)
+		LIMIT ?`, project, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list project facts: %w", err)
 	}
