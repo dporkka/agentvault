@@ -64,6 +64,9 @@ func CompileUnified(c *Compiler, fileMemories *memory.Store, req contract.Compil
 	if err := collector.addObjects(); err != nil {
 		return contract.ContextBundle{}, err
 	}
+	if err := collector.addProfiles(); err != nil {
+		return contract.ContextBundle{}, err
+	}
 	if err := collector.addFacts(); err != nil {
 		return contract.ContextBundle{}, err
 	}

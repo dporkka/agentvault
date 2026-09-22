@@ -250,3 +250,14 @@ export interface CreateTemporalFactRequest {
   supersedesId?: string;
   metadata?: Record<string, unknown>;
 }
+
+
+/**
+ * Deterministic standing profile derived from a durable object and temporal
+ * facts. Profiles are views, not an additional canonical storage model.
+ */
+export interface EntityProfile {
+  subject: KnowledgeObject;
+  asOf: string;
+  facts: TemporalFact[];
+}

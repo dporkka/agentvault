@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/agentvault/core/internal/contract"
+	"github.com/agentvault/core/internal/knowledge"
 )
 
 func (c *candidateCollector) addEpisodes() error {
@@ -130,20 +131,5 @@ func (c *candidateCollector) addFacts() error {
 }
 
 func factValidAt(fact contract.TemporalFact, asOf time.Time) bool {
-	if !intervalValidAt(fact.ValidFrom, fact.ValidTo, asOf) {
-		return false
-	}
-	if fact.CreatedAt != "" {
-		createdAt, err := parseFlexibleTime(fact.CreatedAt)
-		if err != nil || createdAt.After(asOf) {
-			return false
-		}
-	}
-	if fact.SupersededAt != "" {
-		supersededAt, err := parseFlexibleTime(fact.SupersededAt)
-		if err != nil || !supersededAt.After(asOf) {
-			return false
-		}
-	}
-	return true
+	return knowledge.FactVisibleAt(fact, asOf)
 }
