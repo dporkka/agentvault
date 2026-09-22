@@ -1,6 +1,6 @@
 package db
 
-// inlineKnowledgeSchema mirrors migrations 004 and 005 for the rare fresh/test
+// inlineKnowledgeSchema mirrors migrations 004, 005, and 006 for the rare fresh/test
 // path where embedded migration files are unavailable. It deliberately excludes
 // the migration-003 file-backed memory columns, which are created by the base
 // inline schema in db.go.
