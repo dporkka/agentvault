@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/agentvault/core/internal/contract"
@@ -9,6 +10,36 @@ import (
 
 func validateJournalPayload(eventType string, payload interface{}) error {
 	switch eventType {
+	case eventEpisodeRecorded:
+		episode, ok := payload.(contract.EpisodeRecord)
+		if !ok {
+			return fmt.Errorf("%s payload must be EpisodeRecord", eventType)
+		}
+		if strings.TrimSpace(episode.ScopeType) == "" || strings.TrimSpace(episode.ScopeID) == "" {
+			return fmt.Errorf("episode scopeType and scopeId are required")
+		}
+		if strings.TrimSpace(episode.EventType) == "" || strings.TrimSpace(episode.Summary) == "" {
+			return fmt.Errorf("episode eventType and summary are required")
+		}
+		if strings.TrimSpace(episode.OccurredAt) == "" {
+			return fmt.Errorf("episode occurredAt is required")
+		}
+		return validateTemporalInterval(episode.OccurredAt, episode.EndedAt)
+	case eventFactRecorded:
+		fact, ok := payload.(contract.TemporalFact)
+		if !ok {
+			return fmt.Errorf("%s payload must be TemporalFact", eventType)
+		}
+		if strings.TrimSpace(fact.SubjectID) == "" || strings.TrimSpace(fact.Predicate) == "" {
+			return fmt.Errorf("fact subjectId and predicate are required")
+		}
+		if strings.TrimSpace(fact.ObjectID) == "" && strings.TrimSpace(fact.Value) == "" {
+			return fmt.Errorf("fact objectId or value is required")
+		}
+		if fact.Confidence < 0 || fact.Confidence > 1 {
+			return fmt.Errorf("fact confidence must be between 0 and 1")
+		}
+		return validateTemporalInterval(fact.ValidFrom, fact.ValidTo)
 	case eventRelationCreated:
 		relation, ok := payload.(contract.ObjectRelation)
 		if !ok {

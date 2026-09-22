@@ -196,3 +196,73 @@ type AppendSessionEventRequest struct {
 type CloseAgentSessionRequest struct {
 	Status string `json:"status,omitempty"`
 }
+
+
+// EpisodeRecord is an immutable occurrence in durable agent knowledge.
+// occurredAt describes when the event happened; provenance.observedAt
+// independently describes when AgentVault learned about it.
+type EpisodeRecord struct {
+	ID           string                 `json:"id"`
+	ScopeType    string                 `json:"scopeType"`
+	ScopeID      string                 `json:"scopeId"`
+	EventType    string                 `json:"eventType"`
+	Summary      string                 `json:"summary"`
+	ObjectIDs    []string               `json:"objectIds,omitempty"`
+	ProvenanceID string                 `json:"provenanceId,omitempty"`
+	OccurredAt   string                 `json:"occurredAt"`
+	EndedAt      string                 `json:"endedAt,omitempty"`
+	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	CreatedAt    string                 `json:"createdAt"`
+}
+
+// CreateEpisodeRequest records a new immutable occurrence.
+type CreateEpisodeRequest struct {
+	ID           string                 `json:"id,omitempty"`
+	ScopeType    string                 `json:"scopeType"`
+	ScopeID      string                 `json:"scopeId"`
+	EventType    string                 `json:"eventType"`
+	Summary      string                 `json:"summary"`
+	ObjectIDs    []string               `json:"objectIds,omitempty"`
+	ProvenanceID string                 `json:"provenanceId,omitempty"`
+	OccurredAt   string                 `json:"occurredAt,omitempty"`
+	EndedAt      string                 `json:"endedAt,omitempty"`
+	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// TemporalFact is a provenance-backed truth claim with independent validity
+// and observation clocks. Supersession never deletes history: the new fact
+// points at the prior fact and the SQLite projection derives reverse links.
+type TemporalFact struct {
+	ID           string                 `json:"id"`
+	SubjectID    string                 `json:"subjectId"`
+	Predicate    string                 `json:"predicate"`
+	ObjectID     string                 `json:"objectId,omitempty"`
+	Value        string                 `json:"value,omitempty"`
+	ProvenanceID string                 `json:"provenanceId,omitempty"`
+	Confidence   float64                `json:"confidence"`
+	ValidFrom    string                 `json:"validFrom,omitempty"`
+	ValidTo      string                 `json:"validTo,omitempty"`
+	SupersedesID string                 `json:"supersedesId,omitempty"`
+	SupersededAt string                 `json:"supersededAt,omitempty"`
+	SupersededBy string                 `json:"supersededBy,omitempty"`
+	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	CreatedAt    string                 `json:"createdAt"`
+	UpdatedAt    string                 `json:"updatedAt"`
+}
+
+// CreateTemporalFactRequest creates a temporal fact. Exactly one of objectId
+// or a non-empty value is sufficient; callers may provide both when a stable
+// object identity also needs a human-readable value.
+type CreateTemporalFactRequest struct {
+	ID           string                 `json:"id,omitempty"`
+	SubjectID    string                 `json:"subjectId"`
+	Predicate    string                 `json:"predicate"`
+	ObjectID     string                 `json:"objectId,omitempty"`
+	Value        string                 `json:"value,omitempty"`
+	ProvenanceID string                 `json:"provenanceId,omitempty"`
+	Confidence   *float64               `json:"confidence,omitempty"`
+	ValidFrom    string                 `json:"validFrom,omitempty"`
+	ValidTo      string                 `json:"validTo,omitempty"`
+	SupersedesID string                 `json:"supersedesId,omitempty"`
+	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+}

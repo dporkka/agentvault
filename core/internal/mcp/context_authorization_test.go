@@ -82,6 +82,31 @@ func TestFilterContextBundleDropsAlternatePathLeaksAndRedactsProvenance(t *testi
 		t.Fatal(err)
 	}
 
+
+	if _, err := store.RecordFact(contract.CreateTemporalFactRequest{
+		ID: "fact_alpha", SubjectID: alpha.ID, Predicate: "status", Value: "active",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordFact(contract.CreateTemporalFactRequest{
+		ID: "fact_cross", SubjectID: alpha.ID, Predicate: "depends_on", ObjectID: beta.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.RecordEpisode(contract.CreateEpisodeRequest{
+		ID: "episode_alpha", ScopeType: "project", ScopeID: "alpha",
+		EventType: "status.changed", Summary: "Alpha changed.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordEpisode(contract.CreateEpisodeRequest{
+		ID: "episode_beta", ScopeType: "project", ScopeID: "beta",
+		EventType: "status.changed", Summary: "Beta changed.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 	principal := authz.Principal{Capabilities: []authz.Capability{authz.ContextCompile}, Scope: authz.Scope{Projects: []string{"alpha"}}}
 	req := contract.CompileContextRequest{Task: "alpha", Project: "alpha", WorkspaceID: "alpha"}
 	provenance := &contract.ContextProvenance{
@@ -95,6 +120,10 @@ func TestFilterContextBundleDropsAlternatePathLeaksAndRedactsProvenance(t *testi
 			{Kind: "object", ID: alpha.ID, Content: "allowed object", ObjectIDs: []string{alpha.ID}, EstimatedTokens: 10, Provenance: provenance},
 			{Kind: "object", ID: beta.ID, Content: "forbidden object", ObjectIDs: []string{beta.ID}, EstimatedTokens: 10},
 			{Kind: "relation", ID: "rel_cross", Content: "cross relation", ObjectIDs: []string{alpha.ID, beta.ID}, EstimatedTokens: 10},
+			{Kind: "fact", ID: "fact_alpha", Content: "allowed fact", ObjectIDs: []string{alpha.ID}, EstimatedTokens: 10},
+			{Kind: "fact", ID: "fact_cross", Content: "cross-project fact", ObjectIDs: []string{alpha.ID, beta.ID}, EstimatedTokens: 10},
+			{Kind: "episode", ID: "episode_alpha", Content: "allowed episode", EstimatedTokens: 10, Metadata: map[string]interface{}{"scopeType": "project", "scopeId": "alpha"}},
+			{Kind: "episode", ID: "episode_beta", Content: "forbidden episode", EstimatedTokens: 10, Metadata: map[string]interface{}{"scopeType": "project", "scopeId": "beta"}},
 			{Kind: "memory", ID: "mem_alpha", Content: "allowed project memory", EstimatedTokens: 10, Metadata: map[string]interface{}{"scopeType": "project", "scopeId": "alpha"}},
 			{Kind: "memory", ID: "mem_agent", Content: "agent-global leak", EstimatedTokens: 10, Metadata: map[string]interface{}{"scopeType": "agent", "scopeId": "agent"}},
 			{Kind: "note", ID: "note_alpha", Content: "allowed note", EstimatedTokens: 10, Metadata: map[string]interface{}{"project": "alpha"}},
@@ -110,12 +139,12 @@ func TestFilterContextBundleDropsAlternatePathLeaksAndRedactsProvenance(t *testi
 	for _, item := range filtered.Items {
 		visible[item.ID] = item
 	}
-	for _, expected := range []string{alpha.ID, "mem_alpha", "note_alpha", alphaSession.ID} {
+	for _, expected := range []string{alpha.ID, "fact_alpha", "episode_alpha", "mem_alpha", "note_alpha", alphaSession.ID} {
 		if _, ok := visible[expected]; !ok {
 			t.Errorf("expected authorized context item %s", expected)
 		}
 	}
-	for _, forbidden := range []string{beta.ID, "rel_cross", "mem_agent", "note_beta", betaSession.ID, "unknown"} {
+	for _, forbidden := range []string{beta.ID, "rel_cross", "fact_cross", "episode_beta", "mem_agent", "note_beta", betaSession.ID, "unknown"} {
 		if _, ok := visible[forbidden]; ok {
 			t.Errorf("out-of-scope context item leaked: %s", forbidden)
 		}

@@ -99,7 +99,12 @@ not break graph relationships or application references.
 `canonicalPath` is optional. When present it points at the portable document or
 artifact that humans should treat as the canonical authored representation.
 
-## 3. Relationships and temporal knowledge
+## 3. Relationships, episodes, and temporal facts
+
+AgentVault keeps three different concepts separate rather than forcing all
+temporal knowledge into graph edges or generic memories.
+
+### Object relations
 
 `ObjectRelation` represents a typed edge between stable object IDs.
 
@@ -115,11 +120,46 @@ Relationships may include:
 - `supersedes`
 
 Relations can carry `validFrom`, `validTo`, `confidence`, provenance, and
-metadata. This permits the graph to represent knowledge that changes over time
-without rewriting history.
+metadata.
 
-The Context Compiler prefers relations valid for the requested point in time
-while retaining historical relationships for audit and reconstruction.
+### Episodes
+
+`EpisodeRecord` represents an immutable occurrence: something that happened
+during a project, agent, or session scope. Examples include a deployment,
+architecture change, failed attempt, external observation, or completed tool
+run.
+
+Episodes keep two clocks distinct:
+
+- `occurredAt` / `endedAt` describe when the event happened;
+- the linked provenance record's `observedAt` describes when AgentVault or an
+  agent learned about it.
+
+That distinction prevents late-arriving observations from being mistaken for
+knowledge that was available earlier.
+
+### Temporal facts
+
+`TemporalFact` represents a provenance-backed truth claim:
+
+```text
+subject --predicate--> object-or-value
+```
+
+A fact has an optional validity interval and can supersede an older fact with
+the same subject and predicate. Supersession is append-only: the new canonical
+journal event points to `supersedesId`; SQLite derives `supersededBy` and
+`supersededAt` for efficient current-state queries.
+
+AgentVault therefore preserves both:
+
+- **valid time** — when a claim was true in the represented domain;
+- **knowledge time** — when AgentVault observed/recorded the claim.
+
+The Context Compiler can reconstruct knowledge at a requested `asOf` time:
+an older fact remains visible before its supersession boundary and disappears
+from current context afterward. History is never rewritten to make new
+knowledge appear retroactively known.
 
 ## 4. Provenance
 
@@ -220,8 +260,11 @@ evidence-backed context from:
 
 - current durable session/events;
 - journal-backed machine memories;
+- scoped immutable episodes;
 - Markdown-backed scoped memories;
-- typed objects and valid relations;
+- typed objects;
+- temporal facts valid and known at the requested `asOf` time;
+- currently valid object relations;
 - ordinary indexed notes;
 - recent durable session history.
 
@@ -230,8 +273,9 @@ filter and is used as the workspace fallback when `workspaceId` is omitted for
 compatibility with the original compiler contract.
 
 The compiler does not call an LLM. It ranks locally, enforces temporal and
-supersession rules, deduplicates classified memories from generic note search,
-and fits results into a deterministic token budget.
+supersession rules, prevents late-observed episodes/facts from leaking into
+historical `asOf` context, deduplicates classified memories from generic note
+search, and fits results into a deterministic token budget.
 
 ## 8. Integration boundaries
 
@@ -290,6 +334,11 @@ The CLI exposes the same knowledge substrate through MCP:
 - `agentvault.compile_context`
 
 MCP is an adapter. It must not introduce a parallel storage or memory model.
+
+First-class episodes and temporal facts currently enter the compiler through
+the core knowledge store. Their public MCP/HTTP mutation adapters intentionally
+land separately so they can reuse the same project/session capability checks
+and adversarial authorization coverage as existing structured writes.
 
 ### HTTP
 

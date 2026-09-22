@@ -34,17 +34,19 @@ slightly differently, so callers should keep a small model-window reserve.
 
 ## Retrieval order
 
-The unified compiler gathers candidates from six layers:
+The unified compiler gathers candidates from nine layers:
 
 1. current durable session and its most recent events;
 2. journal-backed session/project/agent machine memories after temporal and
    supersession resolution;
-3. Markdown-backed human/file memories after workspace/agent/session visibility,
+3. scoped episodes that had occurred and were known by the requested `asOf`;
+4. Markdown-backed human/file memories after workspace/agent/session visibility,
    temporal validity, contextual supersession, and optional project filtering;
-4. explicitly requested and task-relevant project knowledge objects plus
-   currently valid relations;
-5. project/task-relevant indexed notes that are not classified memories;
-6. recent matching agent sessions for execution history.
+5. explicitly requested and task-relevant project knowledge objects;
+6. temporal facts whose validity and knowledge-time windows contain `asOf`;
+7. currently valid object relations;
+8. project/task-relevant indexed notes that are not classified memories;
+9. recent matching agent sessions for execution history.
 
 Gathering order does not determine output order. Candidates receive local,
 deterministic relevance scores and are sorted by score, kind, then stable ID.
@@ -106,6 +108,27 @@ For Markdown memory, scope inheritance is explicit: global memory is visible to
 narrower contexts, while workspace-, agent-, or session-scoped memory is only
 visible when each populated scope dimension matches the compilation context.
 
+## Episodes and temporal facts
+
+Episodes are eligible only when `occurredAt <= asOf` and the episode record
+itself had already been created by `asOf`. Session-scoped episodes are treated
+as active execution context; broader project/agent episodes must also be
+relevant to the requested task before consuming context budget.
+
+Temporal facts use two independent dimensions:
+
+- domain validity: `validFrom <= asOf < validTo`;
+- knowledge visibility: `createdAt <= asOf < supersededAt` when a supersession
+  boundary exists.
+
+This permits historical reconstruction without pretending that AgentVault knew
+a newly observed fact in the past. The linked provenance `observedAt` remains
+available to consumers as the evidence-observation clock.
+
+Project-level fact retrieval is anchored to the subject object's project. A
+fact cannot enter another project's context merely because its object value
+references an object in that project.
+
 ## Temporal relations
 
 Object relations use the same half-open validity rule:
@@ -119,7 +142,7 @@ An absent boundary is unbounded.
 ## Provenance
 
 Structured context items carry a compact provenance object inline when the
-underlying object, relation, memory, or session event has provenance. This
+underlying object, relation, fact, episode, memory, or session event has provenance. This
 includes source type/ID, producer agent/session/model, confidence, observation
 time, and concrete evidence references.
 
