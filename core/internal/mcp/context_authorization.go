@@ -144,6 +144,18 @@ func contextItemAuthorized(store *knowledge.Store, principal authz.Principal, re
 	case "object":
 		object, err := store.GetObject(item.ID)
 		return err == nil && authorizeContextProjectResource(principal, req, object.Project, req.SessionID) == nil
+	case "profile":
+		object, err := store.GetObject(item.ID)
+		if err != nil || authorizeContextProjectResource(principal, req, object.Project, req.SessionID) != nil {
+			return false
+		}
+		for _, id := range item.ObjectIDs {
+			linked, err := store.GetObject(id)
+			if err != nil || authorizeContextProjectResource(principal, req, linked.Project, req.SessionID) != nil {
+				return false
+			}
+		}
+		return true
 	case "fact":
 		fact, err := store.GetFact(item.ID)
 		if err != nil {
