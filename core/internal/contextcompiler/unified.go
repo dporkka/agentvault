@@ -53,12 +53,18 @@ func CompileUnified(c *Compiler, fileMemories *memory.Store, req contract.Compil
 	if err := collector.addMemories(); err != nil {
 		return contract.ContextBundle{}, err
 	}
+	if err := collector.addEpisodes(); err != nil {
+		return contract.ContextBundle{}, err
+	}
 	if fileMemories != nil {
 		if err := addMarkdownMemories(collector, fileMemories); err != nil {
 			return contract.ContextBundle{}, err
 		}
 	}
 	if err := collector.addObjects(); err != nil {
+		return contract.ContextBundle{}, err
+	}
+	if err := collector.addFacts(); err != nil {
 		return contract.ContextBundle{}, err
 	}
 	if err := collector.addRelations(); err != nil {
