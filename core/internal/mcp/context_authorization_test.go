@@ -109,6 +109,17 @@ func TestFilterContextBundleDropsAlternatePathLeaksAndRedactsProvenance(t *testi
 
 	principal := authz.Principal{Capabilities: []authz.Capability{authz.ContextCompile}, Scope: authz.Scope{Projects: []string{"alpha"}}}
 	req := contract.CompileContextRequest{Task: "alpha", Project: "alpha", WorkspaceID: "alpha"}
+
+	if !contextItemAuthorized(store, principal, req, contract.ContextItem{
+		Kind: "profile", ID: alpha.ID, ObjectIDs: []string{alpha.ID},
+	}) {
+		t.Fatal("authorized standing profile was rejected")
+	}
+	if contextItemAuthorized(store, principal, req, contract.ContextItem{
+		Kind: "profile", ID: alpha.ID, ObjectIDs: []string{alpha.ID, beta.ID},
+	}) {
+		t.Fatal("profile with cross-project object target was authorized")
+	}
 	provenance := &contract.ContextProvenance{
 		ID: "prov_1", SourceType: "file", SourceID: "secret-source", AgentID: "other-agent", Model: "model-x",
 		Confidence: 0.9, ObservedAt: "2026-09-12T12:00:00Z",
