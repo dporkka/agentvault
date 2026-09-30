@@ -55,8 +55,8 @@ func TestRunMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 5 {
-		t.Errorf("Expected migration version 5, got %d", version)
+	if version != 6 {
+		t.Errorf("Expected migration version 6, got %d", version)
 	}
 
 	// Verify tables exist
@@ -153,8 +153,8 @@ func TestRunMigrationsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 5 {
-		t.Errorf("Expected migration version 5, got %d", version)
+	if version != 6 {
+		t.Errorf("Expected migration version 6, got %d", version)
 	}
 }
 
@@ -169,6 +169,7 @@ func TestEmbeddedMigrationsPresent(t *testing.T) {
 		"003_agent_state.sql":       false,
 		"004_evaluations.sql":       false,
 		"005_context_snapshots.sql": false,
+		"006_regression_case_provenance.sql": false,
 	}
 	for _, e := range entries {
 		if _, ok := expected[e.Name()]; ok {
@@ -237,8 +238,8 @@ func TestRunInlineMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 5 {
-		t.Errorf("Expected migration version 5, got %d", version)
+	if version != 6 {
+		t.Errorf("Expected migration version 6, got %d", version)
 	}
 }
 
@@ -267,7 +268,7 @@ func TestRunMigrationsInlineFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 5 {
+	if version != 6 {
 		t.Errorf("Expected inline migration version 5, got %d", version)
 	}
 }
