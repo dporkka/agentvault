@@ -118,6 +118,8 @@ func (s *Server) RegisterTools() {
 	s.registerOpenDaily()
 	s.registerLogAgentRun()
 	s.registerLogObservation()
+	s.registerRecordActionIntent()
+	s.registerRecordActionReceipt()
 	s.registerLogEvaluation()
 	s.registerProposePromotion()
 	s.registerReviewPromotion()
