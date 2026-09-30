@@ -1614,3 +1614,42 @@ func TestHandleProposeRunLearning(t *testing.T) {
 		t.Fatalf("unexpected learning proposal output:\n%s", result)
 	}
 }
+
+
+func TestHandleGetLearningRecommendation(t *testing.T) {
+	s, database := setupTestServer(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO agent_runs (
+			id, agent_name, agent_id, agent_revision, task, status, created_at
+		) VALUES ('run_recommend_mcp', 'recommend-agent', 'agt_recommend_mcp', 2, 'fix regression', 'failed', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO run_observations (
+			id, run_id, kind, name, status, input_json, output_json, evidence_json, created_at
+		) VALUES ('obs_recommend_mcp', 'run_recommend_mcp', 'tool', 'go test', 'failed', '{}', '{}', '{}', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO evaluations (
+			id, run_id, observation_id, evaluator, name, label, rationale, metadata_json, created_at
+		) VALUES ('eval_recommend_mcp', 'run_recommend_mcp', 'obs_recommend_mcp', 'human:test',
+			'regression', 'fail', 'Focused test was skipped.', '{"target_kind":"memory"}', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := s.handleGetLearningRecommendation(map[string]interface{}{"run_id": "run_recommend_mcp"})
+	if err != nil {
+		t.Fatalf("handleGetLearningRecommendation: %v", err)
+	}
+	for _, want := range []string{"run_recommend_mcp", "agt_recommend_mcp", "strong", "obs_recommend_mcp", "eval_recommend_mcp", "memory"} {
+		if !strings.Contains(result, want) {
+			t.Fatalf("expected %q in recommendation output:\n%s", want, result)
+		}
+	}
+}
