@@ -46,6 +46,7 @@ AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The sam
 | **MCP server** | Expose vault search, read, create, capture, and ask as Model Context Protocol tools. |
 | **Multi-client support** | First-party desktop (Wails), web (Vite), browser extension (MV3), and mobile (Expo) apps. |
 | **Vault diagnostics** | `agentvault doctor` checks config, database, migrations, links, orphan chunks, embeddings, and API auth. |
+| **Durable journal integrity** | Hash-chained machine state plus `agentvault journal verify` and portable external checkpoints detect corruption and journal replacement. |
 
 ## Screenshots
 
@@ -92,6 +93,9 @@ agentvault ask "What have I decided about vector search?"
 
 # Validate vault health
 agentvault doctor
+
+# Verify durable machine-state integrity
+agentvault journal verify
 ```
 
 ## Install
@@ -118,6 +122,8 @@ For signed installers and store publishing setup, see [`docs/PUBLISHING.md`](doc
 | `agentvault ask <question>` | Ask a source-grounded question over indexed notes |
 | `agentvault import <type> <source>` | Import Markdown or Obsidian notes (`type`: `markdown` or `obsidian`) |
 | `agentvault doctor` | Validate vault health |
+| `agentvault journal verify [--checkpoint <file>] [--json]` | Verify the durable journal hash chain and optionally compare it with an external checkpoint |
+| `agentvault journal checkpoint --output <file>` | Write a no-overwrite portable integrity checkpoint for storage outside the writable vault boundary |
 | `agentvault config get/set/show` | Manage vault configuration |
 | `agentvault git status/diff/commit/log/init` | Run Git commands from the vault context |
 | `agentvault serve` | Start the local HTTP API |
