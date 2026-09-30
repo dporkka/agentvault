@@ -1989,3 +1989,32 @@ func (s *Server) handleProposeRunLearning(w http.ResponseWriter, r *http.Request
 	}
 	writeJSON(w, http.StatusCreated, promotionResponse(item))
 }
+
+
+func learningRecommendationResponse(item *agentstate.LearningRecommendation) contract.LearningRecommendation {
+	signals := make([]contract.LearningSignal, 0, len(item.Signals))
+	for _, signal := range item.Signals {
+		signals = append(signals, contract.LearningSignal{
+			Kind: string(signal.Kind), ID: signal.ID, ObservationID: signal.ObservationID,
+			Name: signal.Name, Status: signal.Status, Label: signal.Label,
+			Score: signal.Score, Rationale: signal.Rationale,
+		})
+	}
+	return contract.LearningRecommendation{
+		RunID: item.RunID, AgentID: item.AgentID, AgentRevision: item.AgentRevision,
+		Eligible: item.Eligible, SupportLevel: string(item.SupportLevel),
+		EvidenceCount: item.EvidenceCount, SuggestedTargetKind: string(item.SuggestedTargetKind),
+		ReasonCodes: item.ReasonCodes, SourceObservationIDs: item.SourceObservationIDs,
+		SourceEvaluationIDs: item.SourceEvaluationIDs, ContextMemoryRefs: item.ContextMemoryRefs,
+		SupersedesNoteIDs: item.SupersedesNoteIDs, Signals: signals,
+	}
+}
+
+func (s *Server) handleLearningRecommendation(w http.ResponseWriter, r *http.Request) {
+	item, err := agentstate.RecommendRunLearning(s.db, r.PathValue("id"))
+	if err != nil {
+		writeAgentStateError(w, "learning recommendation lookup failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, learningRecommendationResponse(item))
+}
