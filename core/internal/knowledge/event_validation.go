@@ -52,6 +52,12 @@ func validateJournalPayload(eventType string, payload interface{}) error {
 			return fmt.Errorf("%s payload must be MemoryRecord", eventType)
 		}
 		return validateTemporalInterval(memory.ValidFrom, memory.ValidTo)
+	case eventMemorySynthesized:
+		synthesis, ok := payload.(memorySynthesisEvent)
+		if !ok {
+			return fmt.Errorf("%s payload must be memorySynthesisEvent", eventType)
+		}
+		return validateMemorySynthesisEvent(synthesis)
 	case eventProvenanceCreated:
 		record, ok := payload.(contract.ProvenanceRecord)
 		if !ok {
