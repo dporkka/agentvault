@@ -149,3 +149,29 @@ func seedActionEvidenceRun(t *testing.T, database *DB, id string) {
 		t.Fatalf("seed action run: %v", err)
 	}
 }
+
+
+func TestRecordActionIntentRejectsObservationFromDifferentRun(t *testing.T) {
+	database := openActionEvidenceTestDB(t)
+	defer database.Close()
+	seedActionEvidenceRun(t, database, "run_action_owner")
+	seedActionEvidenceRun(t, database, "run_action_other")
+
+	if _, err := database.Exec(
+		`INSERT INTO run_observations (
+			id, run_id, kind, name, created_at
+		) VALUES ('obs_other', 'run_action_other', 'tool', 'github.create_pr', datetime('now'))`,
+	); err != nil {
+		t.Fatalf("seed observation: %v", err)
+	}
+
+	_, _, err := database.RecordActionIntent(agentstate.ActionIntent{
+		ID: "intent_wrong_obs", RunID: "run_action_owner", ObservationID: "obs_other",
+		OperationID: "op_wrong_obs", Action: "github.create_pr",
+		CapabilityRef: "github.write", AuthorityHash: "sha256:authority",
+		InputHash: "sha256:input",
+	})
+	if err == nil || !strings.Contains(err.Error(), "belongs to run") {
+		t.Fatalf("RecordActionIntent error = %v, want observation/run mismatch", err)
+	}
+}
