@@ -78,3 +78,80 @@ func TestPromotionRecordValidate(t *testing.T) {
 		t.Fatal("promotion without evidence should fail")
 	}
 }
+
+
+func TestPromotionTransitionValidate(t *testing.T) {
+	if err := ValidatePromotionTransition(PromotionProposed, PromotionApproved); err != nil {
+		t.Fatalf("proposed -> approved rejected: %v", err)
+	}
+	if err := ValidatePromotionTransition(PromotionProposed, PromotionRejected); err != nil {
+		t.Fatalf("proposed -> rejected rejected: %v", err)
+	}
+	if err := ValidatePromotionTransition(PromotionApproved, PromotionCommitted); err != nil {
+		t.Fatalf("approved -> committed rejected: %v", err)
+	}
+
+	for _, tc := range []struct {
+		from PromotionStatus
+		to   PromotionStatus
+	}{
+		{PromotionProposed, PromotionCommitted},
+		{PromotionRejected, PromotionApproved},
+		{PromotionCommitted, PromotionApproved},
+	} {
+		if err := ValidatePromotionTransition(tc.from, tc.to); err == nil {
+			t.Fatalf("expected invalid promotion transition %s -> %s", tc.from, tc.to)
+		}
+	}
+}
+
+func TestEvaluationDatasetValidate(t *testing.T) {
+	valid := EvaluationDataset{ID: "ds_1", Name: "Golden path"}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid dataset rejected: %v", err)
+	}
+	if err := (EvaluationDataset{ID: "ds_1"}).Validate(); err == nil {
+		t.Fatal("dataset without name should fail")
+	}
+}
+
+func TestEvaluationCaseValidate(t *testing.T) {
+	valid := EvaluationCase{
+		ID: "case_1", DatasetID: "ds_1", Name: "Create note",
+		Input: map[string]any{"prompt": "create a note"},
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid case rejected: %v", err)
+	}
+	if err := (EvaluationCase{ID: "case_1", DatasetID: "ds_1", Name: "bad"}).Validate(); err == nil {
+		t.Fatal("case without input should fail")
+	}
+}
+
+func TestExperimentValidate(t *testing.T) {
+	valid := Experiment{
+		ID: "exp_1", DatasetID: "ds_1", Name: "baseline",
+		AgentID: "agt_1", AgentRevision: 2, Status: ExperimentCompleted,
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid experiment rejected: %v", err)
+	}
+	valid.Status = "mystery"
+	if err := valid.Validate(); err == nil {
+		t.Fatal("unknown experiment status should fail")
+	}
+}
+
+func TestExperimentResultValidate(t *testing.T) {
+	score := 0.8
+	valid := ExperimentResult{
+		ExperimentID: "exp_1", CaseID: "case_1", Score: &score,
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid experiment result rejected: %v", err)
+	}
+	valid.Score = nil
+	if err := valid.Validate(); err == nil {
+		t.Fatal("experiment result without score or label should fail")
+	}
+}
