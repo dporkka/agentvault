@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type {
   AgentSession,
   KnowledgeObject,
+  MemoryCandidate,
   MutationProposal,
   ProvenanceRecord,
   TimelineFilter,
@@ -30,6 +31,7 @@ function kindLabel(kind: TimelineKind): string {
 }
 
 const ActivityView: React.FC = () => {
+  const [mode, setMode] = useState<'activity' | 'review'>('activity');
   const [projects, setProjects] = useState<string[]>([]);
   const [project, setProject] = useState('');
   const [kind, setKind] = useState<'' | TimelineKind>('');
@@ -37,6 +39,16 @@ const ActivityView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<TimelineItem | null>(null);
+
+  const [candidates, setCandidates] = useState<MemoryCandidate[]>([]);
+  const [candidateLoading, setCandidateLoading] = useState(false);
+  const [candidateError, setCandidateError] = useState<string | null>(null);
+  const [selectedCandidate, setSelectedCandidate] = useState<MemoryCandidate | null>(null);
+  const [reviewer, setReviewer] = useState('');
+  const [reviewReason, setReviewReason] = useState('');
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const [provenance, setProvenance] = useState<ProvenanceRecord | null>(null);
   const [session, setSession] = useState<AgentSession | null>(null);
@@ -66,6 +78,8 @@ const ActivityView: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (mode !== 'activity') return undefined;
+
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -91,9 +105,43 @@ const ActivityView: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [timelineFilter]);
+  }, [timelineFilter, mode]);
 
   useEffect(() => {
+    if (mode !== 'review') return undefined;
+
+    let cancelled = false;
+    setCandidateLoading(true);
+    setCandidateError(null);
+    setReviewMessage(null);
+
+    knowledgeApi.listMemoryCandidates({ status: 'pending', limit: 100 })
+      .then((result) => {
+        if (cancelled) return;
+        setCandidates(result);
+        setSelectedCandidate((current) => {
+          if (!current) return null;
+          return result.find((candidate) => candidate.id === current.id) ?? null;
+        });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setCandidates([]);
+        setSelectedCandidate(null);
+        setCandidateError(err instanceof Error ? err.message : 'Unable to load memory review queue');
+      })
+      .finally(() => {
+        if (!cancelled) setCandidateLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== 'activity') return undefined;
+
     let cancelled = false;
     setProvenance(null);
     setSession(null);
@@ -163,7 +211,112 @@ const ActivityView: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [selected]);
+  }, [selected, mode]);
+
+  useEffect(() => {
+    if (mode !== 'review') return undefined;
+
+    let cancelled = false;
+    setProvenance(null);
+    setSession(null);
+    setObjects([]);
+    setMutation(null);
+    setDetailError(null);
+    setReviewError(null);
+    setReviewer('');
+    setReviewReason('');
+
+    if (!selectedCandidate) {
+      setDetailLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const requests: Promise<void>[] = [];
+    setDetailLoading(true);
+
+    if (selectedCandidate.provenanceId) {
+      requests.push(
+        knowledgeApi.getProvenance(selectedCandidate.provenanceId)
+          .then((value) => {
+            if (!cancelled) setProvenance(value);
+          }),
+      );
+    }
+    if (selectedCandidate.scopeType === 'session') {
+      requests.push(
+        knowledgeApi.getSession(selectedCandidate.scopeId)
+          .then((value) => {
+            if (!cancelled) setSession(value);
+          }),
+      );
+    }
+    if (selectedCandidate.objectId) {
+      requests.push(
+        knowledgeApi.getObject(selectedCandidate.objectId)
+          .then((value) => {
+            if (!cancelled) setObjects([value]);
+          }),
+      );
+    }
+
+    Promise.all(requests)
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setDetailError(err instanceof Error ? err.message : 'Unable to load candidate evidence');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCandidate, mode]);
+
+  const reviewCandidate = async (action: 'accept' | 'reject') => {
+    if (!selectedCandidate || !reviewer.trim() || reviewing) return;
+
+    setReviewing(true);
+    setReviewError(null);
+    setReviewMessage(null);
+    const request = {
+      reviewedBy: reviewer.trim(),
+      reason: reviewReason.trim() || undefined,
+    };
+
+    try {
+      if (action === 'accept') {
+        await knowledgeApi.acceptMemoryCandidate(selectedCandidate.id, request);
+        setReviewMessage('Candidate accepted.');
+      } else {
+        await knowledgeApi.rejectMemoryCandidate(selectedCandidate.id, request);
+        setReviewMessage('Candidate rejected.');
+      }
+      setCandidates((current) => current.filter((candidate) => candidate.id !== selectedCandidate.id));
+      setSelectedCandidate(null);
+    } catch (err: unknown) {
+      setReviewError(err instanceof Error ? err.message : 'Unable to review candidate');
+    } finally {
+      setReviewing(false);
+    }
+  };
+
+  const showActivity = () => {
+    setMode('activity');
+    setSelectedCandidate(null);
+    setReviewMessage(null);
+    setReviewError(null);
+  };
+
+  const showReview = () => {
+    setMode('review');
+    setSelected(null);
+    setReviewMessage(null);
+    setReviewError(null);
+  };
 
   return (
     <div className="h-full flex flex-col">
