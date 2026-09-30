@@ -17,6 +17,28 @@ func (d *DB) RecordActionIntent(intent agentstate.ActionIntent) (agentstate.Acti
 	if err := intent.Validate(); err != nil {
 		return agentstate.ActionIntent{}, false, err
 	}
+	if intent.ObservationID != "" {
+		var observationRunID string
+		err := d.conn.QueryRow(
+			`SELECT run_id FROM run_observations WHERE id = ?`,
+			intent.ObservationID,
+		).Scan(&observationRunID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return agentstate.ActionIntent{}, false, fmt.Errorf(
+					"action intent observation not found: %s",
+					intent.ObservationID,
+				)
+			}
+			return agentstate.ActionIntent{}, false, fmt.Errorf("read action intent observation: %w", err)
+		}
+		if observationRunID != intent.RunID {
+			return agentstate.ActionIntent{}, false, fmt.Errorf(
+				"action intent observation %q belongs to run %q, not %q",
+				intent.ObservationID, observationRunID, intent.RunID,
+			)
+		}
+	}
 	if intent.CreatedAt.IsZero() {
 		intent.CreatedAt = time.Now().UTC()
 	}
