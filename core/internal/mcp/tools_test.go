@@ -1572,3 +1572,46 @@ func TestHandleGetRunAudit(t *testing.T) {
 		t.Fatalf("unexpected run audit output:\n%s", result)
 	}
 }
+
+
+func TestHandleProposeRunLearning(t *testing.T) {
+	s, database := setupTestServer(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO agent_runs (
+			id, agent_name, agent_id, agent_revision, task, status, created_at
+		) VALUES ('run_learning_mcp', 'learning-agent', 'agt_learning_mcp', 2, 'fix regression', 'failed', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO run_observations (
+			id, run_id, kind, name, status, input_json, output_json, evidence_json, created_at
+		) VALUES ('obs_learning_mcp', 'run_learning_mcp', 'tool', 'go test', 'failed', '{}', '{}', '{}', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO evaluations (
+			id, run_id, observation_id, evaluator, name, label, metadata_json, created_at
+		) VALUES ('eval_learning_mcp', 'run_learning_mcp', 'obs_learning_mcp', 'human:test', 'regression', 'fail', '{}', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := s.handleProposeRunLearning(map[string]interface{}{
+		"run_id":                 "run_learning_mcp",
+		"target_kind":            "memory",
+		"candidate":              "Run focused regression tests first.",
+		"rationale":              "Evaluation failed.",
+		"source_observation_ids": []interface{}{"obs_learning_mcp"},
+		"source_evaluation_ids":  []interface{}{"eval_learning_mcp"},
+	})
+	if err != nil {
+		t.Fatalf("handleProposeRunLearning: %v", err)
+	}
+	if !strings.Contains(result, "agt_learning_mcp") || !strings.Contains(result, "run_learning_mcp") || !strings.Contains(result, "proposed") {
+		t.Fatalf("unexpected learning proposal output:\n%s", result)
+	}
+}
