@@ -1,4 +1,4 @@
-.PHONY: build test test-ci bench smoke-test lint fmt tidy dev-core clean install help desktop desktop-dev ci contract-check contract-list-snake release release-cli release-cli-linux release-cli-darwin release-cli-windows release-extension release-desktop-linux release-desktop-linux-tar release-mobile
+.PHONY: build test test-ci test-core-critical bench smoke-test lint fmt tidy dev-core clean install help desktop desktop-dev ci contract-check contract-list-snake release release-cli release-cli-linux release-cli-darwin release-cli-windows release-extension release-desktop-linux release-desktop-linux-tar release-mobile
 
 VAULT := ./test-vault
 CORE := ./core
@@ -19,6 +19,12 @@ test: ## Run all Go tests (verbose)
 
 test-ci: ## Run Go tests with race detection and cache disabled (CI mode)
 	cd $(CORE) && go test -race -count=1 ./...
+
+test-core-critical: ## Validate durable recovery, journal integrity, context determinism, and authorization boundaries
+	cd $(CORE) && go test ./internal/knowledge -run 'TestJournalReplayRestoresRebuiltProjection|TestJournalAppendBuildsVerifiableHashChain|TestJournalVerifyRejectsTamperingBeforeReplaySideEffects|TestJournalFirstChainedEventAnchorsLegacyPrefix|TestJournalCheckpointRoundTripAndDetectsWholeJournalRewrite|TestJournalCheckpointRefusesOverwrite|TestJournalVerifyCheckpointRejectsInvalidCheckpoint|TestTemporalFactSupersessionAndEpisodeReplay|TestProvenanceEvidenceSpanRoundTrip' -count=1
+	cd $(CORE) && go test ./cmd/agentvault -run 'TestRunJournalVerifyReportsIntegrity|TestRunJournalCheckpointThenVerifyAgainstCheckpoint|TestJournalCommandRegistered' -count=1
+	cd $(CORE) && go test ./internal/contextcompiler -run 'TestContextCompilerGoldenEvaluation|TestCompileIncludesCurrentTemporalKnowledgeWithoutProjectLeak|TestCompileUnifiedIncludesVisibleMarkdownMemoryWithoutScopeLeak' -count=1
+	cd $(CORE) && go test ./internal/authz ./internal/mcp -count=1
 
 bench: ## Run Go benchmarks for core operations
 	cd $(CORE) && go test -bench=. -benchmem -run=^$$ ./internal/indexer ./internal/search ./internal/importers ./internal/vectors

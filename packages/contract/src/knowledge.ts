@@ -2,11 +2,27 @@
 // core/internal/contract/knowledge.go and are UI-independent so other
 // AgentVault-integrated products can consume the same stable API surface.
 
+export interface SourceSpan {
+  /** 1-based inclusive line number. */
+  startLine?: number;
+  /** 1-based inclusive line number. */
+  endLine?: number;
+  /** 0-based inclusive byte offset. */
+  startByte?: number;
+  /** 0-based exclusive byte offset. */
+  endByte?: number;
+}
+
 export interface ProvenanceEvidence {
   source: string;
   id?: string;
   path?: string;
   quote?: string;
+  /** Hash of the exact source version this evidence was extracted from. */
+  contentHash?: string;
+  /** Optional retrieval/index chunk identity. */
+  chunkId?: string;
+  span?: SourceSpan;
 }
 
 export interface ProvenanceRecord {

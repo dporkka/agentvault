@@ -174,6 +174,11 @@ plus any source metadata declared in frontmatter. Ordinary notes retain their
 stable note ID and vault-relative path and do not require a synthetic durable
 provenance row merely to be included.
 
+When structured provenance contains exact evidence spans, those line/byte ranges,
+content hashes, and chunk IDs remain attached to the context item's provenance.
+This lets downstream agents cite the exact source version instead of trying to
+reconstruct evidence locations from generated text.
+
 ## Budget behavior
 
 Items are admitted from highest to lowest score. If the next item does not fit,

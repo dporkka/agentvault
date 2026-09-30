@@ -53,6 +53,35 @@ and the projection can recover on replay. The reverse order is forbidden.
 Journal events are versioned and contain stable IDs, timestamps, event type,
 and a complete payload. Replay must be idempotent.
 
+New journal events are hash-chained. Each event stores the previous integrity
+hash and a SHA-256 hash over its immutable envelope and payload. Journals written
+before hash chaining remain valid: the first chained event commits to the exact
+legacy JSONL prefix through a legacy-prefix digest. Replay verifies the complete
+chain before applying any projection side effects, so detected corruption cannot
+partially rebuild SQLite.
+
+The hash chain provides corruption and rewrite detection relative to a trusted
+head/checkpoint. It is not an authenticity mechanism by itself: an attacker who
+can rewrite the entire journal can also recompute unsigned hashes.
+
+AgentVault can emit a **portable external checkpoint** with the current event
+counts, legacy-prefix anchor, chain head, and SHA-256 digest of the complete
+journal. Checkpoints are created with no-overwrite semantics and should be stored
+outside the writable vault boundary or in immutable/versioned storage when they
+are used as a trust anchor. Verifying against such a checkpoint detects a full
+journal replacement even when the replacement has a fresh internally valid hash
+chain.
+
+```bash
+agentvault journal verify
+agentvault journal checkpoint --output /trusted/agentvault-checkpoint.json
+agentvault journal verify --checkpoint /trusted/agentvault-checkpoint.json
+```
+
+Portable checkpoints are still unsigned witnesses. Their trust comes from where
+the operator stores or publishes them. Cryptographic signatures, hardware-backed
+keys, transparency logs, or remote attestation are separate future layers.
+
 ## 2. Universal object model
 
 A `KnowledgeObject` is the stable envelope shared by application-specific
@@ -198,6 +227,23 @@ edited to make an old inference appear supported by new evidence.
 
 Confidence is in `[0, 1]` and defaults to `1` only when omitted. An explicit
 zero is valid and must be preserved.
+
+### Exact source spans
+
+A `ProvenanceEvidence` record can optionally identify the exact source version
+and location that supports a claim:
+
+- `contentHash` binds evidence to a specific source version;
+- `chunkId` preserves the retrieval/index chunk identity when applicable;
+- `span.startLine` / `span.endLine` are 1-based inclusive line bounds;
+- `span.startByte` / `span.endByte` are 0-based half-open byte bounds.
+
+Line and byte ranges are independently optional, but each range must provide
+both endpoints. Existing path/quote-only provenance remains valid.
+
+Source spans are part of canonical provenance evidence and therefore survive
+journal replay. They are not inferred later from a quote, because files may
+have changed by the time a fact is inspected.
 
 ## 5. Memory model
 

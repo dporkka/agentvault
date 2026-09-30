@@ -54,6 +54,9 @@ func (s *Store) CreateProvenance(record contract.ProvenanceRecord) (contract.Pro
 	if record.Confidence < 0 || record.Confidence > 1 {
 		return contract.ProvenanceRecord{}, errors.New("confidence must be between 0 and 1")
 	}
+	if err := validateProvenanceEvidence(record.Evidence); err != nil {
+		return contract.ProvenanceRecord{}, err
+	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if record.ID == "" {
@@ -716,4 +719,42 @@ func orEmptySlice(value []contract.ProvenanceEvidence) []contract.ProvenanceEvid
 		return []contract.ProvenanceEvidence{}
 	}
 	return value
+}
+
+
+func validateProvenanceEvidence(evidence []contract.ProvenanceEvidence) error {
+	for i, item := range evidence {
+		if item.Span == nil {
+			continue
+		}
+		span := item.Span
+		hasLineStart := span.StartLine != 0
+		hasLineEnd := span.EndLine != 0
+		if hasLineStart != hasLineEnd {
+			return fmt.Errorf("evidence[%d] span must provide both startLine and endLine", i)
+		}
+		if hasLineStart {
+			if span.StartLine < 1 || span.EndLine < 1 {
+				return fmt.Errorf("evidence[%d] line span must be 1-based", i)
+			}
+			if span.EndLine < span.StartLine {
+				return fmt.Errorf("evidence[%d] endLine must be greater than or equal to startLine", i)
+			}
+		}
+
+		hasByteStart := span.StartByte != nil
+		hasByteEnd := span.EndByte != nil
+		if hasByteStart != hasByteEnd {
+			return fmt.Errorf("evidence[%d] span must provide both startByte and endByte", i)
+		}
+		if hasByteStart {
+			if *span.StartByte < 0 || *span.EndByte < 0 {
+				return fmt.Errorf("evidence[%d] byte span must be non-negative", i)
+			}
+			if *span.EndByte < *span.StartByte {
+				return fmt.Errorf("evidence[%d] endByte must be greater than or equal to startByte", i)
+			}
+		}
+	}
+	return nil
 }
