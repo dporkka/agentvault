@@ -42,6 +42,8 @@ type RetrievalEvaluationCaseResult struct {
 	ProvenanceRequired  int
 	ProvenanceCoverage  float64
 	OrderViolations     []string
+	PreferenceTotal     int
+	PreferenceAccuracy  float64
 	TokenUtilization    float64
 	RequiredPer1KTokens float64
 	TokenBudgetExceeded bool
@@ -54,6 +56,7 @@ type RetrievalEvaluationReport struct {
 	MacroRecall             float64
 	TotalLeakage            int
 	MacroProvenanceCoverage float64
+	MeanPreferenceAccuracy  float64
 	MeanTokenUtilization    float64
 	MeanRequiredPer1KTokens float64
 	Passed                  bool
@@ -77,6 +80,7 @@ func EvaluateRetrieval(cases []RetrievalEvaluationCase) RetrievalEvaluationRepor
 		report.MacroRecall += result.Recall
 		report.TotalLeakage += result.LeakageCount
 		report.MacroProvenanceCoverage += result.ProvenanceCoverage
+		report.MeanPreferenceAccuracy += result.PreferenceAccuracy
 		report.MeanTokenUtilization += result.TokenUtilization
 		report.MeanRequiredPer1KTokens += result.RequiredPer1KTokens
 		if !result.Passed {
@@ -87,6 +91,7 @@ func EvaluateRetrieval(cases []RetrievalEvaluationCase) RetrievalEvaluationRepor
 	count := float64(len(report.Cases))
 	report.MacroRecall /= count
 	report.MacroProvenanceCoverage /= count
+	report.MeanPreferenceAccuracy /= count
 	report.MeanTokenUtilization /= count
 	report.MeanRequiredPer1KTokens /= count
 	return report
@@ -147,12 +152,19 @@ func evaluateRetrievalCase(evaluationCase RetrievalEvaluationCase) RetrievalEval
 		result.ProvenanceCoverage = float64(result.ProvenanceCovered) / float64(result.ProvenanceRequired)
 	}
 
+	result.PreferenceTotal = len(expect.PreferredBefore)
 	for _, preference := range expect.PreferredBefore {
 		higher, higherOK := index[preference.HigherID]
 		lower, lowerOK := index[preference.LowerID]
-		if higherOK && lowerOK && higher >= lower {
-			result.OrderViolations = append(result.OrderViolations, fmt.Sprintf("%s !< %s", preference.HigherID, preference.LowerID))
+		if higherOK && lowerOK && higher < lower {
+			continue
 		}
+		result.OrderViolations = append(result.OrderViolations, fmt.Sprintf("%s !< %s", preference.HigherID, preference.LowerID))
+	}
+	if result.PreferenceTotal == 0 {
+		result.PreferenceAccuracy = 1
+	} else {
+		result.PreferenceAccuracy = float64(result.PreferenceTotal-len(result.OrderViolations)) / float64(result.PreferenceTotal)
 	}
 
 	if bundle.TokenBudget > 0 {
