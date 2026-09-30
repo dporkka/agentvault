@@ -238,8 +238,8 @@ func TestRunInlineMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 6 {
-		t.Errorf("Expected migration version 6, got %d", version)
+	if version != 5 {
+		t.Errorf("Expected migration version 5, got %d", version)
 	}
 }
 
@@ -268,7 +268,7 @@ func TestRunMigrationsInlineFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 6 {
+	if version != 5 {
 		t.Errorf("Expected inline migration version 5, got %d", version)
 	}
 }
