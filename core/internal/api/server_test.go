@@ -1575,3 +1575,142 @@ func TestLearningRecommendationEndpoint(t *testing.T) {
 		t.Fatalf("unexpected evaluation sources: %#v", out["sourceEvaluationIds"])
 	}
 }
+
+
+func TestRunRegressionCaseEndpoints(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO evaluation_datasets (id, name, agent_id, created_at)
+		VALUES ('ds_regression_api', 'Regression suite', 'agt_regression_api', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO agent_runs (
+			id, agent_name, agent_id, agent_revision, task, status, input_json, created_at
+		) VALUES (
+			'run_regression_api', 'regression-agent', 'agt_regression_api', 3,
+			'fix checkout', 'failed', '{"fixture":"checkout-42"}', datetime('now')
+		)
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO run_observations (
+			id, run_id, kind, name, status, input_json, output_json, evidence_json, created_at
+		) VALUES (
+			'obs_regression_api', 'run_regression_api', 'tool', 'checkout test', 'failed',
+			'{}', '{}', '{}', datetime('now')
+		)
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO evaluations (
+			id, run_id, observation_id, evaluator, name, label, metadata_json, created_at
+		) VALUES (
+			'eval_regression_api', 'run_regression_api', 'obs_regression_api',
+			'human:test', 'checkout', 'fail', '{"expected":{"status":"pass"}}', datetime('now')
+		)
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServer(vaultPath, database)
+	srv.RegisterRoutes()
+	var handler http.Handler = srv.mux
+	handler = srv.authMiddleware(handler)
+	handler = srv.corsMiddleware(handler)
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	t.Run("proposal is read only", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/runs/run_regression_api/regression-case-proposal")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		var out map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		if out["eligible"] != true || out["agentId"] != "agt_regression_api" || out["name"] != "Regression: fix checkout" {
+			t.Fatalf("unexpected proposal: %#v", out)
+		}
+		if out["supportLevel"] != "strong" {
+			t.Fatalf("expected strong support, got %#v", out["supportLevel"])
+		}
+		var count int
+		if err := database.QueryRow("SELECT COUNT(*) FROM evaluation_cases").Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Fatalf("proposal endpoint must not mutate dataset cases, got %d", count)
+		}
+	})
+
+	captureBody, _ := json.Marshal(map[string]interface{}{
+		"datasetId": "ds_regression_api",
+		"tags": []string{"checkout"},
+	})
+
+	t.Run("capture requires auth", func(t *testing.T) {
+		resp, err := http.Post(
+			ts.URL+"/runs/run_regression_api/regression-cases",
+			"application/json",
+			bytes.NewReader(captureBody),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("capture persists provenance and is idempotent", func(t *testing.T) {
+		capture := func() map[string]interface{} {
+			req, err := http.NewRequest(
+				http.MethodPost,
+				ts.URL+"/runs/run_regression_api/regression-cases",
+				bytes.NewReader(captureBody),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-AgentVault-Token", srv.AuthToken())
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200/201, got %d", resp.StatusCode)
+			}
+			var out map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatal(err)
+			}
+			return out
+		}
+		first := capture()
+		second := capture()
+		if first["id"] == "" || second["id"] != first["id"] {
+			t.Fatalf("expected idempotent case capture: first=%#v second=%#v", first, second)
+		}
+		if first["sourceRunId"] != "run_regression_api" || first["agentRevision"] != float64(3) {
+			t.Fatalf("missing run provenance: %#v", first)
+		}
+		evals, _ := first["sourceEvaluationIds"].([]interface{})
+		if len(evals) != 1 || evals[0] != "eval_regression_api" {
+			t.Fatalf("missing evaluation provenance: %#v", first)
+		}
+	})
+}
