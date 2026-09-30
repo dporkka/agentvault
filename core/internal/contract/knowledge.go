@@ -288,3 +288,37 @@ type EntityProfile struct {
 	AsOf    string           `json:"asOf"`
 	Facts   []TemporalFact   `json:"facts"`
 }
+
+
+// TimelineFilter scopes the derived activity stream across canonical capture,
+// memory, episode, and durable session-event sources.
+type TimelineFilter struct {
+	Project   string `json:"project,omitempty"`
+	AgentID   string `json:"agentId,omitempty"`
+	SessionID string `json:"sessionId,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+	Since     string `json:"since,omitempty"`
+	Until     string `json:"until,omitempty"`
+	Limit     int    `json:"limit,omitempty"`
+}
+
+// TimelineItem is a normalized projection for human activity browsing. It is
+// intentionally derived state; source records remain canonical in Markdown or
+// the append-only knowledge journal.
+type TimelineItem struct {
+	Kind         string                 `json:"kind"`
+	ID           string                 `json:"id"`
+	Title        string                 `json:"title,omitempty"`
+	Summary      string                 `json:"summary,omitempty"`
+	Project      string                 `json:"project,omitempty"`
+	AgentID      string                 `json:"agentId,omitempty"`
+	SessionID    string                 `json:"sessionId,omitempty"`
+	ScopeType    string                 `json:"scopeType,omitempty"`
+	ScopeID      string                 `json:"scopeId,omitempty"`
+	EventType    string                 `json:"eventType,omitempty"`
+	ObjectIDs    []string               `json:"objectIds,omitempty"`
+	ProvenanceID string                 `json:"provenanceId,omitempty"`
+	OccurredAt   string                 `json:"occurredAt"`
+	CreatedAt    string                 `json:"createdAt"`
+	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+}
