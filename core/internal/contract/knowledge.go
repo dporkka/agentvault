@@ -291,7 +291,7 @@ type EntityProfile struct {
 
 
 // TimelineFilter scopes the derived activity stream across canonical capture,
-// memory, episode, and durable session-event sources.
+// memory, episode, durable session-event, and mutation sources.
 type TimelineFilter struct {
 	Project   string `json:"project,omitempty"`
 	AgentID   string `json:"agentId,omitempty"`
