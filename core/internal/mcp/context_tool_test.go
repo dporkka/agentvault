@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/agentvault/core/internal/contextcompiler"
@@ -137,5 +138,31 @@ func TestCompileContextToolRejectsChangedPinnedView(t *testing.T) {
 	})
 	if !errors.Is(err, contextcompiler.ErrViewContentHashMismatch) {
 		t.Fatalf("expected ErrViewContentHashMismatch, got %v", err)
+	}
+}
+
+
+func TestCompileContextToolRejectsChangedInputManifest(t *testing.T) {
+	server, database, vault := setupKnowledgeMCPServer(t)
+	defer database.Close()
+
+	viewDir := filepath.Join(vault, ".agentvault", "views")
+	if err := os.MkdirAll(viewDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(viewDir, "manifest-pin.yaml"), []byte("version: 1\nname: Manifest pin\nquery:\n  projects: [agentvault]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server.RegisterContextTool()
+	tool := server.tools["agentvault.compile_context"]
+	_, err := tool.Handler(map[string]interface{}{
+		"task":                         "context compiler",
+		"project":                      "agentvault",
+		"view_id":                      "manifest-pin",
+		"expected_input_manifest_hash": strings.Repeat("a", 64),
+	})
+	if !errors.Is(err, contextcompiler.ErrInputManifestHashMismatch) {
+		t.Fatalf("expected ErrInputManifestHashMismatch, got %v", err)
 	}
 }

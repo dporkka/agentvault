@@ -106,3 +106,29 @@ When `viewId` is present:
 The view is a selector, not a second ranking engine. Once file-backed candidates
 are selected, Context Compiler still applies its normal deterministic
 task-relevance, ranking, token-budget, and max-item logic.
+
+
+### Input manifest
+
+Saved-view compilation also emits an `inputManifest` describing the complete
+eligible file-backed candidate corpus **before** token-budget or `maxItems`
+truncation. Each source records:
+
+- its context kind (`note` or Markdown-backed `memory`);
+- stable note/memory ID;
+- vault-relative Markdown path;
+- SHA-256 hash of the exact raw Markdown file bytes.
+
+Sources are sorted deterministically and folded together with the saved-view ID
+and definition hash into `inputManifest.manifestHash`. This means a change to
+an eligible source is visible even when that source is too low-ranked to appear
+in the final returned context items.
+
+A caller may pin that corpus with `expectedInputManifestHash` over
+HTTP/TypeScript or `expected_input_manifest_hash` over MCP. Corpus drift fails
+closed with HTTP 409 / the typed compiler mismatch error.
+
+The input manifest is currently emitted only for saved-view-scoped
+compilations. It proves the view definition and canonical Markdown candidate
+corpus used for retrieval; it does not attempt to hash journal-backed structured
+memory or the SQLite projection itself.

@@ -33,9 +33,13 @@ func (s *savedViewScope) allows(noteID string) bool {
 func (c *Compiler) resolveSavedViewScope(req contract.CompileContextRequest) (*savedViewScope, error) {
 	id := strings.TrimSpace(req.ViewID)
 	expectedHash := strings.TrimSpace(req.ExpectedViewContentHash)
+	expectedManifestHash := strings.TrimSpace(req.ExpectedInputManifestHash)
 	if id == "" {
 		if expectedHash != "" {
 			return nil, fmt.Errorf("expectedViewContentHash requires viewId")
+		}
+		if expectedManifestHash != "" {
+			return nil, fmt.Errorf("expectedInputManifestHash requires viewId")
 		}
 		return nil, nil
 	}

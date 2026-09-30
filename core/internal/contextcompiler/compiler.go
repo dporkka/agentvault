@@ -108,6 +108,11 @@ func (c *Compiler) Compile(req contract.CompileContextRequest) (contract.Context
 		return contract.ContextBundle{}, err
 	}
 
+	inputManifest, err := c.buildInputManifest(req, collector.items, viewScope)
+	if err != nil {
+		return contract.ContextBundle{}, err
+	}
+
 	sort.SliceStable(collector.items, func(i, j int) bool {
 		if collector.items[i].Score != collector.items[j].Score {
 			return collector.items[i].Score > collector.items[j].Score
@@ -137,6 +142,7 @@ func (c *Compiler) Compile(req contract.CompileContextRequest) (contract.Context
 		ViewID:          strings.TrimSpace(req.ViewID),
 		ViewVersion:     viewVersion,
 		ViewContentHash: viewContentHash,
+		InputManifest:   inputManifest,
 		AgentID:         req.AgentID,
 		SessionID:       req.SessionID,
 		AsOf:            asOf.Format(time.RFC3339Nano),

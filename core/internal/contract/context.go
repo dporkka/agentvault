@@ -7,8 +7,9 @@ type CompileContextRequest struct {
 	WorkspaceID             string   `json:"workspaceId,omitempty"`
 	Project                 string   `json:"project,omitempty"`
 	ViewID                  string   `json:"viewId,omitempty"`
-	ExpectedViewContentHash string   `json:"expectedViewContentHash,omitempty"`
-	AgentID                 string   `json:"agentId,omitempty"`
+	ExpectedViewContentHash    string   `json:"expectedViewContentHash,omitempty"`
+	ExpectedInputManifestHash string   `json:"expectedInputManifestHash,omitempty"`
+	AgentID                   string   `json:"agentId,omitempty"`
 	SessionID               string   `json:"sessionId,omitempty"`
 	ObjectIDs               []string `json:"objectIds,omitempty"`
 	TokenBudget             int      `json:"tokenBudget,omitempty"`
@@ -25,8 +26,9 @@ type ContextBundle struct {
 	Project         string             `json:"project,omitempty"`
 	ViewID          string             `json:"viewId,omitempty"`
 	ViewVersion     int                `json:"viewVersion,omitempty"`
-	ViewContentHash string             `json:"viewContentHash,omitempty"`
-	AgentID         string             `json:"agentId,omitempty"`
+	ViewContentHash string                `json:"viewContentHash,omitempty"`
+	InputManifest   *ContextInputManifest `json:"inputManifest,omitempty"`
+	AgentID         string                `json:"agentId,omitempty"`
 	SessionID       string             `json:"sessionId,omitempty"`
 	AsOf            string             `json:"asOf"`
 	TokenBudget     int                `json:"tokenBudget"`
@@ -34,6 +36,21 @@ type ContextBundle struct {
 	Truncated       bool               `json:"truncated"`
 	Items           []ContextItem      `json:"items"`
 	Stats           ContextBundleStats `json:"stats"`
+}
+
+type ContextInputSource struct {
+	Kind        string `json:"kind"`
+	ID          string `json:"id"`
+	Path        string `json:"path"`
+	ContentHash string `json:"contentHash"`
+}
+
+type ContextInputManifest struct {
+	Version         string               `json:"version"`
+	ViewID          string               `json:"viewId"`
+	ViewContentHash string               `json:"viewContentHash"`
+	Sources         []ContextInputSource `json:"sources"`
+	ManifestHash    string               `json:"manifestHash"`
 }
 
 // ContextBundleStats explains which sources contributed to a bundle.
