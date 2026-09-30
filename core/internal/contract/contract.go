@@ -275,3 +275,62 @@ type ExperimentDetail struct {
 	Experiment
 	Results []ExperimentResult `json:"results"`
 }
+
+
+// ProposePromotionRequest is the body for POST /promotions.
+type ProposePromotionRequest struct {
+	AgentID              string   `json:"agentId"`
+	TargetKind           string   `json:"targetKind"`
+	Candidate            string   `json:"candidate"`
+	Rationale            string   `json:"rationale,omitempty"`
+	SourceRunIDs         []string `json:"sourceRunIds,omitempty"`
+	SourceObservationIDs []string `json:"sourceObservationIds,omitempty"`
+	SourceEvaluationIDs  []string `json:"sourceEvaluationIds,omitempty"`
+	SupersedesNoteID     string   `json:"supersedesNoteId,omitempty"`
+}
+
+// ReviewPromotionRequest is the body for POST /promotions/{id}/review.
+type ReviewPromotionRequest struct {
+	Decision string `json:"decision"`
+	Reviewer string `json:"reviewer"`
+	Note     string `json:"note,omitempty"`
+}
+
+// CommitPromotionRequest is the body for POST /promotions/{id}/commit.
+type CommitPromotionRequest struct {
+	TargetNoteID string `json:"targetNoteId"`
+}
+
+// CreateEvaluationDatasetRequest is the body for POST /evaluation-datasets.
+type CreateEvaluationDatasetRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	AgentID     string `json:"agentId,omitempty"`
+}
+
+// CreateEvaluationCaseRequest is the body for POST /evaluation-datasets/{id}/cases.
+type CreateEvaluationCaseRequest struct {
+	Name     string                 `json:"name"`
+	Input    map[string]interface{} `json:"input"`
+	Expected map[string]interface{} `json:"expected,omitempty"`
+	Tags     []string               `json:"tags,omitempty"`
+}
+
+// CreateExperimentRequest is the body for POST /experiments.
+type CreateExperimentRequest struct {
+	DatasetID     string                 `json:"datasetId"`
+	Name          string                 `json:"name"`
+	AgentID       string                 `json:"agentId"`
+	AgentRevision int                    `json:"agentRevision"`
+	Status        string                 `json:"status,omitempty"`
+	Config        map[string]interface{} `json:"config,omitempty"`
+}
+
+// CreateExperimentResultRequest is the body for POST /experiments/{id}/results.
+type CreateExperimentResultRequest struct {
+	CaseID   string                 `json:"caseId"`
+	RunID    string                 `json:"runId,omitempty"`
+	Score    *float64               `json:"score,omitempty"`
+	Label    string                 `json:"label,omitempty"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+}
