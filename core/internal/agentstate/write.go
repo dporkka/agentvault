@@ -199,6 +199,12 @@ func AddEvaluationCase(database *db.DB, record EvaluationCase) (*EvaluationCase,
 	if record.Tags == nil {
 		record.Tags = []string{}
 	}
+	if record.SourceObservationIDs == nil {
+		record.SourceObservationIDs = []string{}
+	}
+	if record.SourceEvaluationIDs == nil {
+		record.SourceEvaluationIDs = []string{}
+	}
 	if err := record.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
@@ -219,12 +225,29 @@ func AddEvaluationCase(database *db.DB, record EvaluationCase) (*EvaluationCase,
 	if err != nil {
 		return nil, fmt.Errorf("%w: encode case tags: %v", ErrInvalid, err)
 	}
+	observationJSON, err := json.Marshal(record.SourceObservationIDs)
+	if err != nil {
+		return nil, fmt.Errorf("%w: encode case source observations: %v", ErrInvalid, err)
+	}
+	evaluationJSON, err := json.Marshal(record.SourceEvaluationIDs)
+	if err != nil {
+		return nil, fmt.Errorf("%w: encode case source evaluations: %v", ErrInvalid, err)
+	}
 
 	if _, err := database.Exec(`
 		INSERT INTO evaluation_cases (
-			id, dataset_id, name, input_json, expected_json, tags_json, created_at
-		) VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?)
-	`, record.ID, record.DatasetID, record.Name, string(inputJSON), expectedJSON, string(tagsJSON), record.CreatedAt); err != nil {
+			id, dataset_id, name, input_json, expected_json, tags_json,
+			source_run_id, source_observation_ids_json, source_evaluation_ids_json,
+			agent_id, agent_revision, created_at
+		) VALUES (
+			?, ?, ?, ?, NULLIF(?, ''), ?,
+			NULLIF(?, ''), ?, ?, NULLIF(?, ''), NULLIF(?, 0), ?
+		)
+	`,
+		record.ID, record.DatasetID, record.Name, string(inputJSON), expectedJSON, string(tagsJSON),
+		record.SourceRunID, string(observationJSON), string(evaluationJSON),
+		record.AgentID, record.AgentRevision, record.CreatedAt,
+	); err != nil {
 		return nil, fmt.Errorf("%w: add evaluation case: %v", ErrStorage, err)
 	}
 	return &record, nil
