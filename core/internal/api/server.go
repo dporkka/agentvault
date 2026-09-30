@@ -180,6 +180,11 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /graph", s.handleGraph)
 	s.mux.HandleFunc("GET /graph/neighbors", s.handleGraphNeighbors)
 
+	// Durable agent state and evaluation evidence
+	s.mux.HandleFunc("GET /promotions", s.handlePromotions)
+	s.mux.HandleFunc("GET /evaluation-datasets/{id}", s.handleEvaluationDataset)
+	s.mux.HandleFunc("GET /experiments/{id}", s.handleExperiment)
+
 	// Conversations
 	s.mux.HandleFunc("POST /conversations", s.handleCreateConversation)
 	s.mux.HandleFunc("GET /conversations", s.handleListConversations)
