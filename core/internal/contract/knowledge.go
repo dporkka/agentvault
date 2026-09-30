@@ -176,39 +176,39 @@ const (
 // provenance-backed episode. Scope and provenance are inherited from the source
 // episode so an extractor cannot silently widen visibility or replace evidence.
 type MemoryCandidate struct {
-	ID               string                `json:"id"`
-	SourceEpisodeID  string                `json:"sourceEpisodeId"`
-	MemoryKind       string                `json:"memoryKind"`
-	ScopeType        string                `json:"scopeType"`
-	ScopeID          string                `json:"scopeId"`
-	Content          string                `json:"content"`
-	ObjectID         string                `json:"objectId,omitempty"`
-	ProvenanceID     string                `json:"provenanceId"`
-	Confidence       float64               `json:"confidence"`
-	Status           MemoryCandidateStatus `json:"status"`
-	ProposedBy       string                `json:"proposedBy,omitempty"`
-	ReviewedBy       string                `json:"reviewedBy,omitempty"`
-	ReviewReason     string                `json:"reviewReason,omitempty"`
-	ResultMemoryID   string                `json:"resultMemoryId,omitempty"`
-	TargetMemoryID   string                `json:"targetMemoryId,omitempty"`
-	Metadata         map[string]interface{} `json:"metadata,omitempty"`
-	CreatedAt        string                `json:"createdAt"`
-	UpdatedAt        string                `json:"updatedAt"`
-	ReviewedAt       string                `json:"reviewedAt,omitempty"`
+	ID              string                 `json:"id"`
+	SourceEpisodeID string                 `json:"sourceEpisodeId"`
+	MemoryKind      string                 `json:"memoryKind"`
+	ScopeType       string                 `json:"scopeType"`
+	ScopeID         string                 `json:"scopeId"`
+	Content         string                 `json:"content"`
+	ObjectID        string                 `json:"objectId,omitempty"`
+	ProvenanceID    string                 `json:"provenanceId"`
+	Confidence      float64                `json:"confidence"`
+	Status          MemoryCandidateStatus  `json:"status"`
+	ProposedBy      string                 `json:"proposedBy,omitempty"`
+	ReviewedBy      string                 `json:"reviewedBy,omitempty"`
+	ReviewReason    string                 `json:"reviewReason,omitempty"`
+	ResultMemoryID  string                 `json:"resultMemoryId,omitempty"`
+	TargetMemoryID  string                 `json:"targetMemoryId,omitempty"`
+	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+	CreatedAt       string                 `json:"createdAt"`
+	UpdatedAt       string                 `json:"updatedAt"`
+	ReviewedAt      string                 `json:"reviewedAt,omitempty"`
 }
 
 // CreateMemoryCandidateRequest proposes semantic memory from one
 // provenance-backed episode. The candidate inherits scope/provenance from that
 // episode and never materializes durable memory by itself.
 type CreateMemoryCandidateRequest struct {
-	ID          string                 `json:"id,omitempty"`
-	EpisodeID   string                 `json:"episodeId"`
-	MemoryKind  string                 `json:"memoryKind"`
-	Content     string                 `json:"content"`
-	ObjectID    string                 `json:"objectId,omitempty"`
-	Confidence  *float64               `json:"confidence,omitempty"`
-	ProposedBy  string                 `json:"proposedBy,omitempty"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	ID         string                 `json:"id,omitempty"`
+	EpisodeID  string                 `json:"episodeId"`
+	MemoryKind string                 `json:"memoryKind"`
+	Content    string                 `json:"content"`
+	ObjectID   string                 `json:"objectId,omitempty"`
+	Confidence *float64               `json:"confidence,omitempty"`
+	ProposedBy string                 `json:"proposedBy,omitempty"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // MemoryCandidateFilter scopes candidate review queues.
