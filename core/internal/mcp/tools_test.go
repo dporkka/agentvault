@@ -1457,3 +1457,82 @@ func TestLogWrite(t *testing.T) {
 		t.Errorf("expected 1 run logged, got %d", count)
 	}
 }
+
+
+func TestHandleCompileAndGetContext(t *testing.T) {
+	s, database := setupTestServer(t)
+	defer database.Close()
+
+	if err := os.MkdirAll(filepath.Join(s.vaultPath, "75-agents"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(s.vaultPath, "10-notes"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	agentContent := `---
+id: agt_mcp_context
+type: agent
+title: MCP Context Agent
+revision: 4
+identity_ref: identity_mcp_context
+memory_refs: [memory_mcp_context]
+knowledge_scopes: []
+artifact_scopes: []
+conversation_scopes: []
+capability_refs: [github]
+context_policy_ref: ""
+---
+Build auditable contexts.
+`
+	identityContent := `---
+id: identity_mcp_context
+type: note
+title: MCP Identity
+---
+Prefer explicit provenance.
+`
+	memoryContent := `---
+id: memory_mcp_context
+type: note
+title: MCP Memory
+---
+Keep runtime execution outside AgentVault.
+`
+	if err := os.WriteFile(filepath.Join(s.vaultPath, "75-agents", "mcp-context.md"), []byte(agentContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.vaultPath, "10-notes", "mcp-identity.md"), []byte(identityContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.vaultPath, "10-notes", "mcp-memory.md"), []byte(memoryContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	addTestNote(t, database, "agt_mcp_context", "MCP Context Agent", "75-agents/mcp-context.md", "agent", "", "Build auditable contexts.", nil)
+	addTestNote(t, database, "identity_mcp_context", "MCP Identity", "10-notes/mcp-identity.md", "note", "", "Prefer explicit provenance.", nil)
+	addTestNote(t, database, "memory_mcp_context", "MCP Memory", "10-notes/mcp-memory.md", "note", "", "Keep runtime execution outside AgentVault.", nil)
+
+	result, err := s.handleCompileContext(map[string]interface{}{
+		"agent_id": "agt_mcp_context",
+		"task":     "Compile a stable context.",
+	})
+	if err != nil {
+		t.Fatalf("handleCompileContext: %v", err)
+	}
+	if !strings.Contains(result, "sha256:") || !strings.Contains(result, "MCP Identity") || !strings.Contains(result, "MCP Memory") {
+		t.Fatalf("unexpected compiled context output:\n%s", result)
+	}
+
+	var hash string
+	if err := database.QueryRow(`SELECT hash FROM context_snapshots ORDER BY created_at DESC LIMIT 1`).Scan(&hash); err != nil {
+		t.Fatalf("query context snapshot: %v", err)
+	}
+	stored, err := s.handleGetContextSnapshot(map[string]interface{}{"hash": hash})
+	if err != nil {
+		t.Fatalf("handleGetContextSnapshot: %v", err)
+	}
+	if !strings.Contains(stored, hash) || !strings.Contains(stored, "Compile a stable context.") {
+		t.Fatalf("unexpected stored context output:\n%s", stored)
+	}
+}
