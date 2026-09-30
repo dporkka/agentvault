@@ -203,10 +203,12 @@ func TestHandleToolsList(t *testing.T) {
 		"agentvault.set_status",
 		"agentvault.ask",
 		"agentvault.toggle_pin",
+		"agentvault.create_memory_candidate",
+		"agentvault.promote_memory",
 	}
 
-	if len(tools) != 17 {
-		t.Errorf("expected 17 tools, got %d", len(tools))
+	if len(tools) != 19 {
+		t.Errorf("expected 19 tools, got %d", len(tools))
 	}
 
 	toolNames := make(map[string]bool)
@@ -511,8 +513,8 @@ func TestNewServer(t *testing.T) {
 	}
 
 	srv.RegisterTools()
-	if len(srv.tools) != 17 {
-		t.Errorf("expected 17 tools after RegisterTools, got %d", len(srv.tools))
+	if len(srv.tools) != 19 {
+		t.Errorf("expected 19 tools after RegisterTools, got %d", len(srv.tools))
 	}
 }
 
