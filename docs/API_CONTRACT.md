@@ -106,6 +106,7 @@ A missing or incorrect token on a write endpoint returns `401` with
 | POST | `/evaluation-datasets` | yes | 201 / 400 | camelCase (`EvaluationDataset`) |
 | POST | `/evaluation-datasets/{id}/cases` | yes | 201 / 400 / 404 | camelCase (`EvaluationCase`) |
 | GET | `/experiments/{id}` | no | 200 / 404 | camelCase (`ExperimentDetail`) |
+| GET | `/experiments/{id}/compare/{candidateId}` | no | 200 / 400 / 404 / 409 | camelCase (`ExperimentComparison`) |
 | POST | `/experiments` | yes | 201 / 400 / 404 | camelCase (`Experiment`) |
 | POST | `/experiments/{id}/results` | yes | 201 / 400 / 404 / 409 | camelCase (`ExperimentResult`) |
 | POST | `/agents/{id}/context` | yes | 200 / 400 / 404 | camelCase (`ContextSnapshot`) |
@@ -554,6 +555,27 @@ Example response:
   ]
 }
 ```
+
+## GET /experiments/{id}/compare/{candidateId}
+
+No auth. Compares two persisted experiments without running evaluations.
+
+The baseline and candidate experiments must reference the same evaluation dataset and the same agent ID. Different datasets or agents return `409 Conflict`.
+
+Case transitions are derived only from explicit categorical labels:
+
+- failure → pass = `fixed`
+- pass → failure = `regressed`
+- pass → pass = `stable_pass`
+- failure → failure = `stable_fail`
+- unknown/unrecognized labels = `unclassified`
+- absent results = `missing_baseline` / `missing_candidate`
+
+Recognized pass labels include `pass`, `passed`, `success`, `succeeded`, `correct`, and `accepted`. Failure labels follow the same explicit failure vocabulary used by learning recommendations.
+
+If both results contain numeric scores, `scoreDelta` is returned as `candidate - baseline`. AgentVault does **not** interpret the sign as improvement or regression because evaluator score polarity and thresholds are not globally defined.
+
+The response includes the two immutable agent revisions and per-case transitions, but deliberately provides no synthesized overall winner. External runtimes remain responsible for executing the cases and writing results through the experiment-result API.
 
 ## GET /runs/{id}/regression-case-proposal
 
