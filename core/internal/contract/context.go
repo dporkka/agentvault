@@ -12,6 +12,7 @@ type CompileContextRequest struct {
 	TokenBudget int      `json:"tokenBudget,omitempty"`
 	MaxItems    int      `json:"maxItems,omitempty"`
 	AsOf        string   `json:"asOf,omitempty"`
+	Explain     bool     `json:"explain,omitempty"`
 }
 
 // ContextBundle is the compiled, model-agnostic context payload. estimatedTokens
@@ -41,16 +42,33 @@ type ContextBundleStats struct {
 
 // ContextItem is one ranked unit of evidence/context.
 type ContextItem struct {
-	Kind            string                 `json:"kind"`
-	ID              string                 `json:"id"`
-	Title           string                 `json:"title,omitempty"`
-	Content         string                 `json:"content"`
-	Path            string                 `json:"path,omitempty"`
-	Score           float64                `json:"score"`
-	EstimatedTokens int                    `json:"estimatedTokens"`
-	ObjectIDs       []string               `json:"objectIds,omitempty"`
-	Provenance      *ContextProvenance     `json:"provenance,omitempty"`
-	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+	Kind            string                     `json:"kind"`
+	ID              string                     `json:"id"`
+	Title           string                     `json:"title,omitempty"`
+	Content         string                     `json:"content"`
+	Path            string                     `json:"path,omitempty"`
+	Score           float64                    `json:"score"`
+	EstimatedTokens int                        `json:"estimatedTokens"`
+	ObjectIDs       []string                   `json:"objectIds,omitempty"`
+	Provenance      *ContextProvenance         `json:"provenance,omitempty"`
+	Metadata        map[string]interface{}     `json:"metadata,omitempty"`
+	Ranking         *ContextRankingExplanation `json:"ranking,omitempty"`
+}
+
+// ContextRankingExplanation makes deterministic ranking auditable without
+// requiring consumers to reverse-engineer source-specific scoring heuristics.
+type ContextRankingExplanation struct {
+	Algorithm  string                    `json:"algorithm"`
+	Components []ContextRankingComponent `json:"components"`
+}
+
+// ContextRankingComponent is one normalized [0,1] signal and its weighted
+// contribution to the final ContextItem score.
+type ContextRankingComponent struct {
+	Signal       string  `json:"signal"`
+	Value        float64 `json:"value"`
+	Weight       float64 `json:"weight"`
+	Contribution float64 `json:"contribution"`
 }
 
 // ContextProvenance is the compact provenance view carried beside compiled
