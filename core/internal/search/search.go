@@ -414,19 +414,25 @@ func (s *Searcher) scanSingle(row *sql.Row) (*Result, error) {
 	return &r, nil
 }
 
+type LinkedCandidate struct {
+	Result   Result
+	SeedID   string
+	Distance int
+}
+
 // LinkedCandidates returns one-hop linked notes for explicit seed IDs inside
 // an explicit project scope. The project predicate is applied in SQL before
 // results are materialized, so graph expansion cannot widen caller scope.
-func (s *Searcher) LinkedCandidates(seedIDs []string, project string, limit int) ([]Result, error) {
+func (s *Searcher) LinkedCandidates(seedIDs []string, project string, limit int) ([]LinkedCandidate, error) {
 	project = strings.TrimSpace(project)
 	if project == "" || len(seedIDs) == 0 || limit == 0 {
-		return []Result{}, nil
+		return []LinkedCandidate{}, nil
 	}
 	if limit < 0 {
 		limit = 20
 	}
 
-	results := make([]Result, 0, limit)
+	results := make([]LinkedCandidate, 0, limit)
 	seen := make(map[string]bool, len(seedIDs)+limit)
 	for _, seed := range seedIDs {
 		seed = strings.TrimSpace(seed)
@@ -479,7 +485,7 @@ func (s *Searcher) LinkedCandidates(seedIDs []string, project string, limit int)
 				continue
 			}
 			seen[result.ID] = true
-			results = append(results, result)
+			results = append(results, LinkedCandidate{Result: result, SeedID: seed, Distance: 1})
 			if len(results) >= limit {
 				break
 			}

@@ -70,6 +70,12 @@ Private other-project recovery details.
 			if item.Ranking == nil {
 				t.Fatal("graph candidate missing ranking explanation")
 			}
+			if item.Retrieval == nil {
+				t.Fatal("graph candidate missing retrieval trace")
+			}
+			if item.Retrieval.Method != "graph" || item.Retrieval.SeedID != "note_graph_seed" || item.Retrieval.Distance != 1 {
+				t.Fatalf("unexpected graph retrieval trace: %+v", item.Retrieval)
+			}
 			foundGraph := false
 			for _, component := range item.Ranking.Components {
 				if component.Signal == "graphDistance" {
@@ -86,5 +92,37 @@ Private other-project recovery details.
 	}
 	if !foundNeighbor {
 		t.Fatalf("one-hop graph neighbor was not recovered: %+v", bundle.Items)
+	}
+}
+
+func TestCompileOmitsRetrievalTraceUnlessExplainRequested(t *testing.T) {
+	compiler, _, database, vault := setupCompiler(t)
+	defer database.Close()
+
+	writeAndIndexNote(t, database, vault, "trace-hidden.md", `---
+id: note_trace_hidden
+type: note
+title: Deployment Verification
+project: adacavo
+created: 2026-09-20T00:00:00Z
+updated: 2026-09-29T00:00:00Z
+---
+Deployment verification checklist.
+`)
+
+	bundle, err := compiler.Compile(contract.CompileContextRequest{
+		Task:        "deployment verification",
+		Project:     "adacavo",
+		TokenBudget: 800,
+		MaxItems:    5,
+		AsOf:        "2099-01-01T00:00:00Z",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range bundle.Items {
+		if item.Retrieval != nil {
+			t.Fatalf("retrieval trace leaked into non-explain bundle: %+v", item.Retrieval)
+		}
 	}
 }

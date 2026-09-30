@@ -23,15 +23,18 @@ func TestLinkedCandidatesReturnsOnlyOneHopWithinProject(t *testing.T) {
 
 	foundSameProject := false
 	for _, result := range results {
-		if result.ID == "note_005" {
+		if result.Result.ID == "note_005" {
 			t.Fatalf("cross-project link leaked into graph candidates: %+v", results)
 		}
-		if result.ID == "note_003" {
+		if result.Result.ID == "note_003" {
 			foundSameProject = true
-			if result.Project != "webapp" {
+			if result.Result.Project != "webapp" {
 				t.Fatalf("expected scoped project, got %+v", result)
 			}
 		}
+	}
+	if results[0].SeedID != "note_002" || results[0].Distance != 1 {
+		t.Fatalf("unexpected graph path: %+v", results[0])
 	}
 	if !foundSameProject {
 		t.Fatalf("expected same-project linked candidate, got %+v", results)

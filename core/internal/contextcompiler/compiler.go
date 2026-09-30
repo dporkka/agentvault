@@ -157,6 +157,9 @@ func (c *candidateCollector) add(item contract.ContextItem) {
 	if item.Metadata == nil {
 		item.Metadata = map[string]interface{}{}
 	}
+	if !c.req.Explain {
+		item.Retrieval = nil
+	}
 	item = c.rank(item)
 	c.items = append(c.items, item)
 }
@@ -369,6 +372,7 @@ func (c *candidateCollector) addObject(object contract.KnowledgeObject, score fl
 		Score:      score,
 		ObjectIDs:  []string{object.ID},
 		Provenance: c.provenanceFor(object.ProvenanceID),
+		Retrieval:  c.objectRetrievalTrace(object, explicit),
 		Metadata: map[string]interface{}{
 			"type":      object.Type,
 			"explicit":  explicit,
@@ -419,13 +423,14 @@ func (c *candidateCollector) addNotes() error {
 			return fmt.Errorf("load note %s: %w", candidate.result.ID, err)
 		}
 		c.add(contract.ContextItem{
-			Kind:     "note",
-			ID:       candidate.result.ID,
-			Title:    candidate.result.Title,
-			Content:  detail.Snippet,
-			Path:     candidate.result.Path,
-			Score:    candidate.baseScore,
-			Metadata: noteContextMetadata(candidate.result, candidate.semanticScore, candidate.graphDistance),
+			Kind:      "note",
+			ID:        candidate.result.ID,
+			Title:     candidate.result.Title,
+			Content:   detail.Snippet,
+			Path:      candidate.result.Path,
+			Score:     candidate.baseScore,
+			Retrieval: candidate.retrievalTrace(c),
+			Metadata:  noteContextMetadata(candidate.result, candidate.semanticScore, candidate.graphDistance),
 		})
 	}
 	return nil
@@ -436,6 +441,8 @@ type noteCandidate struct {
 	baseScore     float64
 	semanticScore float64
 	graphDistance float64
+	method        string
+	seedID        string
 }
 
 func (c *candidateCollector) noteCandidates() ([]noteCandidate, error) {
@@ -469,6 +476,7 @@ func (c *candidateCollector) noteCandidates() ([]noteCandidate, error) {
 			result:        result,
 			baseScore:     0.84 - float64(i)*0.012,
 			semanticScore: semanticScores[result.ID],
+			method:        "lexical",
 		})
 	}
 	for _, result := range semantic {
@@ -480,6 +488,7 @@ func (c *candidateCollector) noteCandidates() ([]noteCandidate, error) {
 			result:        result,
 			baseScore:     0.70,
 			semanticScore: result.Score,
+			method:        "semantic",
 		})
 	}
 
@@ -491,7 +500,8 @@ func (c *candidateCollector) noteCandidates() ([]noteCandidate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("search linked notes for context: %w", err)
 	}
-	for _, result := range linked {
+	for _, linkedCandidate := range linked {
+		result := linkedCandidate.Result
 		if seen[result.ID] {
 			continue
 		}
@@ -499,7 +509,9 @@ func (c *candidateCollector) noteCandidates() ([]noteCandidate, error) {
 		candidates = append(candidates, noteCandidate{
 			result:        result,
 			baseScore:     0.66,
-			graphDistance: 1,
+			graphDistance: float64(linkedCandidate.Distance),
+			method:        "graph",
+			seedID:        linkedCandidate.SeedID,
 		})
 	}
 	return candidates, nil
@@ -799,4 +811,32 @@ func compactStrings(values ...string) []string {
 		}
 	}
 	return result
+}
+
+func (c *candidateCollector) trace(method, sourceID, scope, seedID string, distance int) *contract.ContextRetrievalTrace {
+	if !c.req.Explain {
+		return nil
+	}
+	return &contract.ContextRetrievalTrace{
+		Method:   method,
+		Scope:    scope,
+		SourceID: sourceID,
+		SeedID:   seedID,
+		Distance: distance,
+	}
+}
+
+func (c *candidateCollector) objectRetrievalTrace(object contract.KnowledgeObject, explicit bool) *contract.ContextRetrievalTrace {
+	if explicit {
+		return c.trace("explicit_object", object.ID, c.req.Project, "", 0)
+	}
+	return c.trace("project_object", object.ID, c.req.Project, "", 0)
+}
+
+func (n noteCandidate) retrievalTrace(c *candidateCollector) *contract.ContextRetrievalTrace {
+	method := n.method
+	if method == "" {
+		method = "lexical"
+	}
+	return c.trace(method, n.result.ID, n.result.Project, n.seedID, int(n.graphDistance))
 }

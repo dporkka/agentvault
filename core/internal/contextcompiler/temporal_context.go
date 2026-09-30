@@ -54,6 +54,7 @@ func (c *candidateCollector) addEpisodes() error {
 				Score:      score,
 				ObjectIDs:  episode.ObjectIDs,
 				Provenance: c.provenanceFor(episode.ProvenanceID),
+				Retrieval:  c.trace("episode_scope", episode.ID, episode.ScopeType+":"+episode.ScopeID, "", 0),
 				Metadata: map[string]interface{}{
 					"scopeType":  episode.ScopeType,
 					"scopeId":    episode.ScopeID,
@@ -113,6 +114,7 @@ func (c *candidateCollector) addFacts() error {
 			Score:      0.88 + fact.Confidence*0.05 + relevance*0.06,
 			ObjectIDs:  compactStrings(fact.SubjectID, fact.ObjectID),
 			Provenance: c.provenanceFor(fact.ProvenanceID),
+			Retrieval:  c.trace("temporal_fact", fact.ID, c.req.Project, fact.SubjectID, 0),
 			Metadata: map[string]interface{}{
 				"subjectId":    fact.SubjectID,
 				"predicate":    fact.Predicate,

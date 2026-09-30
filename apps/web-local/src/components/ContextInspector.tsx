@@ -26,6 +26,26 @@ function ItemCard({ item, index }: { item: ContextItem; index: number }) {
           {provenance.evidence?.length ? <span> · {provenance.evidence.length} evidence item{provenance.evidence.length === 1 ? '' : 's'}</span> : null}
         </div>
       )}
+      {item.retrieval && (
+        <div className="mt-3 pt-3 border-t border-vault-border">
+          <div className="text-xs font-medium text-vault-text-muted mb-2">How this entered context</div>
+          <div className="flex flex-wrap gap-2">
+            <span className="px-2 py-1 rounded bg-vault-bg-tertiary text-xs text-vault-text-secondary">
+              {item.retrieval.method}{item.retrieval.scope ? ` · ${item.retrieval.scope}` : ''}
+            </span>
+            {item.retrieval.seedId && (
+              <span className="px-2 py-1 rounded bg-vault-bg-tertiary text-xs text-vault-text-secondary">
+                seed {item.retrieval.seedId}{item.retrieval.distance ? ` · ${item.retrieval.distance} hop${item.retrieval.distance === 1 ? '' : 's'}` : ''}
+              </span>
+            )}
+            {item.retrieval.sourceId && item.retrieval.sourceId !== item.id && (
+              <span className="px-2 py-1 rounded bg-vault-bg-tertiary text-xs text-vault-text-secondary">
+                source {item.retrieval.sourceId}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
       {item.ranking && (
         <div className="mt-3 pt-3 border-t border-vault-border">
           <div className="text-xs font-medium text-vault-text-muted mb-2">Why this ranked here</div>
@@ -87,7 +107,7 @@ const ContextInspector: React.FC = () => {
       <header className="border-b border-vault-border px-6 py-4">
         <h1 className="text-lg font-semibold text-vault-text-primary">Context Inspector</h1>
         <p className="text-xs text-vault-text-muted mt-1">
-          Inspect exactly what AgentVault will give an agent, including ranking, provenance, scope, and token cost.
+          Inspect exactly what AgentVault will give an agent, including retrieval path, ranking, provenance, scope, and token cost.
         </p>
       </header>
 

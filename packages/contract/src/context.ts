@@ -37,6 +37,15 @@ export interface ContextItem {
   provenance?: ContextProvenance;
   metadata?: Record<string, unknown>;
   ranking?: ContextRankingExplanation;
+  retrieval?: ContextRetrievalTrace;
+}
+
+export interface ContextRetrievalTrace {
+  method: string;
+  scope?: string;
+  sourceId?: string;
+  seedId?: string;
+  distance?: number;
 }
 
 export interface ContextRankingExplanation {

@@ -78,6 +78,7 @@ func (c *candidateCollector) addProfiles() error {
 			Content:   strings.Join(lines, "\n"),
 			Score:     score,
 			ObjectIDs: compactStrings(objectIDs...),
+			Retrieval: c.trace("entity_profile", profile.Subject.ID, profile.Subject.Project, profile.Subject.ID, 0),
 			Metadata: map[string]interface{}{
 				"type":      profile.Subject.Type,
 				"project":   profile.Subject.Project,
