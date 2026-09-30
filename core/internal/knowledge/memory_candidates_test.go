@@ -345,3 +345,69 @@ func TestMemoryCandidateReplayRestoresReviewAndResultMemory(t *testing.T) {
 		t.Fatalf("candidate result memory did not replay exactly: %+v", memory)
 	}
 }
+
+
+func TestMemoryCandidateCannotAttachCrossProjectObject(t *testing.T) {
+	store, database, _ := setupStore(t)
+	defer database.Close()
+
+	episode := createCandidateEpisode(t, store, "project", "alpha")
+	betaObject, err := store.UpsertObject(contract.UpsertKnowledgeObjectRequest{
+		ID:      "obj_beta_candidate",
+		Type:    "decision",
+		Title:   "Beta-only decision",
+		Project: "beta",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ProposeMemoryCandidate(contract.CreateMemoryCandidateRequest{
+		EpisodeID:  episode.ID,
+		MemoryKind: "decision",
+		Content:    "Should not attach a beta object to alpha evidence.",
+		ObjectID:   betaObject.ID,
+	}); err == nil {
+		t.Fatal("expected cross-project candidate object to fail")
+	}
+}
+
+func TestMemoryCandidateCannotBranchAnAlreadySupersededMemory(t *testing.T) {
+	store, database, _ := setupStore(t)
+	defer database.Close()
+
+	episode := createCandidateEpisode(t, store, "project", "branch-project")
+	old, err := store.RecordMemory(contract.CreateMemoryRequest{
+		ID:          "mem_branch_old",
+		MemoryClass: "semantic",
+		MemoryKind:  "fact",
+		ScopeType:   "project",
+		ScopeID:     "branch-project",
+		Content:     "Old fact.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.ProposeMemoryCandidate(contract.CreateMemoryCandidateRequest{
+		EpisodeID: episode.ID, MemoryKind: "fact", Content: "First correction.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SupersedeMemoryWithCandidate(first.ID, contract.SupersedeMemoryCandidateRequest{
+		ReviewedBy: "reviewer", TargetMemoryID: old.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := store.ProposeMemoryCandidate(contract.CreateMemoryCandidateRequest{
+		EpisodeID: episode.ID, MemoryKind: "fact", Content: "Second divergent correction.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SupersedeMemoryWithCandidate(second.ID, contract.SupersedeMemoryCandidateRequest{
+		ReviewedBy: "reviewer", TargetMemoryID: old.ID,
+	}); err == nil {
+		t.Fatal("expected already-superseded target to reject a divergent replacement")
+	}
+}
