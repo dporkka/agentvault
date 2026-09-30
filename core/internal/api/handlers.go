@@ -2053,3 +2053,48 @@ func (s *Server) handleCaptureRunRegressionCase(w http.ResponseWriter, r *http.R
 	}
 	writeJSON(w, http.StatusCreated, evaluationCaseResponse(item))
 }
+
+
+func experimentComparisonResponse(item *agentstate.ExperimentComparison) contract.ExperimentComparison {
+	cases := make([]contract.ExperimentCaseComparison, 0, len(item.Cases))
+	for _, comparison := range item.Cases {
+		cases = append(cases, contract.ExperimentCaseComparison{
+			CaseID: comparison.CaseID, CaseName: comparison.CaseName,
+			Transition: string(comparison.Transition),
+			BaselineRunID: comparison.BaselineRunID, CandidateRunID: comparison.CandidateRunID,
+			BaselineLabel: comparison.BaselineLabel, CandidateLabel: comparison.CandidateLabel,
+			BaselineScore: comparison.BaselineScore, CandidateScore: comparison.CandidateScore,
+			ScoreDelta: comparison.ScoreDelta,
+		})
+	}
+	return contract.ExperimentComparison{
+		BaselineExperimentID: item.BaselineExperimentID,
+		CandidateExperimentID: item.CandidateExperimentID,
+		DatasetID: item.DatasetID, AgentID: item.AgentID,
+		BaselineAgentRevision: item.BaselineAgentRevision,
+		CandidateAgentRevision: item.CandidateAgentRevision,
+		Comparable: item.Comparable, ReasonCodes: item.ReasonCodes,
+		Summary: contract.ExperimentComparisonSummary{
+			TotalCases: item.Summary.TotalCases, PairedResults: item.Summary.PairedResults,
+			Fixes: item.Summary.Fixes, Regressions: item.Summary.Regressions,
+			StablePass: item.Summary.StablePass, StableFail: item.Summary.StableFail,
+			Unclassified: item.Summary.Unclassified,
+			MissingBaseline: item.Summary.MissingBaseline,
+			MissingCandidate: item.Summary.MissingCandidate,
+		},
+		Cases: cases,
+	}
+}
+
+func (s *Server) handleExperimentComparison(w http.ResponseWriter, r *http.Request) {
+	item, err := agentstate.CompareExperiments(
+		s.db,
+		r.PathValue("id"),
+		r.PathValue("candidateId"),
+	)
+	if err != nil {
+		writeAgentStateError(w, "experiment comparison failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, experimentComparisonResponse(item))
+}
