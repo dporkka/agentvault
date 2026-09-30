@@ -98,6 +98,9 @@ A missing or incorrect token on a write endpoint returns `401` with
 | GET | `/recent` | no | 200 | camelCase (`[]search.Result`) |
 | GET | `/stale` | no | 200 | camelCase (`[]search.Result`) |
 | GET | `/git/status` | no | 200 | camelCase |
+| GET | `/promotions` | no | 200 / 400 | camelCase (`Promotion[]`) |
+| GET | `/evaluation-datasets/{id}` | no | 200 / 404 | camelCase (`EvaluationDatasetDetail`) |
+| GET | `/experiments/{id}` | no | 200 / 404 | camelCase (`ExperimentDetail`) |
 
 ---
 
@@ -340,6 +343,29 @@ vault is a valid state and returns `isGitRepo: false` (not an error). Uses
 When `isGitRepo` is `false`: `branch` is `""`, `clean` is `true`, and both file
 arrays are empty (never `null`).
 
+## GET /promotions
+
+No auth. Lists evidence-backed promotion records. With no query parameters, returns only `proposed` records (the pending review queue), newest first.
+
+Optional query parameters:
+- `status`: `proposed`, `approved`, `rejected`, `committed`, `superseded`, or `all`.
+- `agent_id`: filter to one agent manifest ID.
+- `limit`: maximum rows, default 50 and capped at 100.
+
+Each record includes its source run/observation/evaluation IDs, review metadata, and canonical target note ID when committed.
+
+## GET /evaluation-datasets/{id}
+
+No auth. Returns one evaluation dataset and all of its reproducible cases ordered by creation time. Case `input` and `expected` values are decoded JSON objects; `expected` is `null` when the case has no expected output.
+
+Returns `404` when the dataset does not exist.
+
+## GET /experiments/{id}
+
+No auth. Returns one externally executed experiment together with all recorded case-level results. The response includes the immutable agent revision and experiment configuration used for comparison, plus optional run IDs, score/label values, and per-result metadata.
+
+Returns `404` when the experiment does not exist.
+
 ---
 
 ## Known contract drift
@@ -376,6 +402,4 @@ every client and the server now produce.
   `contract.VaultStatus` (`isVault`, not `isOpen`) and the Wails
   frontend checks `vaultStatus?.isVault`.
 
-All endpoints are now aligned across server, tests, and clients:
-`/health`, `/vault/status`, `/vault/index`, `/search`, `/notes/{id}`, `/notes`
-(POST), `/capture`, `/ask`, `/projects`, `/recent`, `/stale`, and `/git/status`.
+All endpoints are now aligned across server, tests, and clients, including the durable agent-state read surfaces `/promotions`, `/evaluation-datasets/{id}`, and `/experiments/{id}`.
