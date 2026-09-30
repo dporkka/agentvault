@@ -192,12 +192,13 @@ func addMarkdownMemories(c *candidateCollector, store *memory.Store) error {
 		}
 
 		c.add(contract.ContextItem{
-			Kind:    "memory",
-			ID:      record.NoteID,
-			Title:   record.Title,
-			Content: detail.Snippet,
-			Path:    record.Path,
-			Score:   score,
+			Kind:      "memory",
+			ID:        record.NoteID,
+			Title:     record.Title,
+			Content:   detail.Snippet,
+			Path:      record.Path,
+			Score:     score,
+			Retrieval: c.trace("markdown_memory", record.NoteID, "workspace:"+workspaceID, "", 0),
 			Provenance: &contract.ContextProvenance{
 				ID:         "markdown:" + record.NoteID,
 				SourceType: sourceType,
@@ -263,13 +264,14 @@ func addNotesUnified(c *candidateCollector, store *memory.Store) error {
 			return fmt.Errorf("load note %s: %w", result.ID, err)
 		}
 		c.add(contract.ContextItem{
-			Kind:     "note",
-			ID:       result.ID,
-			Title:    result.Title,
-			Content:  detail.Snippet,
-			Path:     result.Path,
-			Score:    candidate.baseScore,
-			Metadata: noteContextMetadata(result, candidate.semanticScore, candidate.graphDistance),
+			Kind:      "note",
+			ID:        result.ID,
+			Title:     result.Title,
+			Content:   detail.Snippet,
+			Path:      result.Path,
+			Score:     candidate.baseScore,
+			Retrieval: candidate.retrievalTrace(c),
+			Metadata:  noteContextMetadata(result, candidate.semanticScore, candidate.graphDistance),
 		})
 	}
 	return nil
