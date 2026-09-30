@@ -1026,6 +1026,70 @@ func (s *Server) handleLogEvaluation(args map[string]interface{}) (string, error
 		id, runID, name, evaluator), nil
 }
 
+// --- Tool: agentvault.get_learning_recommendation ---
+
+func (s *Server) registerGetLearningRecommendation() {
+	s.tools["agentvault.get_learning_recommendation"] = Tool{
+		Name:        "agentvault.get_learning_recommendation",
+		Description: "Inspect one audited run for deterministic failure signals and explicit evaluator hints without creating or mutating memory.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id": schemaString("Agent run ID"),
+		}, []string{"run_id"}),
+		Handler: s.handleGetLearningRecommendation,
+	}
+}
+
+func (s *Server) handleGetLearningRecommendation(args map[string]interface{}) (string, error) {
+	rec, err := agentstate.RecommendRunLearning(s.db, stringArg(args, "run_id"))
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Learning Recommendation\n\n")
+	sb.WriteString(fmt.Sprintf("- **Run:** %s\n", rec.RunID))
+	if rec.AgentID != "" {
+		sb.WriteString(fmt.Sprintf("- **Agent:** %s@%d\n", rec.AgentID, rec.AgentRevision))
+	} else {
+		sb.WriteString("- **Agent:** unbound\n")
+	}
+	sb.WriteString(fmt.Sprintf("- **Eligible:** %t\n", rec.Eligible))
+	sb.WriteString(fmt.Sprintf("- **Support:** %s\n", rec.SupportLevel))
+	sb.WriteString(fmt.Sprintf("- **Evidence:** %d\n", rec.EvidenceCount))
+	if rec.SuggestedTargetKind != "" {
+		sb.WriteString(fmt.Sprintf("- **Target hint:** %s\n", rec.SuggestedTargetKind))
+	}
+	if len(rec.ReasonCodes) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Reasons:** %s\n", strings.Join(rec.ReasonCodes, ", ")))
+	}
+	if len(rec.ContextMemoryRefs) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Context memory refs:** %s\n", strings.Join(rec.ContextMemoryRefs, ", ")))
+	}
+	if len(rec.SupersedesNoteIDs) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Supersession hints:** %s\n", strings.Join(rec.SupersedesNoteIDs, ", ")))
+	}
+
+	sb.WriteString("\n## Signals\n\n")
+	if len(rec.Signals) == 0 {
+		sb.WriteString("No explicit negative evidence.\n")
+		return sb.String(), nil
+	}
+	for _, signal := range rec.Signals {
+		sb.WriteString(fmt.Sprintf("- %s **%s** %s", signal.ID, signal.Kind, signal.Name))
+		if signal.Status != "" {
+			sb.WriteString(fmt.Sprintf(" status=%s", signal.Status))
+		}
+		if signal.Label != "" {
+			sb.WriteString(fmt.Sprintf(" label=%s", signal.Label))
+		}
+		if signal.Rationale != "" {
+			sb.WriteString(fmt.Sprintf(" — %s", signal.Rationale))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
 // --- Tool: agentvault.propose_run_learning ---
 
 func (s *Server) registerProposeRunLearning() {
