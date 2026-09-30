@@ -193,8 +193,8 @@ func TestCorsMiddleware_DisallowedOrigin(t *testing.T) {
 	}
 }
 
-// TestAuthMiddleware_BearerToken covers X-AgentVault-Token and Authorization
-// Bearer header handling in isolation.
+// TestAuthMiddleware_BearerToken covers protected reads plus X-AgentVault-Token
+// and Authorization Bearer header handling in isolation.
 func TestAuthMiddleware_BearerToken(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
 	defer database.Close()
@@ -205,12 +205,31 @@ func TestAuthMiddleware_BearerToken(t *testing.T) {
 	})
 	handler := srv.authMiddleware(inner)
 
-	t.Run("GET open", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+	t.Run("GET protected without token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/vault/status", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 for unauthenticated protected GET, got %d", rec.Code)
+		}
+	})
+
+	t.Run("GET health public", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusNoContent {
-			t.Errorf("expected 204 for GET, got %d", rec.Code)
+			t.Errorf("expected 204 for public health GET, got %d", rec.Code)
+		}
+	})
+
+	t.Run("GET protected bearer correct", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/vault/status", nil)
+		req.Header.Set("Authorization", "Bearer "+srv.AuthToken())
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Errorf("expected 204 for authenticated GET, got %d", rec.Code)
 		}
 	})
 

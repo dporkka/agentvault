@@ -15,6 +15,8 @@ import (
 	"github.com/agentvault/core/internal/vectors"
 )
 
+const reciprocalRankFusionK = 60.0
+
 // VectorQuery extends Query with vector search capabilities.
 type VectorQuery struct {
 	Query
@@ -119,7 +121,10 @@ func (s *Searcher) VectorSearch(ctx context.Context, query string, limit int) ([
 }
 
 // HybridSearch combines FTS and vector search results.
-// It runs both searches in parallel and combines scores with the configured weight.
+// It runs both searches in parallel and combines their ranked lists with weighted
+// reciprocal-rank fusion. RRF intentionally ignores raw FTS/vector score magnitudes,
+// because SQLite FTS5 rank (lower is better) and cosine similarity (higher is better)
+// are not directly comparable score spaces.
 func (s *Searcher) HybridSearch(ctx context.Context, vq VectorQuery) ([]Result, error) {
 	if vq.Limit <= 0 {
 		vq.Limit = 20
@@ -183,14 +188,13 @@ func (s *Searcher) HybridSearch(ctx context.Context, vq VectorQuery) ([]Result, 
 		log.Printf("[HybridSearch] Vector search failed: %v", vec.err)
 	}
 
-	// Combine results using the hybrid weight
 	return s.combineResults(fts.results, vec.results, vq.HybridWeight, vq.Limit)
 }
 
-// combineResults merges FTS and vector search results with configurable weighting.
-// weight=0 means FTS only, weight=1 means vector only, 0.5 means equal weight.
+// combineResults merges FTS and vector ranked lists with weighted reciprocal-rank
+// fusion. weight=0 means FTS only, weight=1 means vector only, 0.5 gives equal
+// contribution to each ranked list. The result Score is the fused RRF score.
 func (s *Searcher) combineResults(ftsResults, vecResults []Result, weight float64, limit int) ([]Result, error) {
-	// Clamp weight to [0, 1]
 	if weight < 0 {
 		weight = 0
 	}
@@ -198,63 +202,49 @@ func (s *Searcher) combineResults(ftsResults, vecResults []Result, weight float6
 		weight = 1
 	}
 
-	// If weight is 0, return only FTS results
 	if weight == 0 {
+		if limit > 0 && len(ftsResults) > limit {
+			return ftsResults[:limit], nil
+		}
 		return ftsResults, nil
 	}
-
-	// If weight is 1, return only vector results
 	if weight == 1 {
-		if len(vecResults) > limit {
+		if limit > 0 && len(vecResults) > limit {
 			return vecResults[:limit], nil
 		}
 		return vecResults, nil
 	}
 
-	// Combine scores from both result sets
-	combined := make(map[string]*Result)
-
-	// FTS scores: normalize to [0, 1] range
-	var maxFTSScore float64
-	for _, r := range ftsResults {
-		if r.Score > maxFTSScore {
-			maxFTSScore = r.Score
-		}
-	}
+	combined := make(map[string]*Result, len(ftsResults)+len(vecResults))
 	ftsWeight := 1.0 - weight
-	for _, r := range ftsResults {
-		normalizedScore := r.Score
-		if maxFTSScore > 0 {
-			normalizedScore = r.Score / maxFTSScore
-		}
+	vecWeight := weight
+
+	for i, r := range ftsResults {
 		cr := r
-		cr.Score = normalizedScore * ftsWeight
+		cr.Score = ftsWeight / (reciprocalRankFusionK + float64(i+1))
 		combined[r.ID] = &cr
 	}
 
-	// Vector scores: cosine similarity is already in [-1, 1], typically [0, 1] for normalized vectors
-	vecWeight := weight
-	for _, r := range vecResults {
-		normalizedScore := r.Score
-		if normalizedScore < 0 {
-			normalizedScore = 0
-		}
+	for i, r := range vecResults {
+		rrfScore := vecWeight / (reciprocalRankFusionK + float64(i+1))
 		if existing, ok := combined[r.ID]; ok {
-			existing.Score += normalizedScore * vecWeight
-		} else {
-			cr := r
-			cr.Score = normalizedScore * vecWeight
-			combined[r.ID] = &cr
+			existing.Score += rrfScore
+			continue
 		}
+		cr := r
+		cr.Score = rrfScore
+		combined[r.ID] = &cr
 	}
 
-	// Convert map to slice and sort by combined score
 	results := make([]Result, 0, len(combined))
 	for _, r := range combined {
 		results = append(results, *r)
 	}
 
-	sort.Slice(results, func(i, j int) bool {
+	sort.SliceStable(results, func(i, j int) bool {
+		if results[i].Score == results[j].Score {
+			return results[i].ID < results[j].ID
+		}
 		return results[i].Score > results[j].Score
 	})
 

@@ -761,6 +761,9 @@ func TestCheckConfig_ExtraCases(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer os.Chmod(configPath, 0644)
+		if _, err := os.ReadFile(configPath); err == nil {
+			t.Skip("environment can read mode-000 files; cannot exercise config read error")
+		}
 		d := New(nil, tmpDir)
 		result := d.CheckConfig()
 		if result.Status != "error" {

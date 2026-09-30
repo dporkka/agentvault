@@ -611,7 +611,13 @@ func TestVaultStatusEndpoint_NonVault(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/vault/status")
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/vault/status", nil)
+	if err != nil {
+		t.Fatalf("failed to create status request: %v", err)
+	}
+	req.Header.Set("X-AgentVault-Token", srv.AuthToken())
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("failed to get status: %v", err)
 	}

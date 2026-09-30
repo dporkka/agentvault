@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,8 +15,10 @@ import (
 )
 
 var (
-	mcpHTTP bool
-	mcpPort int
+	mcpHTTP              bool
+	mcpPort              int
+	mcpAllowDirectWrites bool
+	mcpCapabilityToken   string
 )
 
 // mcpStopSignal returns a channel that is closed when the MCP server should
@@ -39,12 +42,26 @@ var mcpCmd = &cobra.Command{
 	Long: `Model Context Protocol (MCP) server for AgentVault.
 
 Exposes AgentVault tools to AI agents via the Model Context Protocol.
-Supports stdio (default) and HTTP transports.
+Supports stdio (default) and authenticated HTTP transports.
+
+User-authored file writes are proposal-only by default. A persistent capability
+token can bind the MCP process to an agent identity. Bound identities receive
+only explicitly granted families such as vault:read, knowledge:read,
+knowledge:write, memory:write, session:write, context:compile, ai:invoke, and
+mutation:* lifecycle capabilities. Legacy direct-write MCP commands remain an
+explicit compatibility opt-in and cannot be combined with a capability identity.
+
+Scope support is capability-specific: mutation capabilities support path/project/
+session restrictions; structured knowledge read/write, memory writes, session
+writes, and context compilation support project/session restrictions; path-scoped
+structured access remains unsupported; and vault:read plus ai:invoke remain
+global-only until their full retrieval paths can enforce narrower scope.
 
 Example:
-  agentvault mcp serve              # stdio mode (default)
-  agentvault mcp serve --http       # HTTP mode on default port 7777
-  agentvault mcp serve --http --port 8888`,
+  agentvault mcp serve
+  AGENTVAULT_CAPABILITY_TOKEN=avc_... agentvault mcp serve
+  AGENTVAULT_CAPABILITY_TOKEN=avc_... agentvault mcp serve --http
+  agentvault mcp serve --allow-direct-writes`,
 }
 
 // mcpServeCmd is the actual serve subcommand.
@@ -53,11 +70,18 @@ var mcpServeCmd = &cobra.Command{
 	Short: "Start MCP server for AI agent integration",
 	Long: `Starts an MCP server that exposes AgentVault tools to AI agents.
 
-Supports stdio (default) and HTTP transports.
+Unbound stdio exposes the existing safe local surface plus proposal/read
+mutations. Supplying a capability token binds the process to that identity and
+registers only explicitly granted tool families. HTTP transport requires a
+capability token and uses that same token as the transport credential.
 
-Example:
-  agentvault mcp serve              # stdio mode
-  agentvault mcp serve --http --port 7777`,
+Durable machine-authored knowledge/session writes use their own capability
+families and do not grant direct writes to user-authored vault files.
+
+--allow-direct-writes is mutually exclusive with a capability token so a scoped
+identity can never regain legacy unreviewed file-writing tools by accident.
+Prefer AGENTVAULT_CAPABILITY_TOKEN over a command-line token when process-list
+visibility is a concern.`,
 	Run: runMcpServe,
 }
 
@@ -67,13 +91,13 @@ func init() {
 
 	mcpServeCmd.Flags().BoolVar(&mcpHTTP, "http", false, "Use HTTP transport instead of stdio")
 	mcpServeCmd.Flags().IntVar(&mcpPort, "port", 7777, "Port for HTTP transport")
+	mcpServeCmd.Flags().BoolVar(&mcpAllowDirectWrites, "allow-direct-writes", false, "Enable legacy MCP tools that write vault files without transactional review")
+	mcpServeCmd.Flags().StringVar(&mcpCapabilityToken, "capability-token", "", "Bind MCP to a persistent scoped capability token (prefer AGENTVAULT_CAPABILITY_TOKEN)")
 }
 
 func runMcpServe(cmd *cobra.Command, args []string) {
-	// Validate vault
 	vp := mustRequireVault()
 
-	// Open database
 	database, err := openDB(vp)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -81,14 +105,34 @@ func runMcpServe(cmd *cobra.Command, args []string) {
 	}
 	defer database.Close()
 
-	// Create and configure server
+	capabilityToken := strings.TrimSpace(mcpCapabilityToken)
+	if capabilityToken == "" {
+		capabilityToken = strings.TrimSpace(os.Getenv("AGENTVAULT_CAPABILITY_TOKEN"))
+	}
+	if mcpHTTP && capabilityToken == "" {
+		fmt.Fprintln(os.Stderr, "Error: HTTP MCP requires --capability-token or AGENTVAULT_CAPABILITY_TOKEN")
+		os.Exit(1)
+	}
+	if mcpAllowDirectWrites && capabilityToken != "" {
+		fmt.Fprintln(os.Stderr, "Error: --allow-direct-writes cannot be combined with a scoped capability token")
+		os.Exit(1)
+	}
+
 	server := mcp.NewServer(vp, database)
-	server.RegisterTools()
-	server.RegisterResources()
+	if capabilityToken != "" {
+		if err := server.SetCapabilityToken(capabilityToken); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid capability token: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	if err := server.RegisterRuntimeSurface(mcpAllowDirectWrites); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: configure MCP authorization surface: %v\n", err)
+		os.Exit(1)
+	}
 
 	if mcpHTTP {
 		addr := fmt.Sprintf("127.0.0.1:%d", mcpPort)
-		fmt.Fprintf(os.Stderr, "AgentVault MCP server started (HTTP on %s)\n", addr)
+		fmt.Fprintf(os.Stderr, "AgentVault MCP server started (authenticated HTTP on %s)\n", addr)
 		srv := &http.Server{Addr: addr, Handler: server}
 		go func() {
 			<-mcpStopSignal()

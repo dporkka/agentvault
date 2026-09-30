@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,9 +10,12 @@ import (
 	"time"
 
 	"github.com/agentvault/core/internal/ai"
+	"github.com/agentvault/core/internal/authz"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/indexer"
+	"github.com/agentvault/core/internal/knowledge"
+	"github.com/agentvault/core/internal/mutations"
 	"github.com/agentvault/core/internal/search"
 	"github.com/agentvault/core/internal/watcher"
 )
@@ -58,33 +62,63 @@ const Version = "0.1.0"
 
 // Server is the HTTP API server for AgentVault.
 type Server struct {
-	vaultPath    string
-	db           *db.DB
-	searcher     *search.Searcher
-	indexer      *indexer.Indexer
-	mux          *http.ServeMux
-	server       *http.Server
-	addr         string
-	authToken    string
-	aiProvider   ai.AIProvider
-	aiProviderMu sync.Mutex
-	rateLimiter  *simpleRateLimiter
-	watcher      *watcher.Watcher
+	vaultPath          string
+	db                 *db.DB
+	searcher           *search.Searcher
+	indexer            *indexer.Indexer
+	knowledge          *knowledge.Store
+	mutations          *mutations.Engine
+	knowledgeInitErr   error
+	mutationInitErr    error
+	capabilityRegistry *authz.Registry
+	capabilityInitErr  error
+	mux                *http.ServeMux
+	server             *http.Server
+	addr               string
+	authToken          string
+	aiProvider         ai.AIProvider
+	aiProviderMu       sync.Mutex
+	rateLimiter        *simpleRateLimiter
+	watcher            *watcher.Watcher
 }
 
-// NewServer creates a new API server.
+// NewServer creates a new API server. Structured machine-authored state is
+// recovered from the canonical vault journal before journal-backed knowledge
+// endpoints become available; Markdown-backed memory remains independently
+// rebuildable through indexing. Interrupted filesystem mutations are then
+// reconciled against their durable before/after hashes. Mutation recovery
+// failures fail the mutation control plane closed without taking unrelated
+// knowledge/context endpoints offline. Capability registry failures similarly
+// fail scoped identities closed while preserving root-token administration.
 func NewServer(vaultPath string, database *db.DB) *Server {
 	mux := http.NewServeMux()
 	searcher := search.New(database)
 	searcher.ConfigureEmbeddings(vaultPath)
+	idx := indexer.New(database, vaultPath)
+	knowledgeStore := knowledge.New(database, vaultPath)
+	knowledgeInitErr := knowledgeStore.ReplayJournal()
+	mutationEngine := mutations.New(vaultPath, knowledgeStore, idx)
+	mutationInitErr := knowledgeInitErr
+	if mutationInitErr == nil {
+		if recoveryErrors := mutationEngine.Recover(); len(recoveryErrors) > 0 {
+			mutationInitErr = fmt.Errorf("mutation recovery failed: %w", errors.Join(recoveryErrors...))
+		}
+	}
+	capabilityRegistry, capabilityInitErr := authz.NewRegistry(vaultPath)
 	return &Server{
-		vaultPath:   vaultPath,
-		db:          database,
-		searcher:    searcher,
-		indexer:     indexer.New(database, vaultPath),
-		mux:         mux,
-		authToken:   generateAuthToken(),
-		rateLimiter: newRateLimiter(30, time.Second),
+		vaultPath:          vaultPath,
+		db:                 database,
+		searcher:           searcher,
+		indexer:            idx,
+		knowledge:          knowledgeStore,
+		mutations:          mutationEngine,
+		knowledgeInitErr:   knowledgeInitErr,
+		mutationInitErr:    mutationInitErr,
+		capabilityRegistry: capabilityRegistry,
+		capabilityInitErr:  capabilityInitErr,
+		mux:                mux,
+		authToken:          generateAuthToken(),
+		rateLimiter:        newRateLimiter(30, time.Second),
 	}
 }
 
@@ -141,13 +175,42 @@ func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) withKnowledgeReady(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.knowledgeInitErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"error":  "knowledge projection is unavailable",
+				"detail": s.knowledgeInitErr.Error(),
+			})
+			return
+		}
+		next(w, r)
+	}
+}
+
+func (s *Server) withMutationReady(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.mutationInitErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"error":  "mutation subsystem is unavailable",
+				"detail": s.mutationInitErr.Error(),
+			})
+			return
+		}
+		next(w, r)
+	}
+}
+
 // RegisterRoutes sets up all API routes.
 func (s *Server) RegisterRoutes() {
 	// Health check (no auth required)
 	s.mux.HandleFunc("GET /health", s.handleHealth)
 
-	// Auth verify (no auth required)
+	// Root auth verification plus root-only lifecycle for persistent scoped tokens.
 	s.mux.HandleFunc("GET /auth/verify", s.handleAuthVerify)
+	s.mux.HandleFunc("GET /auth/capabilities", s.withRootAuth(s.handleListCapabilities))
+	s.mux.HandleFunc("POST /auth/capabilities", s.withRootAuth(s.handleCreateCapability))
+	s.mux.HandleFunc("POST /auth/capabilities/{id}/revoke", s.withRootAuth(s.handleRevokeCapability))
 
 	// Vault status
 	s.mux.HandleFunc("GET /vault/status", s.handleVaultStatus)
@@ -155,6 +218,11 @@ func (s *Server) RegisterRoutes() {
 
 	// Search
 	s.mux.HandleFunc("GET /search", s.handleSearch)
+
+	// Human/file-backed semantic memory. These read-only endpoints operate on
+	// the Markdown-derived note projection and support scope + class + kind.
+	s.mux.HandleFunc("GET /memories", s.handleMemories)
+	s.mux.HandleFunc("GET /memories/{id}", s.handleMemoryByID)
 
 	// Notes CRUD
 	s.mux.HandleFunc("GET /notes/", s.handleNoteByPath) // handles /notes/{id}
@@ -169,6 +237,10 @@ func (s *Server) RegisterRoutes() {
 
 	// AI Ask
 	s.mux.HandleFunc("POST /ask", s.handleAsk)
+
+	// Deterministic agent context compilation over structured journal state,
+	// universal objects, indexed notes, and durable session history.
+	s.mux.HandleFunc("POST /context/compile", s.withKnowledgeReady(s.handleCompileContext))
 
 	// Lists
 	s.mux.HandleFunc("GET /projects", s.handleProjects)
@@ -185,6 +257,38 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /conversations", s.handleListConversations)
 	s.mux.HandleFunc("GET /conversations/{id}", s.handleGetConversation)
 	s.mux.HandleFunc("POST /conversations/{id}/ask", s.handleConversationAsk)
+
+	// Universal knowledge objects and temporal relationships.
+	s.mux.HandleFunc("GET /objects", s.withKnowledgeReady(s.handleListObjects))
+	s.mux.HandleFunc("POST /objects", s.withKnowledgeReady(s.handleUpsertObject))
+	s.mux.HandleFunc("GET /objects/{id}", s.withKnowledgeReady(s.handleGetObject))
+	s.mux.HandleFunc("PUT /objects/{id}", s.withKnowledgeReady(s.handleUpsertObject))
+	s.mux.HandleFunc("GET /objects/{id}/relations", s.withKnowledgeReady(s.handleObjectRelations))
+	s.mux.HandleFunc("POST /relations", s.withKnowledgeReady(s.handleCreateRelation))
+
+	// Machine-authored provenance and journal-backed memory. Singular /memory
+	// is deliberately distinct from /memories, the Markdown-backed recall API.
+	s.mux.HandleFunc("POST /provenance", s.withKnowledgeReady(s.handleCreateProvenance))
+	s.mux.HandleFunc("GET /provenance/{id}", s.withKnowledgeReady(s.handleGetProvenance))
+	s.mux.HandleFunc("GET /memory", s.withKnowledgeReady(s.handleListMemories))
+	s.mux.HandleFunc("POST /memory", s.withKnowledgeReady(s.handleCreateMemory))
+
+	// Durable agent sessions and append-only session events.
+	s.mux.HandleFunc("POST /sessions", s.withKnowledgeReady(s.handleStartAgentSession))
+	s.mux.HandleFunc("GET /sessions/{id}", s.withKnowledgeReady(s.handleGetAgentSession))
+	s.mux.HandleFunc("POST /sessions/{id}/events", s.withKnowledgeReady(s.handleAppendSessionEvent))
+	s.mux.HandleFunc("POST /sessions/{id}/close", s.withKnowledgeReady(s.handleCloseAgentSession))
+
+	// Transactional agent mutations. Authentication happens before readiness so
+	// unauthenticated callers cannot use subsystem state as an oracle. Resource
+	// scope is then enforced inside each handler against path/session/project.
+	s.mux.HandleFunc("GET /mutations", s.withMutationRead(s.withMutationReady(s.handleListMutations)))
+	s.mux.HandleFunc("POST /mutations", s.withMutationPropose(s.withMutationReady(s.handleProposeMutation)))
+	s.mux.HandleFunc("GET /mutations/{id}", s.withMutationRead(s.withMutationReady(s.handleGetMutation)))
+	s.mux.HandleFunc("POST /mutations/{id}/approve", s.withMutationApprove(s.withMutationReady(s.handleApproveMutation)))
+	s.mux.HandleFunc("POST /mutations/{id}/commit", s.withMutationCommit(s.withMutationReady(s.handleCommitMutation)))
+	s.mux.HandleFunc("POST /mutations/{id}/undo", s.withMutationUndo(s.withMutationReady(s.handleUndoMutation)))
+	s.mux.HandleFunc("POST /mutations/{id}/reject", s.withMutationReject(s.withMutationReady(s.handleRejectMutation)))
 
 	// Git status
 	s.mux.HandleFunc("GET /git/status", s.handleGitStatus)
