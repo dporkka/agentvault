@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/agentvault/core/internal/chunker"
@@ -16,6 +17,7 @@ import (
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/embeddings"
+	"github.com/agentvault/core/internal/knowledge"
 	"github.com/agentvault/core/internal/markdown"
 	"github.com/agentvault/core/internal/memory"
 	"github.com/agentvault/core/internal/vectors"
@@ -24,8 +26,11 @@ import (
 
 // Indexer indexes markdown files into the database.
 type Indexer struct {
-	db        *db.DB
-	vaultPath string
+	db               *db.DB
+	vaultPath        string
+	promotionStore   *knowledge.Store
+	promotionOnce    sync.Once
+	promotionInitErr error
 }
 
 // EmbedConfig holds optional embedding configuration for indexing.
@@ -54,7 +59,11 @@ type IndexError = contract.IndexError
 
 // New creates a new Indexer.
 func New(database *db.DB, vaultPath string) *Indexer {
-	return &Indexer{db: database, vaultPath: vaultPath}
+	return &Indexer{
+		db:             database,
+		vaultPath:      vaultPath,
+		promotionStore: knowledge.New(database, vaultPath),
+	}
 }
 
 // Index scans and indexes all markdown files in the vault.
@@ -136,6 +145,12 @@ func (idx *Indexer) Index(opts IndexOptions) (*IndexResult, error) {
 			if fileResult.embedError {
 				result.EmbedErrors++
 			}
+			if fileResult.promotionError != "" {
+				result.Errors = append(result.Errors, IndexError{
+					Path:  relPath,
+					Error: "knowledge promotion: " + fileResult.promotionError,
+				})
+			}
 		}
 
 		return nil
@@ -156,10 +171,11 @@ func (idx *Indexer) Index(opts IndexOptions) (*IndexResult, error) {
 
 // fileResult tracks the outcome of indexing a single file.
 type fileResult struct {
-	updated     bool
-	skipped     bool
-	chunksAdded int
-	embedError  bool
+	updated        bool
+	skipped        bool
+	chunksAdded    int
+	embedError     bool
+	promotionError string
 }
 
 // indexFile indexes a single markdown file.
@@ -369,6 +385,12 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
+	if doc.Frontmatter.Type == "capture" && strings.TrimSpace(doc.Frontmatter.Project) != "" {
+		if err := idx.promoteCapture(noteID, relPath, doc); err != nil {
+			result.promotionError = err.Error()
+		}
+	}
+
 	// Generate embeddings if configured
 	if embedCfg != nil && embedCfg.Enabled && embedCfg.Client != nil {
 		chunksAdded, embedErr := idx.embedNote(noteID, doc.Body, embedCfg)
@@ -380,6 +402,45 @@ func (idx *Indexer) indexFile(relPath string, force bool, embedCfg *EmbedConfig)
 	}
 
 	return result, nil
+}
+
+func (idx *Indexer) promoteCapture(noteID, relPath string, doc *markdown.ParsedDocument) error {
+	idx.promotionOnce.Do(func() {
+		if idx.promotionStore == nil {
+			idx.promotionInitErr = fmt.Errorf("knowledge promotion store is not configured")
+			return
+		}
+		idx.promotionInitErr = idx.promotionStore.ReplayJournal()
+	})
+	if idx.promotionInitErr != nil {
+		return idx.promotionInitErr
+	}
+
+	title := strings.TrimSpace(doc.Frontmatter.Title)
+	if title == "" {
+		title = noteID
+	}
+	metadata := map[string]interface{}{}
+	if value, ok := doc.Frontmatter.Extra["source_url"].(string); ok && strings.TrimSpace(value) != "" {
+		metadata["sourceUrl"] = strings.TrimSpace(value)
+	}
+	if value, ok := doc.Frontmatter.Extra["external_id"].(string); ok && strings.TrimSpace(value) != "" {
+		metadata["externalId"] = strings.TrimSpace(value)
+	}
+
+	_, err := idx.promotionStore.PromoteEvent(knowledge.PromotionInput{
+		SourceType:   "capture",
+		SourceID:     noteID,
+		EvidencePath: filepath.ToSlash(relPath),
+		Project:      doc.Frontmatter.Project,
+		AgentID:      doc.Frontmatter.AgentID,
+		SessionID:    doc.Frontmatter.SessionID,
+		EventType:    "capture.recorded",
+		Summary:      "Captured " + title,
+		OccurredAt:   doc.Frontmatter.Created,
+		Metadata:     metadata,
+	})
+	return err
 }
 
 // embedNote chunks a note's body and generates embeddings for each chunk.
