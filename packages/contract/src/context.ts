@@ -10,6 +10,7 @@ export interface CompileContextRequest {
   tokenBudget?: number;
   maxItems?: number;
   asOf?: string;
+  explain?: boolean;
 }
 
 export interface ContextProvenance {
@@ -35,6 +36,19 @@ export interface ContextItem {
   objectIds?: string[];
   provenance?: ContextProvenance;
   metadata?: Record<string, unknown>;
+  ranking?: ContextRankingExplanation;
+}
+
+export interface ContextRankingExplanation {
+  algorithm: string;
+  components: ContextRankingComponent[];
+}
+
+export interface ContextRankingComponent {
+  signal: string;
+  value: number;
+  weight: number;
+  contribution: number;
 }
 
 export interface ContextBundleStats {
