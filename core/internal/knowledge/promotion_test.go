@@ -94,3 +94,52 @@ func TestPromoteEventUsesSessionAsMostSpecificScope(t *testing.T) {
 		t.Fatalf("promotion lost actor/session provenance: %+v", result.Provenance)
 	}
 }
+
+
+func TestPromoteEventSerializesConcurrentRetries(t *testing.T) {
+	store, database, _ := setupStore(t)
+	defer database.Close()
+
+	input := PromotionInput{
+		SourceType:   "capture",
+		SourceID:     "capture_concurrent_001",
+		EvidencePath: "00-inbox/concurrent.md",
+		Project:      "agentvault",
+		EventType:    "capture.recorded",
+		Summary:      "Captured concurrent source",
+	}
+
+	const workers = 12
+	errs := make(chan error, workers)
+	ids := make(chan string, workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			result, err := store.PromoteEvent(input)
+			if err == nil {
+				ids <- result.Episode.ID
+			}
+			errs <- err
+		}()
+	}
+
+	var expected string
+	for i := 0; i < workers; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent promotion failed: %v", err)
+		}
+		id := <-ids
+		if expected == "" {
+			expected = id
+		} else if id != expected {
+			t.Fatalf("concurrent promotion returned different ids: %q vs %q", id, expected)
+		}
+	}
+
+	episodes, err := store.ListEpisodes("project", "agentvault", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(episodes) != 1 {
+		t.Fatalf("concurrent retries duplicated projection: %+v", episodes)
+	}
+}
