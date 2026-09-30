@@ -383,6 +383,7 @@ func matchResourceTemplate(tmpl, uri string) bool {
 	}
 	return true
 }
+
 // ServeStdio runs the MCP server over stdin/stdout.
 func (s *Server) ServeStdio() {
 	ctx, cancel := context.WithCancel(context.Background())
