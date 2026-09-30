@@ -1026,6 +1026,91 @@ func (s *Server) handleLogEvaluation(args map[string]interface{}) (string, error
 		id, runID, name, evaluator), nil
 }
 
+// --- Tool: agentvault.get_regression_case_proposal ---
+
+func (s *Server) registerGetRegressionCaseProposal() {
+	s.tools["agentvault.get_regression_case_proposal"] = Tool{
+		Name:        "agentvault.get_regression_case_proposal",
+		Description: "Project one audited failure into a read-only regression-case proposal with original input and evidence provenance.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id": schemaString("Agent run ID"),
+		}, []string{"run_id"}),
+		Handler: s.handleGetRegressionCaseProposal,
+	}
+}
+
+func (s *Server) handleGetRegressionCaseProposal(args map[string]interface{}) (string, error) {
+	proposal, err := agentstate.RecommendRunRegressionCase(s.db, stringArg(args, "run_id"))
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Regression Case Proposal\n\n")
+	sb.WriteString(fmt.Sprintf("- **Run:** %s\n", proposal.RunID))
+	if proposal.AgentID != "" {
+		sb.WriteString(fmt.Sprintf("- **Agent:** %s@%d\n", proposal.AgentID, proposal.AgentRevision))
+	} else {
+		sb.WriteString("- **Agent:** unbound\n")
+	}
+	sb.WriteString(fmt.Sprintf("- **Eligible:** %t\n", proposal.Eligible))
+	sb.WriteString(fmt.Sprintf("- **Support:** %s\n", proposal.SupportLevel))
+	sb.WriteString(fmt.Sprintf("- **Name:** %s\n", proposal.Name))
+	sb.WriteString(fmt.Sprintf("- **Expected hint:** %t\n", proposal.Expected != nil))
+	if len(proposal.SourceObservationIDs) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Observations:** %s\n", strings.Join(proposal.SourceObservationIDs, ", ")))
+	}
+	if len(proposal.SourceEvaluationIDs) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Evaluations:** %s\n", strings.Join(proposal.SourceEvaluationIDs, ", ")))
+	}
+	if len(proposal.ReasonCodes) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Reasons:** %s\n", strings.Join(proposal.ReasonCodes, ", ")))
+	}
+	return sb.String(), nil
+}
+
+// --- Tool: agentvault.capture_run_regression_case ---
+
+func (s *Server) registerCaptureRunRegressionCase() {
+	s.tools["agentvault.capture_run_regression_case"] = Tool{
+		Name:        "agentvault.capture_run_regression_case",
+		Description: "Explicitly add an eligible failed run to a caller-selected evaluation dataset, preserving run/observation/evaluation provenance. Repeated capture of the same run into the same dataset is idempotent.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id":        schemaString("Originating agent run ID"),
+			"dataset_id":    schemaString("Target evaluation dataset ID"),
+			"name":          schemaString("Optional case name override"),
+			"expected_json": schemaString("Optional JSON object overriding explicit evaluator expected behavior"),
+			"tags":          schemaStringArray("Optional tags added to the default regression tag"),
+		}, []string{"run_id", "dataset_id"}),
+		Handler: s.handleCaptureRunRegressionCase,
+	}
+}
+
+func (s *Server) handleCaptureRunRegressionCase(args map[string]interface{}) (string, error) {
+	var expected map[string]interface{}
+	if stringArg(args, "expected_json") != "" {
+		expectedJSON, err := normalizedJSONObjectArg(args, "expected_json")
+		if err != nil {
+			return "", err
+		}
+		if err := json.Unmarshal([]byte(expectedJSON), &expected); err != nil {
+			return "", err
+		}
+	}
+
+	record, err := agentstate.CaptureRunRegressionCase(s.db, agentstate.RunRegressionCaseCapture{
+		RunID: stringArg(args, "run_id"), DatasetID: stringArg(args, "dataset_id"),
+		Name: stringArg(args, "name"), Expected: expected, Tags: stringSliceArg(args, "tags"),
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(
+		"Captured regression case: %s\n- **ID:** %s\n- **Dataset:** %s\n- **Run:** %s\n- **Agent:** %s@%d",
+		record.Name, record.ID, record.DatasetID, record.SourceRunID, record.AgentID, record.AgentRevision,
+	), nil
+}
+
 // --- Tool: agentvault.get_learning_recommendation ---
 
 func (s *Server) registerGetLearningRecommendation() {
