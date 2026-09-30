@@ -21,8 +21,8 @@ const (
 	defaultTokenBudget = 8000
 	minimumTokenBudget = 256
 	maximumTokenBudget = 128000
-	defaultMaxItems     = 40
-	maximumMaxItems     = 200
+	defaultMaxItems    = 40
+	maximumMaxItems    = 200
 )
 
 // Compiler builds model-agnostic context bundles without making an LLM call.
