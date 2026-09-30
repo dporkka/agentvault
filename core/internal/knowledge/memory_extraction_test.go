@@ -125,8 +125,8 @@ func TestDeterministicExtractionSupportsExplicitMetadataOverride(t *testing.T) {
 		"workflow.completed",
 		"Workflow completed.",
 		map[string]interface{}{
-			"memoryKind":    "constraint",
-			"memoryContent": "Semantic promotion must always require explicit review.",
+			"memoryKind":     "constraint",
+			"memoryContent":  "Semantic promotion must always require explicit review.",
 			"memoryObjectId": object.ID,
 		},
 		object.ID,
@@ -298,7 +298,6 @@ func TestPromoteEventRunsDeterministicExtractionWithoutPromotingRawActivity(t *t
 		t.Fatalf("raw activity was promoted into semantic candidate: %+v", raw.Candidates)
 	}
 }
-
 
 func TestAppendSemanticSessionEventPromotesEpisodeAndCandidate(t *testing.T) {
 	store, database, _ := setupStore(t)
