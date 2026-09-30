@@ -1521,7 +1521,6 @@ func TestRunLearningCandidateEndpoint(t *testing.T) {
 	})
 }
 
-
 func TestLearningRecommendationEndpoint(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
 	defer database.Close()
