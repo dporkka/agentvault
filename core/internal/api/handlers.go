@@ -2,8 +2,8 @@ package api
 
 import (
 	"database/sql"
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -1576,7 +1576,6 @@ func (s *Server) handleExperiment(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, out)
 }
-
 
 // ── Agent State Writes ───────────────────────────────────────────────
 
