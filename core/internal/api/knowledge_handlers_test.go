@@ -329,3 +329,60 @@ func TestMemoryCandidateHTTPDeterministicExtraction(t *testing.T) {
 		t.Fatalf("raw episode extracted candidates: %+v", rawCandidates)
 	}
 }
+
+
+func TestNewServerReconcilesMissedSemanticSessionEventPromotion(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO agent_sessions (
+			id, agent_id, project, objective, status, context_json, started_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		"session_startup_reconcile",
+		"architect",
+		"agentvault",
+		"Recover semantic enrichment",
+		"active",
+		"{}",
+		"2026-09-30T15:00:00Z",
+		"2026-09-30T15:01:00Z",
+	); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(map[string]interface{}{
+		"summary": "Startup should repair missed semantic session-event enrichment.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO session_events (
+			id, session_id, event_type, payload_json, created_at
+		) VALUES (?, ?, ?, ?, ?)`,
+		"event_startup_reconcile",
+		"session_startup_reconcile",
+		"decision",
+		string(payload),
+		"2026-09-30T15:01:00Z",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServer(vaultPath, database)
+	if server.knowledgeInitErr != nil {
+		t.Fatalf("NewServer knowledge init: %v", server.knowledgeInitErr)
+	}
+	candidates, err := server.knowledge.ListMemoryCandidates(contract.MemoryCandidateFilter{
+		Status:    contract.MemoryCandidatePending,
+		ScopeType: "session",
+		ScopeID:   "session_startup_reconcile",
+		Limit:     20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 || candidates[0].MemoryKind != "decision" {
+		t.Fatalf("startup reconciliation did not backfill candidate: %+v", candidates)
+	}
+}
