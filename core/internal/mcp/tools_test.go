@@ -933,7 +933,6 @@ func TestHandleRecordExperimentResultRejectsCaseFromOtherDataset(t *testing.T) {
 	}
 }
 
-
 func TestHandleListPromotionsDefaultsToPending(t *testing.T) {
 	s, db := setupTestServer(t)
 	defer db.Close()
