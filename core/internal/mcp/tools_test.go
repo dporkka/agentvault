@@ -1455,3 +1455,28 @@ func TestHandleRecordActionIntentRequiresExistingRun(t *testing.T) {
 		t.Fatalf("error = %v, want run not found", err)
 	}
 }
+
+
+func TestHandleRecordActionIntentRequiresCapabilityInRunSnapshot(t *testing.T) {
+	s, database := setupTestServer(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO agent_runs (
+			id, agent_name, task, status, capability_snapshot_json, created_at
+		) VALUES ('run_action_cap', 'coding-agent', 'create PR', 'running', '{"github.read":true}', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed agent run: %v", err)
+	}
+
+	_, err := s.handleRecordActionIntent(map[string]interface{}{
+		"run_id":         "run_action_cap",
+		"operation_id":   "op_create_pr",
+		"action":         "github.create_pr",
+		"capability_ref": "github.write",
+		"input_hash":     "sha256:input",
+	})
+	if err == nil || !strings.Contains(err.Error(), "not present in run capability snapshot") {
+		t.Fatalf("error = %v, want missing capability rejection", err)
+	}
+}
