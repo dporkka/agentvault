@@ -9,13 +9,13 @@
   <img src="docs/assets/logo.png" alt="AgentVault logo" width="160">
 </p>
 
-**A local-first knowledge operating system for notes, decisions, research, tasks, and agent-readable context.**
+**A local-first knowledge and state operating system for durable agents, notes, decisions, research, tasks, and agent-readable context.**
 
 AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The same files are readable by you, editable in any editor, and indexable by the Go core for fast full-text, semantic, and hybrid search. A single shared API contract keeps the CLI, local HTTP API, MCP server, desktop app, web app, browser extension, and mobile app in sync.
 
 - **Files first.** Markdown is the durable source of truth; the SQLite index can be rebuilt at any time.
 - **Local by default.** The CLI, HTTP API, and desktop app run on your machine.
-- **Agent-ready.** Source-grounded answers, MCP tools, and structured note types make the vault usable by AI assistants.
+- **Durable agent state.** Canonical agent manifests, structured run evidence, evaluations, and evidence-backed promotion proposals persist across runtimes without making AgentVault an execution engine.
 - **One shared contract.** Go and TypeScript clients share a single API contract so server and clients stay in sync. See [`packages/contract/`](packages/contract/) and [`core/internal/contract/`](core/internal/contract/).
 
 ## Table of Contents
@@ -40,10 +40,10 @@ AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The sam
 | --- | --- |
 | **Markdown-native vault** | Notes are plain Markdown files with YAML frontmatter. No lock-in, full version-control friendliness. |
 | **Full-text, vector, and hybrid search** | SQLite FTS5 plus optional embedding-based semantic search, exposed through one search interface. |
-| **Structured note types** | `note`, `decision`, `task`, `meeting`, `source`, and `project` templates with consistent folder rules. |
+| **Structured note types** | `note`, `decision`, `task`, `meeting`, `source`, `project`, and `agent` templates with consistent folder rules. |
 | **Source-grounded AI** | `agentvault ask` and `POST /ask` retrieve relevant notes first, then answer with citations. |
 | **Local HTTP API** | A loopback REST API for desktop, web, extension, and mobile clients. |
-| **MCP server** | Expose vault search, read, create, capture, and ask as Model Context Protocol tools. |
+| **MCP server** | Expose vault search, read, create, capture, ask, agent-run evidence, evaluations, and promotion proposals as Model Context Protocol tools. |
 | **Multi-client support** | First-party desktop (Wails), web (Vite), browser extension (MV3), and mobile (Expo) apps. |
 | **Vault diagnostics** | `agentvault doctor` checks config, database, migrations, links, orphan chunks, embeddings, and API auth. |
 
@@ -132,6 +132,7 @@ agentvault new task --project platform --title "Build API"
 agentvault new meeting --project platform --title "Sprint Planning"
 agentvault new source --title "Article" --url "https://example.com"
 agentvault new project --title "Platform"
+agentvault new agent --title "Coding Agent"
 ```
 
 ## AI Configuration
@@ -209,6 +210,9 @@ Registered tools:
 - `agentvault.list_recent`
 - `agentvault.git_status`
 - `agentvault.log_agent_run`
+- `agentvault.log_observation`
+- `agentvault.log_evaluation`
+- `agentvault.propose_promotion`
 - `agentvault.ask`
 
 ## Clients
@@ -247,6 +251,7 @@ agentvault/
 ├── core/                         # Go core engine and CLI
 │   ├── cmd/agentvault/           # Cobra commands
 │   ├── internal/
+│   │   ├── agentstate/           # Durable agent/evidence/promotion domain model
 │   │   ├── ai/                   # AI provider interface and providers
 │   │   ├── api/                  # Local HTTP API
 │   │   ├── chunker/              # Markdown/text chunking
