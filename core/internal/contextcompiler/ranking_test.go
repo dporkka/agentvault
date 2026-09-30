@@ -91,3 +91,50 @@ func TestRankContextItemDoesNotUseFutureRecency(t *testing.T) {
 		}
 	}
 }
+
+func TestRankContextItemUsesSemanticSimilarityOnlyWhenAvailable(t *testing.T) {
+	collector := &candidateCollector{
+		req:  contract.CompileContextRequest{Task: "deployment verification", Explain: true},
+		asOf: time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC),
+	}
+	withoutSemantic := collector.rank(contract.ContextItem{
+		Kind:     "note",
+		ID:       "plain",
+		Title:    "Deployment",
+		Content:  "verification",
+		Score:    0.8,
+		Metadata: map[string]interface{}{},
+	})
+	withSemantic := collector.rank(contract.ContextItem{
+		Kind:    "note",
+		ID:      "semantic",
+		Title:   "Deployment",
+		Content: "verification",
+		Score:   0.8,
+		Metadata: map[string]interface{}{
+			"semanticSimilarity": 0.95,
+		},
+	})
+
+	if withoutSemantic.Ranking.Algorithm != "deterministic-multisignal-v1" {
+		t.Fatalf("fallback ranking changed algorithm: %s", withoutSemantic.Ranking.Algorithm)
+	}
+	if withSemantic.Ranking.Algorithm != "deterministic-multisignal-v2-semantic" {
+		t.Fatalf("semantic ranking did not advertise v2: %s", withSemantic.Ranking.Algorithm)
+	}
+	foundSemantic := false
+	for _, component := range withSemantic.Ranking.Components {
+		if component.Signal == "semanticSimilarity" {
+			foundSemantic = true
+			if component.Value != 0.95 || component.Weight <= 0 {
+				t.Fatalf("unexpected semantic component: %+v", component)
+			}
+		}
+	}
+	if !foundSemantic {
+		t.Fatal("expected semanticSimilarity ranking component")
+	}
+	if withSemantic.Score <= withoutSemantic.Score {
+		t.Fatalf("high semantic similarity should improve this candidate score: semantic=%f fallback=%f", withSemantic.Score, withoutSemantic.Score)
+	}
+}
