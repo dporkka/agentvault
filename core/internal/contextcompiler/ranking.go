@@ -10,6 +10,7 @@ import (
 const (
 	rankingAlgorithm         = "deterministic-multisignal-v1"
 	semanticRankingAlgorithm = "deterministic-multisignal-v2-semantic"
+	graphRankingAlgorithm    = "deterministic-multisignal-v3-graph"
 )
 
 type scoreSignal struct {
@@ -36,6 +37,19 @@ func (c *candidateCollector) rank(item contract.ContextItem) contract.ContextIte
 			{name: "provenanceConfidence", value: provenanceConfidence(item.Provenance), weight: 0.07},
 			{name: "recency", value: contextRecency(item, c.asOf), weight: 0.04},
 			{name: "explicitObject", value: explicitObjectSignal(item, c.req.ObjectIDs), weight: 0.07},
+		}
+	}
+	if graph, ok := graphDistanceSignal(item); ok {
+		algorithm = graphRankingAlgorithm
+		semantic, _ := semanticSimilarity(item)
+		signals = []scoreSignal{
+			{name: "sourcePrior", value: clampScore(item.Score), weight: 0.54},
+			{name: "lexicalRelevance", value: lexicalRelevance(taskTerms(c.req.Task), item.Title+" "+item.Content), weight: 0.13},
+			{name: "semanticSimilarity", value: semantic, weight: 0.10},
+			{name: "graphDistance", value: graph, weight: 0.08},
+			{name: "provenanceConfidence", value: provenanceConfidence(item.Provenance), weight: 0.06},
+			{name: "recency", value: contextRecency(item, c.asOf), weight: 0.03},
+			{name: "explicitObject", value: explicitObjectSignal(item, c.req.ObjectIDs), weight: 0.06},
 		}
 	}
 
@@ -143,4 +157,31 @@ func semanticSimilarity(item contract.ContextItem) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func graphDistanceSignal(item contract.ContextItem) (float64, bool) {
+	if item.Metadata == nil {
+		return 0, false
+	}
+	raw, ok := item.Metadata["graphDistance"]
+	if !ok {
+		return 0, false
+	}
+	var distance float64
+	switch value := raw.(type) {
+	case float64:
+		distance = value
+	case float32:
+		distance = float64(value)
+	case int:
+		distance = float64(value)
+	default:
+		return 0, false
+	}
+	if distance <= 0 {
+		return 0, false
+	}
+	// One bounded hop is currently supported. Express closeness rather than
+	// distance so larger values always mean stronger ranking evidence.
+	return clampScore(1 / distance), true
 }

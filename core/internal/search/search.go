@@ -414,6 +414,80 @@ func (s *Searcher) scanSingle(row *sql.Row) (*Result, error) {
 	return &r, nil
 }
 
+// LinkedCandidates returns one-hop linked notes for explicit seed IDs inside
+// an explicit project scope. The project predicate is applied in SQL before
+// results are materialized, so graph expansion cannot widen caller scope.
+func (s *Searcher) LinkedCandidates(seedIDs []string, project string, limit int) ([]Result, error) {
+	project = strings.TrimSpace(project)
+	if project == "" || len(seedIDs) == 0 || limit == 0 {
+		return []Result{}, nil
+	}
+	if limit < 0 {
+		limit = 20
+	}
+
+	results := make([]Result, 0, limit)
+	seen := make(map[string]bool, len(seedIDs)+limit)
+	for _, seed := range seedIDs {
+		seed = strings.TrimSpace(seed)
+		if seed != "" {
+			seen[seed] = true
+		}
+	}
+
+	for _, seed := range seedIDs {
+		seed = strings.TrimSpace(seed)
+		if seed == "" || len(results) >= limit {
+			continue
+		}
+
+		rows, err := s.db.Query(`
+			SELECT DISTINCT
+				notes.id,
+				notes.title,
+				files.path,
+				notes.type,
+				notes.project,
+				notes.status,
+				notes.updated_at,
+				substr(notes.body, 1, 200),
+				0.0
+			FROM links
+			JOIN notes ON notes.id = CASE
+				WHEN links.from_note_id = ? THEN links.to_note_id
+				ELSE links.from_note_id
+			END
+			JOIN files ON files.id = notes.file_id
+			WHERE (links.from_note_id = ? OR links.to_note_id = ?)
+			  AND notes.project = ?
+			  AND notes.id <> ?
+			ORDER BY notes.updated_at DESC, notes.id
+			LIMIT ?
+		`, seed, seed, seed, project, seed, limit-len(results))
+		if err != nil {
+			return nil, fmt.Errorf("linked candidate query failed: %w", err)
+		}
+		linked, err := s.scanResults(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		rows.Close()
+
+		for _, result := range linked {
+			if seen[result.ID] {
+				continue
+			}
+			seen[result.ID] = true
+			results = append(results, result)
+			if len(results) >= limit {
+				break
+			}
+		}
+	}
+	return results, nil
+}
+
 // GetBacklinks returns all links pointing TO the given note.
 func (s *Searcher) GetBacklinks(noteID string) ([]contract.Link, error) {
 	rows, err := s.db.Query(`
