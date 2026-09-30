@@ -110,6 +110,7 @@ A missing or incorrect token on a protected endpoint returns `401` with:
 | GET | `/git/status` | yes | 200 | camelCase |
 | GET | `/memory-candidates` | yes | 200 | camelCase (`MemoryCandidate[]`) |
 | POST | `/memory-candidates` | yes | 201 | camelCase (`MemoryCandidate`) |
+| POST | `/memory-candidates/extract` | yes | 200 | camelCase (`MemoryCandidate[]`) |
 | GET | `/memory-candidates/{id}` | yes | 200 / 404 | camelCase |
 | POST | `/memory-candidates/{id}/accept` | yes | 200 | camelCase |
 | POST | `/memory-candidates/{id}/reject` | yes | 200 | camelCase |
@@ -469,6 +470,23 @@ source episode. Supported candidate kinds are `observation`, `fact`,
 `preference`, `decision`, `constraint`, and `summary`.
 
 Proposal alone never creates a `MemoryRecord`.
+
+### `POST /memory-candidates/extract`
+
+Runs deterministic, model-free candidate extraction for one existing episode:
+
+```json
+{ "episodeId": "episode_..." }
+```
+
+Only explicit semantic event types or explicit `memoryKind` metadata are
+eligible. Raw activity returns an empty array. Extraction deduplicates against
+equivalent pending candidates and current accepted semantic memory but never
+performs terminal review.
+
+The same operation is available through MCP as
+`agentvault.extract_memory_candidates`. A scoped `memory:write` identity may
+invoke it only for episodes within its authorized project/session scope.
 
 ### `GET /memory-candidates`
 
