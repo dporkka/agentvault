@@ -1713,3 +1713,78 @@ func TestRunRegressionCaseEndpoints(t *testing.T) {
 		}
 	})
 }
+
+
+func TestExperimentComparisonEndpoint(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO evaluation_datasets (id, name, agent_id, created_at)
+		VALUES ('ds_compare_api', 'Regression suite', 'agt_compare_api', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO evaluation_cases (
+			id, dataset_id, name, input_json, tags_json, created_at
+		) VALUES (
+			'case_compare_api', 'ds_compare_api', 'Checkout regression',
+			'{"fixture":"checkout"}', '["regression"]', datetime('now')
+		)
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO experiments (
+			id, dataset_id, name, agent_id, agent_revision, status, config_json, created_at, completed_at
+		) VALUES
+		('exp_compare_base', 'ds_compare_api', 'baseline', 'agt_compare_api', 2, 'completed', '{}', datetime('now'), datetime('now')),
+		('exp_compare_candidate', 'ds_compare_api', 'candidate', 'agt_compare_api', 3, 'completed', '{}', datetime('now'), datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO experiment_results (
+			experiment_id, case_id, score, label, metadata_json, created_at
+		) VALUES
+		('exp_compare_base', 'case_compare_api', 0.2, 'fail', '{}', datetime('now')),
+		('exp_compare_candidate', 'case_compare_api', 0.9, 'pass', '{}', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, vaultPath, database)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/experiments/exp_compare_base/compare/exp_compare_candidate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var out map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out["baselineExperimentId"] != "exp_compare_base" ||
+		out["candidateExperimentId"] != "exp_compare_candidate" ||
+		out["agentId"] != "agt_compare_api" {
+		t.Fatalf("unexpected comparison identity: %#v", out)
+	}
+	summary, _ := out["summary"].(map[string]interface{})
+	if summary["fixes"] != float64(1) || summary["regressions"] != float64(0) {
+		t.Fatalf("unexpected comparison summary: %#v", summary)
+	}
+	cases, _ := out["cases"].([]interface{})
+	if len(cases) != 1 {
+		t.Fatalf("expected one case comparison: %#v", out["cases"])
+	}
+	first, _ := cases[0].(map[string]interface{})
+	if first["transition"] != "fixed" || first["scoreDelta"] != 0.7 {
+		t.Fatalf("unexpected case comparison: %#v", first)
+	}
+}
