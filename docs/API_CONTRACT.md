@@ -110,6 +110,8 @@ A missing or incorrect token on a write endpoint returns `401` with
 | POST | `/experiments/{id}/results` | yes | 201 / 400 / 404 / 409 | camelCase (`ExperimentResult`) |
 | POST | `/agents/{id}/context` | yes | 200 / 400 / 404 | camelCase (`ContextSnapshot`) |
 | GET | `/contexts/{hash}` | no | 200 / 400 / 404 | camelCase (`ContextSnapshot`) |
+| POST | `/runs` | yes | 201 / 400 / 404 / 409 | camelCase (`RunRecord`) |
+| GET | `/runs/{id}/audit` | no | 200 / 400 / 404 / 409 | camelCase (`RunAudit`) |
 
 ---
 
@@ -446,6 +448,55 @@ The persisted row is evidence, not a second canonical knowledge store. Markdown 
 
 No auth. Returns the exact immutable `ContextSnapshot` persisted by context compilation. Returns `404` when the hash is unknown. This endpoint is intended for run audit/replay and for explaining behavioral differences between agent revisions or context selections.
 
+## POST /runs
+
+Auth required. Records execution evidence for a runtime invocation without executing the agent itself.
+
+A legacy run may omit `agentId`, `agentRevision`, and `contextHash`. When `contextHash` is supplied, the server requires `agentId` and `agentRevision`, resolves the immutable context snapshot, and rejects the run with `409 Conflict` unless the snapshot belongs to the same agent revision. An unknown context hash returns `404`.
+
+Request:
+
+```json
+{
+  "agentName": "coding-agent",
+  "agentId": "agt_...",
+  "agentRevision": 3,
+  "task": "Implement the audit view",
+  "status": "succeeded",
+  "conversationId": "conv_...",
+  "contextHash": "sha256:...",
+  "input": {"issue": 81},
+  "output": {"result": "ok"},
+  "capabilitySnapshot": {"github.read": true},
+  "runtimeMetadata": {"model": "example"},
+  "filesChanged": ["core/internal/agentstate/run.go"]
+}
+```
+
+The response is a `RunRecord` containing the generated run ID and normalized evidence fields.
+
+## GET /runs/{id}/audit
+
+No auth. Returns one `RunAudit` aggregate containing:
+
+- the persisted run,
+- the exact immutable `ContextSnapshot` referenced by `contextHash` (or `null` for an unbound legacy run),
+- all run observations in creation order,
+- all evaluations in creation order.
+
+The embedded context retains each section's `sourceId` and `sourcePath`, so callers can traverse:
+
+```text
+run
+  -> immutable context hash
+      -> agent revision
+      -> identity / memory / knowledge / conversation / artifact provenance
+  -> observations
+  -> evaluations
+```
+
+The audit read also verifies that persisted run identity still matches the referenced context snapshot; inconsistent stored evidence returns `409 Conflict`.
+
 ## GET /promotions
 
 No auth. Lists evidence-backed promotion records. With no query parameters, returns only `proposed` records (the pending review queue), newest first.
@@ -505,4 +556,4 @@ every client and the server now produce.
   `contract.VaultStatus` (`isVault`, not `isOpen`) and the Wails
   frontend checks `vaultStatus?.isVault`.
 
-All endpoints are now aligned across server, tests, and clients, including durable agent-state reads/writes and deterministic context compilation via `/agents/{id}/context` and `/contexts/{hash}`.
+All endpoints are now aligned across server, tests, and clients, including durable agent-state reads/writes, deterministic context compilation, context-bound run recording, and `/runs/{id}/audit` provenance reads.
