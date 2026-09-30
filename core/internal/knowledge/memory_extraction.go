@@ -98,6 +98,193 @@ func (s *Store) ExtractMemoryCandidatesFromEpisode(episodeID string) ([]contract
 	return []contract.MemoryCandidate{candidate}, nil
 }
 
+
+// promoteSemanticSessionEvent turns an explicitly semantic durable session event
+// into a provenance-backed episode and review candidate. It returns eligible=false
+// for ordinary execution/history events so callers can treat those as raw evidence.
+func (s *Store) promoteSemanticSessionEvent(
+	session contract.AgentSession,
+	event contract.SessionEvent,
+) (PromotionResult, bool, error) {
+	kind, explicitKind, err := semanticKindFromSessionEvent(event)
+	if err != nil {
+		return PromotionResult{}, true, err
+	}
+	if kind == "" {
+		return PromotionResult{}, false, nil
+	}
+
+	summary := stringMapValue(event.Payload, "summary")
+	if summary == "" {
+		summary = stringMapValue(event.Payload, "memoryContent")
+	}
+	if summary == "" {
+		// Semantic classification without durable content is not promotable.
+		return PromotionResult{}, false, nil
+	}
+
+	metadata := map[string]interface{}{
+		"sessionEventId": event.ID,
+	}
+	if explicitKind {
+		metadata["memoryKind"] = kind
+	}
+	if value := stringMapValue(event.Payload, "memoryContent"); value != "" {
+		metadata["memoryContent"] = value
+	}
+
+	objectIDs, err := stringSliceMapValue(event.Payload, "objectIds")
+	if err != nil {
+		return PromotionResult{}, true, err
+	}
+	if objectID := stringMapValue(event.Payload, "memoryObjectId"); objectID != "" {
+		metadata["memoryObjectId"] = objectID
+		if !containsID(objectIDs, objectID) {
+			objectIDs = append(objectIDs, objectID)
+		}
+	}
+
+	result, err := s.PromoteEvent(PromotionInput{
+		SourceType:   "session-event",
+		SourceID:     event.ID,
+		Project:      session.Project,
+		AgentID:      session.AgentID,
+		SessionID:    session.ID,
+		EventType:    event.EventType,
+		Summary:      summary,
+		OccurredAt:   event.CreatedAt,
+		ProvenanceID: event.ProvenanceID,
+		Metadata:     metadata,
+		ObjectIDs:    objectIDs,
+	})
+	if err != nil {
+		return PromotionResult{}, true, err
+	}
+	return result, true, nil
+}
+
+// ReconcileSemanticSessionEvents backfills semantic promotion for durable
+// session events that were committed before enrichment completed. Promotion IDs
+// and candidate IDs are deterministic, so retries are safe.
+func (s *Store) ReconcileSemanticSessionEvents(limit int) error {
+	if limit <= 0 || limit > 5000 {
+		limit = 1000
+	}
+
+	rows, err := s.db.Query(`
+		SELECT se.id, se.session_id, se.event_type, se.payload_json,
+		       COALESCE(se.provenance_id, ''), se.created_at,
+		       s.agent_id, COALESCE(s.project, '')
+		FROM session_events se
+		JOIN agent_sessions s ON s.id = se.session_id
+		WHERE (
+			lower(se.event_type) IN (
+				'observation', 'observation.observed', 'observation.recorded',
+				'fact', 'fact.observed', 'fact.recorded', 'fact.asserted',
+				'preference', 'preference.observed', 'preference.recorded',
+				'decision', 'decision.observed', 'decision.recorded',
+				'constraint', 'constraint.observed', 'constraint.recorded',
+				'summary', 'summary.generated', 'summary.recorded'
+			)
+			OR lower(COALESCE(json_extract(se.payload_json, '$.memoryKind'), '')) IN (
+				'observation', 'fact', 'preference', 'decision', 'constraint', 'summary'
+			)
+		)
+		AND NOT EXISTS (
+			SELECT 1
+			FROM episodes e
+			WHERE json_extract(e.metadata_json, '$.promotionSourceType') = 'session-event'
+			  AND json_extract(e.metadata_json, '$.promotionSourceId') = se.id
+		)
+		ORDER BY se.created_at ASC, se.id ASC
+		LIMIT ?`, limit)
+	if err != nil {
+		return fmt.Errorf("list semantic session events for reconciliation: %w", err)
+	}
+	defer rows.Close()
+
+	type pendingEvent struct {
+		event   contract.SessionEvent
+		session contract.AgentSession
+	}
+	pending := make([]pendingEvent, 0)
+	for rows.Next() {
+		var item pendingEvent
+		var payloadJSON string
+		if err := rows.Scan(
+			&item.event.ID,
+			&item.event.SessionID,
+			&item.event.EventType,
+			&payloadJSON,
+			&item.event.ProvenanceID,
+			&item.event.CreatedAt,
+			&item.session.AgentID,
+			&item.session.Project,
+		); err != nil {
+			return err
+		}
+		item.session.ID = item.event.SessionID
+		if err := json.Unmarshal([]byte(payloadJSON), &item.event.Payload); err != nil {
+			return fmt.Errorf("decode semantic session event payload: %w", err)
+		}
+		pending = append(pending, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	var problems []error
+	for _, item := range pending {
+		if _, _, err := s.promoteSemanticSessionEvent(item.session, item.event); err != nil {
+			problems = append(problems, fmt.Errorf("session event %s: %w", item.event.ID, err))
+		}
+	}
+	return errors.Join(problems...)
+}
+
+func semanticKindFromSessionEvent(event contract.SessionEvent) (string, bool, error) {
+	if rawKind, exists := event.Payload["memoryKind"]; exists {
+		value, ok := rawKind.(string)
+		if !ok {
+			return "", true, errors.New("session event memoryKind must be a string")
+		}
+		kind := strings.ToLower(strings.TrimSpace(value))
+		if !validSemanticCandidateKind(kind) {
+			return "", true, fmt.Errorf("session event memoryKind %q is not a semantic candidate kind", value)
+		}
+		return kind, true, nil
+	}
+	return semanticKindForEventType(event.EventType), false, nil
+}
+
+func stringMapValue(values map[string]interface{}, key string) string {
+	value, _ := values[key].(string)
+	return strings.TrimSpace(value)
+}
+
+func stringSliceMapValue(values map[string]interface{}, key string) ([]string, error) {
+	raw, exists := values[key]
+	if !exists || raw == nil {
+		return nil, nil
+	}
+	switch value := raw.(type) {
+	case []string:
+		return normalizeIDs(value), nil
+	case []interface{}:
+		result := make([]string, 0, len(value))
+		for _, item := range value {
+			text, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("%s must contain only string values", key)
+			}
+			result = append(result, text)
+		}
+		return normalizeIDs(result), nil
+	default:
+		return nil, fmt.Errorf("%s must be an array of strings", key)
+	}
+}
+
 func deterministicSemanticSpec(episode contract.EpisodeRecord) (semanticCandidateSpec, bool, error) {
 	kind := ""
 	content := strings.TrimSpace(episode.Summary)
