@@ -277,3 +277,34 @@ export interface EntityProfile {
   asOf: string;
   facts: TemporalFact[];
 }
+
+
+export type TimelineKind = 'capture' | 'session_event' | 'episode' | 'memory';
+
+export interface TimelineFilter {
+  project?: string;
+  agentId?: string;
+  sessionId?: string;
+  kind?: TimelineKind;
+  since?: string;
+  until?: string;
+  limit?: number;
+}
+
+export interface TimelineItem {
+  kind: TimelineKind;
+  id: string;
+  title?: string;
+  summary?: string;
+  project?: string;
+  agentId?: string;
+  sessionId?: string;
+  scopeType?: string;
+  scopeId?: string;
+  eventType?: string;
+  objectIds?: string[];
+  provenanceId?: string;
+  occurredAt: string;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+}
