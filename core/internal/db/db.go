@@ -372,6 +372,16 @@ CREATE TABLE IF NOT EXISTS experiment_results (
   FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS context_snapshots (
+  hash TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  agent_revision INTEGER NOT NULL,
+  task TEXT,
+  conversation_id TEXT,
+  context_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS captures (
   id TEXT PRIMARY KEY,
   capture_type TEXT NOT NULL,
@@ -411,13 +421,14 @@ CREATE INDEX IF NOT EXISTS idx_evaluation_cases_dataset ON evaluation_cases(data
 CREATE INDEX IF NOT EXISTS idx_experiments_dataset ON experiments(dataset_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_experiments_agent ON experiments(agent_id, agent_revision, created_at);
 CREATE INDEX IF NOT EXISTS idx_experiment_results_run ON experiment_results(run_id);
+CREATE INDEX IF NOT EXISTS idx_context_snapshots_agent ON context_snapshots(agent_id, agent_revision, created_at);
 `
 	_, err := d.conn.Exec(schema)
 	if err != nil {
 		return fmt.Errorf("failed to run inline migrations: %w", err)
 	}
 	_, err = d.conn.Exec(
-		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, datetime('now'))`,
+		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (5, datetime('now'))`,
 	)
 	return err
 }
