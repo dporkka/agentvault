@@ -2017,7 +2017,6 @@ func (s *Server) handleLearningRecommendation(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, learningRecommendationResponse(item))
 }
 
-
 func regressionCaseProposalResponse(item *agentstate.RegressionCaseProposal) contract.RegressionCaseProposal {
 	return contract.RegressionCaseProposal{
 		RunID: item.RunID, AgentID: item.AgentID, AgentRevision: item.AgentRevision,
