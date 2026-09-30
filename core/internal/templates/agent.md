@@ -6,9 +6,8 @@ status: active
 revision: 1
 created: {{.Created}}
 updated: {{.Created}}
-{{- if .Tags }}
-tags: [{{ join .Tags ", " }}]
-{{- end }}
+{{if .Tags}}tags: [{{join .Tags ", "}}]
+{{end}}
 identity_ref: ""
 memory_refs: []
 knowledge_scopes: []
