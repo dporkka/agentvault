@@ -66,7 +66,7 @@ func (s *Server) registerSearch() {
 		Description: "Search the vault for notes, decisions, tasks, and other content. Supports full-text search with optional filters by type, project, tag, and status.",
 		InputSchema: makeSchema(map[string]interface{}{
 			"query":   schemaString("Search query text"),
-			"type":    schemaString("Filter by note type (note, decision, task, meeting, source)"),
+			"type":    schemaString("Filter by note type (note, decision, task, meeting, source, agent)"),
 			"project": schemaString("Filter by project name"),
 			"tag":     schemaString("Filter by tag"),
 			"status":  schemaString("Filter by status"),
@@ -256,7 +256,7 @@ func (s *Server) registerCreateNote() {
 		Name:        "agentvault.create_note",
 		Description: "Create a new note in the vault using a template. The note is written to the appropriate folder based on its type.",
 		InputSchema: makeSchema(map[string]interface{}{
-			"type":    schemaStringEnum("Note type", []string{"note", "decision", "task", "meeting", "source"}),
+			"type":    schemaStringEnum("Note type", []string{"note", "decision", "task", "meeting", "source", "agent"}),
 			"title":   schemaString("Note title"),
 			"project": schemaString("Project name (optional)"),
 			"tags":    schemaStringArray("Tags to apply"),
