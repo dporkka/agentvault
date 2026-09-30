@@ -39,6 +39,21 @@ func validateReplayedJournalEvent(event JournalEvent) error {
 			return fmt.Errorf("decode provenance payload: %w", err)
 		}
 		return validateJournalPayload(event.Type, provenance)
+	case eventMemoryCandidateProposed:
+		var candidate contract.MemoryCandidate
+		if err := json.Unmarshal(event.Payload, &candidate); err != nil {
+			return fmt.Errorf("decode memory candidate payload: %w", err)
+		}
+		return validateJournalPayload(event.Type, candidate)
+	case eventMemoryCandidateAccepted,
+		eventMemoryCandidateRejected,
+		eventMemoryCandidateMerged,
+		eventMemoryCandidateSuperseded:
+		var resolution memoryCandidateResolution
+		if err := json.Unmarshal(event.Payload, &resolution); err != nil {
+			return fmt.Errorf("decode memory candidate resolution payload: %w", err)
+		}
+		return validateJournalPayload(event.Type, resolution)
 	default:
 		return nil
 	}
