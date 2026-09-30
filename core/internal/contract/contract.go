@@ -377,3 +377,80 @@ type ContextSnapshot struct {
 	Unresolved         []ContextReferenceIssue `json:"unresolved"`
 	Text               string                  `json:"text"`
 }
+
+
+// CreateRunRequest is the body for POST /runs.
+type CreateRunRequest struct {
+	AgentName          string                 `json:"agentName"`
+	AgentID            string                 `json:"agentId,omitempty"`
+	AgentRevision      int                    `json:"agentRevision,omitempty"`
+	Task               string                 `json:"task"`
+	Status             string                 `json:"status,omitempty"`
+	ConversationID     string                 `json:"conversationId,omitempty"`
+	ContextHash        string                 `json:"contextHash,omitempty"`
+	Input              map[string]interface{} `json:"input,omitempty"`
+	Output             map[string]interface{} `json:"output,omitempty"`
+	CapabilitySnapshot map[string]interface{} `json:"capabilitySnapshot,omitempty"`
+	RuntimeMetadata    map[string]interface{} `json:"runtimeMetadata,omitempty"`
+	StartedAt          string                 `json:"startedAt,omitempty"`
+	EndedAt            string                 `json:"endedAt,omitempty"`
+	FilesChanged       []string               `json:"filesChanged,omitempty"`
+}
+
+// RunRecord is persisted execution evidence for one agent runtime invocation.
+type RunRecord struct {
+	ID                 string                 `json:"id"`
+	AgentName          string                 `json:"agentName"`
+	AgentID            string                 `json:"agentId"`
+	AgentRevision      int                    `json:"agentRevision"`
+	Task               string                 `json:"task"`
+	Status             string                 `json:"status"`
+	ConversationID     string                 `json:"conversationId"`
+	ContextHash        string                 `json:"contextHash"`
+	Input              map[string]interface{} `json:"input"`
+	Output             map[string]interface{} `json:"output"`
+	CapabilitySnapshot map[string]interface{} `json:"capabilitySnapshot"`
+	RuntimeMetadata    map[string]interface{} `json:"runtimeMetadata"`
+	StartedAt          string                 `json:"startedAt"`
+	EndedAt            string                 `json:"endedAt"`
+	FilesChanged       []string               `json:"filesChanged"`
+	CreatedAt          string                 `json:"createdAt"`
+}
+
+// RunObservation is one structured observation attached to a run audit.
+type RunObservation struct {
+	ID                  string                 `json:"id"`
+	RunID               string                 `json:"runId"`
+	ParentObservationID string                 `json:"parentObservationId"`
+	Kind                string                 `json:"kind"`
+	Name                string                 `json:"name"`
+	Status              string                 `json:"status"`
+	Input               map[string]interface{} `json:"input"`
+	Output              map[string]interface{} `json:"output"`
+	Evidence            map[string]interface{} `json:"evidence"`
+	StartedAt           string                 `json:"startedAt"`
+	EndedAt             string                 `json:"endedAt"`
+	CreatedAt           string                 `json:"createdAt"`
+}
+
+// RunEvaluation is evaluation evidence attached to a run or observation.
+type RunEvaluation struct {
+	ID            string                 `json:"id"`
+	RunID         string                 `json:"runId"`
+	ObservationID string                 `json:"observationId"`
+	Evaluator     string                 `json:"evaluator"`
+	Name          string                 `json:"name"`
+	Score         *float64               `json:"score"`
+	Label         string                 `json:"label"`
+	Rationale     string                 `json:"rationale"`
+	Metadata      map[string]interface{} `json:"metadata"`
+	CreatedAt     string                 `json:"createdAt"`
+}
+
+// RunAudit joins a run to its exact immutable context and downstream evidence.
+type RunAudit struct {
+	Run          RunRecord        `json:"run"`
+	Context      *ContextSnapshot `json:"context"`
+	Observations []RunObservation `json:"observations"`
+	Evaluations  []RunEvaluation  `json:"evaluations"`
+}
