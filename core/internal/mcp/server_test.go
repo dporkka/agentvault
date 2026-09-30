@@ -198,6 +198,8 @@ func TestHandleToolsList(t *testing.T) {
 		"agentvault.git_status",
 		"agentvault.log_agent_run",
 		"agentvault.log_observation",
+		"agentvault.record_action_intent",
+		"agentvault.record_action_receipt",
 		"agentvault.log_evaluation",
 		"agentvault.propose_promotion",
 		"agentvault.review_promotion",
@@ -520,7 +522,7 @@ func TestNewServer(t *testing.T) {
 	}
 
 	srv.RegisterTools()
-	if len(srv.tools) != 26 {
+	if len(srv.tools) != 28 {
 		t.Errorf("expected 28 tools after RegisterTools, got %d", len(srv.tools))
 	}
 }
