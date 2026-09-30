@@ -274,15 +274,14 @@ func TestRunAuditJSONTags(t *testing.T) {
 	}
 }
 
-
 func TestRunLearningCandidateRequestJSONTags(t *testing.T) {
 	req := RunLearningCandidateRequest{
-		TargetKind: "memory",
-		Candidate: "Run focused tests before broad verification.",
-		Rationale: "Regression evidence",
+		TargetKind:           "memory",
+		Candidate:            "Run focused tests before broad verification.",
+		Rationale:            "Regression evidence",
 		SourceObservationIDs: []string{"obs_1"},
-		SourceEvaluationIDs: []string{"eval_1"},
-		SupersedesNoteID: "note_old",
+		SourceEvaluationIDs:  []string{"eval_1"},
+		SupersedesNoteID:     "note_old",
 	}
 	b, err := json.Marshal(req)
 	if err != nil {
