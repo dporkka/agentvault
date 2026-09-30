@@ -1066,43 +1066,19 @@ func (s *Server) registerProposePromotion() {
 }
 
 func (s *Server) handleProposePromotion(args map[string]interface{}) (string, error) {
-	runIDs := stringSliceArg(args, "source_run_ids")
-	observationIDs := stringSliceArg(args, "source_observation_ids")
-	evaluationIDs := stringSliceArg(args, "source_evaluation_ids")
-	id := fmt.Sprintf("promo_%d", time.Now().UnixNano())
-	record := agentstate.PromotionRecord{
-		ID:                   id,
+	record, err := agentstate.ProposePromotion(s.db, agentstate.PromotionRecord{
 		AgentID:              stringArg(args, "agent_id"),
 		TargetKind:           agentstate.PromotionTargetKind(stringArg(args, "target_kind")),
-		Status:               agentstate.PromotionProposed,
 		Candidate:            stringArg(args, "candidate"),
 		Rationale:            stringArg(args, "rationale"),
-		SourceRunIDs:         runIDs,
-		SourceObservationIDs: observationIDs,
-		SourceEvaluationIDs:  evaluationIDs,
+		SourceRunIDs:         stringSliceArg(args, "source_run_ids"),
+		SourceObservationIDs: stringSliceArg(args, "source_observation_ids"),
+		SourceEvaluationIDs:  stringSliceArg(args, "source_evaluation_ids"),
 		SupersedesNoteID:     stringArg(args, "supersedes_note_id"),
-	}
-	if err := record.Validate(); err != nil {
+	})
+	if err != nil {
 		return "", err
 	}
-
-	runJSON, _ := json.Marshal(runIDs)
-	observationJSON, _ := json.Marshal(observationIDs)
-	evaluationJSON, _ := json.Marshal(evaluationIDs)
-	_, err := s.db.Exec(
-		`INSERT INTO promotion_records (
-			id, agent_id, target_kind, status, candidate, rationale,
-			source_run_ids_json, source_observation_ids_json, source_evaluation_ids_json,
-			supersedes_note_id, created_at
-		) VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, NULLIF(?, ''), ?)`,
-		record.ID, record.AgentID, string(record.TargetKind), string(record.Status),
-		record.Candidate, record.Rationale, string(runJSON), string(observationJSON),
-		string(evaluationJSON), record.SupersedesNoteID, currentTimestamp(),
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to propose promotion: %w", err)
-	}
-
 	return fmt.Sprintf("Promotion proposed: %s\n- **Agent:** %s\n- **Target:** %s\n- **Status:** %s",
 		record.ID, record.AgentID, record.TargetKind, record.Status), nil
 }
@@ -1125,41 +1101,29 @@ func (s *Server) registerReviewPromotion() {
 
 func (s *Server) handleReviewPromotion(args map[string]interface{}) (string, error) {
 	promotionID := stringArg(args, "promotion_id")
-	decision := stringArg(args, "decision")
 	reviewer := stringArg(args, "reviewer")
-	reviewNote := stringArg(args, "note")
-	if promotionID == "" || reviewer == "" {
-		return "", fmt.Errorf("promotion_id and reviewer are required")
-	}
 
-	var current string
-	if err := s.db.QueryRow(`SELECT status FROM promotion_records WHERE id = ?`, promotionID).Scan(&current); err != nil {
-		return "", fmt.Errorf("promotion not found: %s", promotionID)
-	}
-
-	var next agentstate.PromotionStatus
-	switch decision {
+	var decision agentstate.PromotionStatus
+	switch stringArg(args, "decision") {
 	case "approve":
-		next = agentstate.PromotionApproved
+		decision = agentstate.PromotionApproved
 	case "reject":
-		next = agentstate.PromotionRejected
+		decision = agentstate.PromotionRejected
 	default:
 		return "", fmt.Errorf("decision must be approve or reject")
 	}
-	if err := agentstate.ValidatePromotionTransition(agentstate.PromotionStatus(current), next); err != nil {
+
+	record, err := agentstate.ReviewPromotion(
+		s.db,
+		promotionID,
+		decision,
+		reviewer,
+		stringArg(args, "note"),
+	)
+	if err != nil {
 		return "", err
 	}
-
-	if _, err := s.db.Exec(
-		`UPDATE promotion_records
-		 SET status = ?, reviewed_at = ?, reviewed_by = ?, review_note = NULLIF(?, '')
-		 WHERE id = ?`,
-		string(next), currentTimestamp(), reviewer, reviewNote, promotionID,
-	); err != nil {
-		return "", fmt.Errorf("failed to review promotion: %w", err)
-	}
-
-	return fmt.Sprintf("Promotion %s: %s\n- **Reviewer:** %s", next, promotionID, reviewer), nil
+	return fmt.Sprintf("Promotion %s: %s\n- **Reviewer:** %s", record.Status, record.ID, reviewer), nil
 }
 
 // --- Tool: agentvault.commit_promotion ---
@@ -1183,17 +1147,10 @@ func (s *Server) handleCommitPromotion(args map[string]interface{}) (string, err
 		return "", fmt.Errorf("promotion_id and target_note_id are required")
 	}
 
-	var current, candidate string
-	if err := s.db.QueryRow(
-		`SELECT status, candidate FROM promotion_records WHERE id = ?`,
-		promotionID,
-	).Scan(&current, &candidate); err != nil {
-		return "", fmt.Errorf("promotion not found: %s", promotionID)
-	}
-	if err := agentstate.ValidatePromotionTransition(agentstate.PromotionStatus(current), agentstate.PromotionCommitted); err != nil {
+	promotion, err := agentstate.GetPromotion(s.db, promotionID)
+	if err != nil {
 		return "", err
 	}
-
 	note, err := s.searcher.GetByID(targetNoteID)
 	if err != nil {
 		return "", fmt.Errorf("target note not found: %s", targetNoteID)
@@ -1202,20 +1159,15 @@ func (s *Server) handleCommitPromotion(args map[string]interface{}) (string, err
 	if err != nil {
 		return "", fmt.Errorf("target note is not readable canonical Markdown: %w", err)
 	}
-	if !strings.Contains(doc.Body, candidate) {
+	if !strings.Contains(doc.Body, promotion.Candidate) {
 		return "", fmt.Errorf("target note does not contain promotion candidate text")
 	}
 
-	if _, err := s.db.Exec(
-		`UPDATE promotion_records
-		 SET status = ?, target_note_id = ?, committed_at = ?
-		 WHERE id = ?`,
-		string(agentstate.PromotionCommitted), targetNoteID, currentTimestamp(), promotionID,
-	); err != nil {
-		return "", fmt.Errorf("failed to commit promotion: %w", err)
+	record, err := agentstate.CommitPromotion(s.db, promotionID, targetNoteID)
+	if err != nil {
+		return "", err
 	}
-
-	return fmt.Sprintf("Promotion committed: %s\n- **Target note:** %s", promotionID, targetNoteID), nil
+	return fmt.Sprintf("Promotion committed: %s\n- **Target note:** %s", record.ID, record.TargetNoteID), nil
 }
 
 // --- Tool: agentvault.create_evaluation_dataset ---
@@ -1234,21 +1186,13 @@ func (s *Server) registerCreateEvaluationDataset() {
 }
 
 func (s *Server) handleCreateEvaluationDataset(args map[string]interface{}) (string, error) {
-	id := fmt.Sprintf("ds_%d", time.Now().UnixNano())
-	record := agentstate.EvaluationDataset{
-		ID: id, Name: stringArg(args, "name"),
-		Description: stringArg(args, "description"), AgentID: stringArg(args, "agent_id"),
-	}
-	if err := record.Validate(); err != nil {
+	record, err := agentstate.CreateEvaluationDataset(s.db, agentstate.EvaluationDataset{
+		Name:        stringArg(args, "name"),
+		Description: stringArg(args, "description"),
+		AgentID:     stringArg(args, "agent_id"),
+	})
+	if err != nil {
 		return "", err
-	}
-
-	if _, err := s.db.Exec(
-		`INSERT INTO evaluation_datasets (id, name, description, agent_id, created_at)
-		 VALUES (?, ?, NULLIF(?, ''), NULLIF(?, ''), ?)`,
-		record.ID, record.Name, record.Description, record.AgentID, currentTimestamp(),
-	); err != nil {
-		return "", fmt.Errorf("failed to create evaluation dataset: %w", err)
 	}
 	return fmt.Sprintf("Created evaluation dataset: %s\n- **ID:** %s", record.Name, record.ID), nil
 }
@@ -1271,17 +1215,6 @@ func (s *Server) registerAddEvaluationCase() {
 }
 
 func (s *Server) handleAddEvaluationCase(args map[string]interface{}) (string, error) {
-	datasetID := stringArg(args, "dataset_id")
-	name := stringArg(args, "name")
-	if datasetID == "" || name == "" || stringArg(args, "input_json") == "" {
-		return "", fmt.Errorf("dataset_id, name, and input_json are required")
-	}
-
-	var one int
-	if err := s.db.QueryRow(`SELECT 1 FROM evaluation_datasets WHERE id = ?`, datasetID).Scan(&one); err != nil {
-		return "", fmt.Errorf("evaluation dataset not found: %s", datasetID)
-	}
-
 	inputJSON, err := normalizedJSONObjectArg(args, "input_json")
 	if err != nil {
 		return "", err
@@ -1291,10 +1224,9 @@ func (s *Server) handleAddEvaluationCase(args map[string]interface{}) (string, e
 		return "", err
 	}
 
-	expectedJSON := ""
 	var expected map[string]interface{}
 	if stringArg(args, "expected_json") != "" {
-		expectedJSON, err = normalizedJSONObjectArg(args, "expected_json")
+		expectedJSON, err := normalizedJSONObjectArg(args, "expected_json")
 		if err != nil {
 			return "", err
 		}
@@ -1303,24 +1235,15 @@ func (s *Server) handleAddEvaluationCase(args map[string]interface{}) (string, e
 		}
 	}
 
-	id := fmt.Sprintf("case_%d", time.Now().UnixNano())
-	tags := stringSliceArg(args, "tags")
-	record := agentstate.EvaluationCase{
-		ID: id, DatasetID: datasetID, Name: name,
-		Input: input, Expected: expected, Tags: tags,
-	}
-	if err := record.Validate(); err != nil {
+	record, err := agentstate.AddEvaluationCase(s.db, agentstate.EvaluationCase{
+		DatasetID: stringArg(args, "dataset_id"),
+		Name:      stringArg(args, "name"),
+		Input:     input,
+		Expected:  expected,
+		Tags:      stringSliceArg(args, "tags"),
+	})
+	if err != nil {
 		return "", err
-	}
-	tagsJSON, _ := json.Marshal(tags)
-
-	if _, err := s.db.Exec(
-		`INSERT INTO evaluation_cases (
-			id, dataset_id, name, input_json, expected_json, tags_json, created_at
-		) VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?)`,
-		record.ID, record.DatasetID, record.Name, inputJSON, expectedJSON, string(tagsJSON), currentTimestamp(),
-	); err != nil {
-		return "", fmt.Errorf("failed to add evaluation case: %w", err)
 	}
 	return fmt.Sprintf("Added evaluation case: %s\n- **ID:** %s\n- **Dataset:** %s", record.Name, record.ID, record.DatasetID), nil
 }
@@ -1344,16 +1267,6 @@ func (s *Server) registerRecordExperiment() {
 }
 
 func (s *Server) handleRecordExperiment(args map[string]interface{}) (string, error) {
-	datasetID := stringArg(args, "dataset_id")
-	var one int
-	if err := s.db.QueryRow(`SELECT 1 FROM evaluation_datasets WHERE id = ?`, datasetID).Scan(&one); err != nil {
-		return "", fmt.Errorf("evaluation dataset not found: %s", datasetID)
-	}
-
-	status := stringArg(args, "status")
-	if status == "" {
-		status = string(agentstate.ExperimentCompleted)
-	}
 	configJSON, err := normalizedJSONObjectArg(args, "config_json")
 	if err != nil {
 		return "", err
@@ -1363,28 +1276,16 @@ func (s *Server) handleRecordExperiment(args map[string]interface{}) (string, er
 		return "", err
 	}
 
-	id := fmt.Sprintf("exp_%d", time.Now().UnixNano())
-	record := agentstate.Experiment{
-		ID: id, DatasetID: datasetID, Name: stringArg(args, "name"),
-		AgentID: stringArg(args, "agent_id"), AgentRevision: intArg(args, "agent_revision", 0),
-		Status: agentstate.ExperimentStatus(status), Config: config,
-	}
-	if err := record.Validate(); err != nil {
+	record, err := agentstate.RecordExperiment(s.db, agentstate.Experiment{
+		DatasetID:     stringArg(args, "dataset_id"),
+		Name:          stringArg(args, "name"),
+		AgentID:       stringArg(args, "agent_id"),
+		AgentRevision: intArg(args, "agent_revision", 0),
+		Status:        agentstate.ExperimentStatus(stringArg(args, "status")),
+		Config:        config,
+	})
+	if err != nil {
 		return "", err
-	}
-
-	completedAt := ""
-	if record.Status == agentstate.ExperimentCompleted || record.Status == agentstate.ExperimentFailed || record.Status == agentstate.ExperimentCancelled {
-		completedAt = currentTimestamp()
-	}
-	if _, err := s.db.Exec(
-		`INSERT INTO experiments (
-			id, dataset_id, name, agent_id, agent_revision, status, config_json, created_at, completed_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''))`,
-		record.ID, record.DatasetID, record.Name, record.AgentID, record.AgentRevision,
-		string(record.Status), configJSON, currentTimestamp(), completedAt,
-	); err != nil {
-		return "", fmt.Errorf("failed to record experiment: %w", err)
 	}
 	return fmt.Sprintf("Recorded experiment: %s\n- **ID:** %s\n- **Status:** %s", record.Name, record.ID, record.Status), nil
 }
@@ -1408,11 +1309,6 @@ func (s *Server) registerRecordExperimentResult() {
 }
 
 func (s *Server) handleRecordExperimentResult(args map[string]interface{}) (string, error) {
-	experimentID := stringArg(args, "experiment_id")
-	caseID := stringArg(args, "case_id")
-	runID := stringArg(args, "run_id")
-	label := stringArg(args, "label")
-
 	var score *float64
 	if raw, ok := args["score"]; ok {
 		switch v := raw.(type) {
@@ -1426,40 +1322,25 @@ func (s *Server) handleRecordExperimentResult(args map[string]interface{}) (stri
 		}
 	}
 
-	record := agentstate.ExperimentResult{
-		ExperimentID: experimentID, CaseID: caseID, RunID: runID, Score: score, Label: label,
-	}
-	if err := record.Validate(); err != nil {
-		return "", err
-	}
-
-	var experimentDataset, caseDataset string
-	if err := s.db.QueryRow(`SELECT dataset_id FROM experiments WHERE id = ?`, experimentID).Scan(&experimentDataset); err != nil {
-		return "", fmt.Errorf("experiment not found: %s", experimentID)
-	}
-	if err := s.db.QueryRow(`SELECT dataset_id FROM evaluation_cases WHERE id = ?`, caseID).Scan(&caseDataset); err != nil {
-		return "", fmt.Errorf("evaluation case not found: %s", caseID)
-	}
-	if experimentDataset != caseDataset {
-		return "", fmt.Errorf("evaluation case dataset does not match experiment dataset")
-	}
-
 	metadataJSON, err := normalizedJSONObjectArg(args, "metadata_json")
 	if err != nil {
 		return "", err
 	}
-	var scoreValue interface{}
-	if score != nil {
-		scoreValue = *score
+	var metadata map[string]interface{}
+	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+		return "", err
 	}
 
-	if _, err := s.db.Exec(
-		`INSERT INTO experiment_results (
-			experiment_id, case_id, run_id, score, label, metadata_json, created_at
-		) VALUES (?, ?, NULLIF(?, ''), ?, NULLIF(?, ''), ?, ?)`,
-		record.ExperimentID, record.CaseID, record.RunID, scoreValue, record.Label, metadataJSON, currentTimestamp(),
-	); err != nil {
-		return "", fmt.Errorf("failed to record experiment result: %w", err)
+	record, err := agentstate.RecordExperimentResult(s.db, agentstate.ExperimentResult{
+		ExperimentID: stringArg(args, "experiment_id"),
+		CaseID:       stringArg(args, "case_id"),
+		RunID:        stringArg(args, "run_id"),
+		Score:        score,
+		Label:        stringArg(args, "label"),
+		Metadata:     metadata,
+	})
+	if err != nil {
+		return "", err
 	}
 	return fmt.Sprintf("Recorded experiment result\n- **Experiment:** %s\n- **Case:** %s", record.ExperimentID, record.CaseID), nil
 }
