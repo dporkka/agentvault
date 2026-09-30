@@ -814,9 +814,11 @@ func TestCheckMigrations_ExtraCases(t *testing.T) {
 	t.Run("incomplete migration version", func(t *testing.T) {
 		tmpDir, database, cleanup := setupTestVaultFixed(t)
 		defer cleanup()
-		database.Exec("DELETE FROM schema_migrations WHERE version = 1")
-		if _, err := database.Exec("UPDATE schema_migrations SET version = 0 WHERE version = 2"); err != nil {
-			t.Fatalf("failed to update migration version: %v", err)
+		if _, err := database.Exec("DELETE FROM schema_migrations"); err != nil {
+			t.Fatalf("failed to clear migrations: %v", err)
+		}
+		if _, err := database.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (0, datetime('now'))"); err != nil {
+			t.Fatalf("failed to seed incomplete migration version: %v", err)
 		}
 		d := New(database, tmpDir)
 		result := d.CheckMigrations()
