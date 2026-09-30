@@ -58,10 +58,10 @@ func TestSynthesizeMemoryCreatesHigherOrderMemoryWithLineage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if target.MemoryClass != "semantic" || target.MemoryKind != "model" {
+	if target.MemoryClass != "semantic" || target.MemoryKind != "summary" {
 		t.Fatalf("unexpected target memory classification: %+v", target)
 	}
-	if target.Metadata["synthesisId"] != synthesis.ID {
+	if target.Metadata["synthesisKind"] != "model" {\n\t\tt.Fatalf("target memory missing model classification: %+v", target.Metadata)\n\t}\n\tif target.Metadata["synthesisId"] != synthesis.ID {
 		t.Fatalf("target memory missing synthesis lineage: %+v", target.Metadata)
 	}
 
@@ -115,7 +115,7 @@ func TestSynthesizeMemoryMapsPolicyAndSkillToProceduralMemory(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if target.MemoryClass != "procedural" || target.MemoryKind != tc.want {
+			if target.MemoryClass != "procedural" || target.Metadata["synthesisKind"] != tc.want {
 				t.Fatalf("unexpected target memory: %+v", target)
 			}
 		})
@@ -193,6 +193,44 @@ func TestSynthesizeMemoryIsIdempotentForEquivalentRequest(t *testing.T) {
 	}
 }
 
+
+func TestSynthesizeMemoryRejectsSupersededSource(t *testing.T) {
+	store, database, _ := setupStore(t)
+	defer database.Close()
+
+	old, err := store.RecordMemory(contract.CreateMemoryRequest{
+		ID:          "mem_stale_source",
+		MemoryClass: "semantic",
+		MemoryKind:  "fact",
+		ScopeType:   "project",
+		ScopeID:     "alpha",
+		Content:     "Old release rule.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.RecordMemory(contract.CreateMemoryRequest{
+		ID:           "mem_current_source",
+		MemoryClass:  "semantic",
+		MemoryKind:   "fact",
+		ScopeType:    "project",
+		ScopeID:      "alpha",
+		Content:      "Current release rule.",
+		SupersedesID: old.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.SynthesizeMemory(contract.CreateMemorySynthesisRequest{
+		Kind:            contract.MemorySynthesisModel,
+		SourceMemoryIDs: []string{old.ID},
+		Content:         "A model derived from stale knowledge.",
+	}); err == nil {
+		t.Fatal("expected superseded source memory to be rejected")
+	}
+}
+
 func TestMemorySynthesisReplaysLineageAndTargetMemory(t *testing.T) {
 	store, database, vault := setupStore(t)
 
@@ -252,7 +290,7 @@ func TestMemorySynthesisReplaysLineageAndTargetMemory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if target.MemoryClass != "procedural" || target.MemoryKind != "skill" {
+	if target.MemoryClass != "procedural" || target.MemoryKind != "procedure" || target.Metadata["synthesisKind"] != "skill" {
 		t.Fatalf("target memory did not replay exactly: %+v", target)
 	}
 }
