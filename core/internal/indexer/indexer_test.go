@@ -14,6 +14,7 @@ import (
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/db"
 	"github.com/agentvault/core/internal/embeddings"
+	"github.com/agentvault/core/internal/knowledge"
 )
 
 func setupTestVault(t *testing.T) (string, *db.DB, func()) {
@@ -614,5 +615,63 @@ func TestComputeHashEmpty(t *testing.T) {
 	h := ComputeHash([]byte{})
 	if len(h) != 64 {
 		t.Errorf("expected sha256 hex length 64, got %d", len(h))
+	}
+}
+
+func TestIndexCapturePromotesProjectEpisodeOnce(t *testing.T) {
+	vaultPath, database, cleanup := setupTestVault(t)
+	defer cleanup()
+	idx := New(database, vaultPath)
+
+	writeNote(t, vaultPath, "00-inbox/research.md", `---
+id: capture_research_001
+type: capture
+title: Browser research
+project: agentvault
+source_url: https://example.com/research
+created: 2026-09-30T12:00:00Z
+---
+
+Research notes.
+`)
+
+	result := mustIndex(t, idx, IndexOptions{})
+	if len(result.Errors) != 0 {
+		t.Fatalf("unexpected index errors: %+v", result.Errors)
+	}
+
+	store := knowledge.New(database, vaultPath)
+	episodes, err := store.ListEpisodes("project", "agentvault", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(episodes) != 1 {
+		t.Fatalf("expected one promoted capture episode, got %+v", episodes)
+	}
+	episode := episodes[0]
+	if episode.EventType != "capture.recorded" || episode.Summary != "Captured Browser research" {
+		t.Fatalf("unexpected promoted episode: %+v", episode)
+	}
+	provenance, err := store.GetProvenance(episode.ProvenanceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if provenance.SourceType != "capture" || provenance.SourceID != "capture_research_001" {
+		t.Fatalf("unexpected capture provenance: %+v", provenance)
+	}
+	if len(provenance.Evidence) != 1 || provenance.Evidence[0].Path != "00-inbox/research.md" {
+		t.Fatalf("unexpected capture evidence: %+v", provenance.Evidence)
+	}
+
+	result = mustIndex(t, idx, IndexOptions{Force: true})
+	if len(result.Errors) != 0 {
+		t.Fatalf("unexpected force-index errors: %+v", result.Errors)
+	}
+	episodes, err = store.ListEpisodes("project", "agentvault", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(episodes) != 1 {
+		t.Fatalf("force reindex duplicated promoted episode: %+v", episodes)
 	}
 }

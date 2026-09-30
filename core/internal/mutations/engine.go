@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -188,7 +189,11 @@ func (e *Engine) Commit(id string) (contract.MutationResult, error) {
 		// committing so startup recovery can observe and finalize it safely.
 		return contract.MutationResult{}, fmt.Errorf("file applied but commit finalization failed: %w", err)
 	}
-	return contract.MutationResult{Proposal: proposal, Warnings: e.reindex(proposal)}, nil
+	warnings := e.reindex(proposal)
+	if err := e.promoteCommittedMutation(proposal); err != nil {
+		warnings = append(warnings, "mutation committed but knowledge promotion failed: "+err.Error())
+	}
+	return contract.MutationResult{Proposal: proposal, Warnings: warnings}, nil
 }
 
 // Undo restores the exact before snapshot iff the target still exactly matches
@@ -277,8 +282,10 @@ func (e *Engine) Recover() []error {
 			switch status {
 			case contract.MutationCommitting:
 				if matchesProposalState(current, proposal.AfterExists, proposal.AfterHash) {
-					if _, err := e.store.FinishMutationCommit(proposal.ID); err != nil {
+					if finished, err := e.store.FinishMutationCommit(proposal.ID); err != nil {
 						problems = append(problems, err)
+					} else if err := e.promoteCommittedMutation(finished); err != nil {
+						log.Printf("[mutations] committed mutation promotion will be retried: %v", err)
 					}
 				} else if matchesProposalState(current, proposal.BeforeExists, proposal.BeforeHash) {
 					if _, err := e.store.AbortMutationCommit(proposal.ID, "recovery observed original file state"); err != nil {
@@ -303,6 +310,24 @@ func (e *Engine) Recover() []error {
 			unlock()
 		}
 	}
+
+	// Promotion is enrichment, not filesystem recovery. Reconcile all recent
+	// committed mutations so a crash after commit finalization, or a transient
+	// journal/projection error, is repaired on a later startup without blocking
+	// the mutation control plane.
+	committed, err := e.store.ListMutationProposals(contract.MutationProposalFilter{
+		Status: contract.MutationCommitted,
+		Limit:  500,
+	})
+	if err != nil {
+		log.Printf("[mutations] committed promotion reconciliation skipped: %v", err)
+	} else {
+		for _, proposal := range committed {
+			if err := e.promoteCommittedMutation(proposal); err != nil {
+				log.Printf("[mutations] committed mutation promotion will be retried: %v", err)
+			}
+		}
+	}
 	return problems
 }
 
@@ -316,7 +341,11 @@ func (e *Engine) resolveInterruptedCommit(proposal contract.MutationProposal, fu
 		if err != nil {
 			return contract.MutationResult{}, fmt.Errorf("commit reached final file state but could not finalize: %w", err)
 		}
-		return contract.MutationResult{Proposal: finished, Warnings: append([]string{cause.Error()}, e.reindex(finished)...)}, nil
+		warnings := append([]string{cause.Error()}, e.reindex(finished)...)
+		if err := e.promoteCommittedMutation(finished); err != nil {
+			warnings = append(warnings, "mutation committed but knowledge promotion failed: "+err.Error())
+		}
+		return contract.MutationResult{Proposal: finished, Warnings: warnings}, nil
 	}
 	if matchesProposalState(current, proposal.BeforeExists, proposal.BeforeHash) {
 		_, _ = e.store.AbortMutationCommit(proposal.ID, cause.Error())
@@ -370,6 +399,40 @@ func (e *Engine) applyBefore(fullPath string, proposal contract.MutationProposal
 	default:
 		return fmt.Errorf("unsupported mutation kind %q", proposal.Kind)
 	}
+}
+
+func (e *Engine) promoteCommittedMutation(proposal contract.MutationProposal) error {
+	if proposal.SessionID == "" && proposal.AgentID == "" {
+		return nil
+	}
+	if e.store == nil {
+		return errors.New("mutation knowledge store is not configured")
+	}
+
+	_, err := e.store.PromoteEvent(knowledge.PromotionInput{
+		SourceType:   "mutation",
+		SourceID:     proposal.ID,
+		EvidencePath: proposal.Path,
+		AgentID:      proposal.AgentID,
+		SessionID:    proposal.SessionID,
+		EventType:    "mutation.committed",
+		Summary: fmt.Sprintf(
+			"Committed %s mutation for %s: %s",
+			proposal.Kind,
+			proposal.Path,
+			proposal.Reason,
+		),
+		OccurredAt:   proposal.CommittedAt,
+		ProvenanceID: proposal.ProvenanceID,
+		Metadata: map[string]interface{}{
+			"mutationId": proposal.ID,
+			"kind":       proposal.Kind,
+			"path":       proposal.Path,
+			"reason":     proposal.Reason,
+			"status":     proposal.Status,
+		},
+	})
+	return err
 }
 
 func (e *Engine) reindex(proposal contract.MutationProposal) []string {
