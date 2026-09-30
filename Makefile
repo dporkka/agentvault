@@ -22,7 +22,7 @@ test-ci: ## Run Go tests with race detection and cache disabled (CI mode)
 
 test-core-critical: ## Validate durable recovery, context determinism, and authorization boundaries
 	cd $(CORE) && go test ./internal/knowledge -run 'TestJournalReplayRestoresRebuiltProjection|TestJournalAppendBuildsVerifiableHashChain|TestJournalVerifyRejectsTamperingBeforeReplaySideEffects|TestJournalFirstChainedEventAnchorsLegacyPrefix|TestTemporalFactSupersessionAndEpisodeReplay|TestProvenanceEvidenceSpanRoundTrip' -count=1
-	cd $(CORE) && go test ./internal/contextcompiler -run 'TestContextCompilerGoldenEvaluation|TestContextCompilerRetrievalEvaluationSuite|TestCompileUsesSemanticSimilarityToRerankScopedNoteCandidates|TestCompileIncludesCurrentTemporalKnowledgeWithoutProjectLeak|TestCompileUnifiedIncludesVisibleMarkdownMemoryWithoutScopeLeak' -count=1
+	cd $(CORE) && go test ./internal/contextcompiler -run 'TestContextCompilerGoldenEvaluation|TestContextCompilerRetrievalEvaluationSuite|TestSemanticContextEvaluationSuite|TestCompileUsesSemanticSimilarityToRerankScopedNoteCandidates|TestCompileIncludesCurrentTemporalKnowledgeWithoutProjectLeak|TestCompileUnifiedIncludesVisibleMarkdownMemoryWithoutScopeLeak' -count=1
 	cd $(CORE) && go test ./internal/authz ./internal/mcp -count=1
 
 bench: ## Run Go benchmarks for core operations
