@@ -216,7 +216,6 @@ func deterministicPromotionID(prefix string, parts ...string) string {
 	return fmt.Sprintf("%s_%x", prefix, hash[:12])
 }
 
-
 func lockPromotion(key string) func() {
 	value, _ := promotionLocks.LoadOrStore(key, &sync.Mutex{})
 	mutex := value.(*sync.Mutex)
