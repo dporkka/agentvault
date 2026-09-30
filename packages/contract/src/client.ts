@@ -25,6 +25,7 @@ import type {
   RecentParams,
   SearchParams,
   SearchResult,
+  SavedView,
   StaleParams,
   UpdateNoteRequest,
   UpdateNoteResponse,
@@ -91,6 +92,9 @@ export interface ApiClient {
   getProjects(): Promise<Projects>;
   getRecent(params?: RecentParams): Promise<SearchResult[]>;
   getStale(params?: StaleParams): Promise<SearchResult[]>;
+  getViews(): Promise<SavedView[]>;
+  getView(id: string): Promise<SavedView>;
+  runView(id: string): Promise<SearchResult[]>;
   getGitStatus(): Promise<GitStatus>;
   getGraph(center: string, depth?: number): Promise<Graph>;
   getGraphNeighbors(id: string): Promise<Graph>;
@@ -232,6 +236,15 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     getStale(params) {
       const qs = buildSearch(params);
       return call<SearchResult[]>('GET', qs ? `/stale?${qs}` : '/stale');
+    },
+    getViews() {
+      return call<SavedView[]>('GET', '/views');
+    },
+    getView(id) {
+      return call<SavedView>('GET', `/views/${encodeURIComponent(id)}`);
+    },
+    runView(id) {
+      return call<SearchResult[]>('POST', `/views/${encodeURIComponent(id)}/run`);
     },
     getGitStatus() {
       return call<GitStatus>('GET', '/git/status');

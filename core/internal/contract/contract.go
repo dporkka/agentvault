@@ -34,7 +34,8 @@ type NoteDetail struct {
 	Project string   `json:"project"`
 	Status  string   `json:"status"`
 	Tags    []string `json:"tags"`
-	Content string   `json:"content"`
+	Content     string   `json:"content"`
+	ContentHash string   `json:"contentHash"`
 }
 
 // IndexResult is the body returned by POST /vault/index. duration is the
@@ -132,13 +133,15 @@ type UpdateNoteRequest struct {
 	Content *string  `json:"content,omitempty"`
 	Tags    []string `json:"tags,omitempty"`
 	Status  *string  `json:"status,omitempty"`
-	Project *string  `json:"project,omitempty"`
+	Project             *string `json:"project,omitempty"`
+	ExpectedContentHash *string `json:"expectedContentHash,omitempty"`
 }
 
 // UpdateNoteResponse is the body returned after a successful note update.
 type UpdateNoteResponse struct {
-	Path string `json:"path"`
-	ID   string `json:"id"`
+	Path        string `json:"path"`
+	ID          string `json:"id"`
+	ContentHash string `json:"contentHash"`
 }
 
 // GraphNode is a vertex in the knowledge graph returned by GET /graph.

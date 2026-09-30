@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/agentvault/core/internal/contract"
+	"github.com/agentvault/core/internal/fileversion"
 	"github.com/agentvault/core/internal/git"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
@@ -226,7 +227,8 @@ func (s *Server) handleNoteByPath(w http.ResponseWriter, r *http.Request) {
 		Project: result.Project,
 		Status:  result.Status,
 		Tags:    result.Tags,
-		Content: string(content),
+		Content:     string(content),
+		ContentHash: fileversion.Hash(content),
 	})
 }
 
@@ -407,6 +409,23 @@ func (s *Server) handleUpdateNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	currentContent, err := os.ReadFile(clean)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "failed to read file",
+			"detail": err.Error(),
+		})
+		return
+	}
+	currentHash := fileversion.Hash(currentContent)
+	if req.ExpectedContentHash != nil && *req.ExpectedContentHash != currentHash {
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"error":       "note changed since it was loaded",
+			"contentHash": currentHash,
+		})
+		return
+	}
+
 	// Parse the existing file
 	doc, err := markdown.ParseFile(clean)
 	if err != nil {
@@ -490,8 +509,9 @@ func (s *Server) handleUpdateNote(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	writeJSON(w, http.StatusOK, contract.UpdateNoteResponse{
-		Path: result.Path,
-		ID:   id,
+		Path:        result.Path,
+		ID:          id,
+		ContentHash: fileversion.Hash([]byte(newContent)),
 	})
 }
 

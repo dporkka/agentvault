@@ -77,6 +77,7 @@ export interface NoteDetail {
   status: string;
   tags: string[];
   content: string;
+  contentHash: string;
 }
 
 // GET /notes/{id}/links
@@ -102,11 +103,13 @@ export interface UpdateNoteRequest {
   tags?: string[];
   status?: string;
   project?: string;
+  expectedContentHash?: string;
 }
 
 export interface UpdateNoteResponse {
   path: string;
   id: string;
+  contentHash: string;
 }
 
 // DELETE /notes/{id}
@@ -167,6 +170,24 @@ export interface AskResponse {
   caveats?: string[];
   missingInfo?: string;
   suggestedActions?: string[];
+}
+
+export interface SavedViewQuery {
+  q?: string;
+  types?: string[];
+  projects?: string[];
+  tags?: string[];
+  statuses?: string[];
+  pinned?: boolean;
+}
+
+export interface SavedView {
+  id: string;
+  version: number;
+  name: string;
+  query?: SavedViewQuery;
+  columns?: string[];
+  limit?: number;
 }
 
 // GET /projects

@@ -47,6 +47,7 @@ function NoteEditRoute() {
       editNoteTitle={note.title}
       editNoteType={note.type}
       editNoteContent={note.content}
+      editNoteContentHash={note.contentHash}
     />
   );
 }

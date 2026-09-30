@@ -10,12 +10,13 @@ interface NoteEditorProps {
   editNoteTitle?: string;
   editNoteType?: string;
   editNoteContent?: string;
+  editNoteContentHash?: string;
 }
 
 const NOTE_TYPES = ['note', 'decision', 'task', 'meeting', 'source'] as const;
 
 const NoteEditor: React.FC<NoteEditorProps> = ({
-  onCreated, onCancel, editNoteId, editNoteTitle, editNoteType, editNoteContent,
+  onCreated, onCancel, editNoteId, editNoteTitle, editNoteType, editNoteContent, editNoteContentHash,
 }) => {
   const isEdit = !!editNoteId;
   const [title, setTitle] = useState(editNoteTitle || '');
@@ -45,6 +46,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           title: normalizedTitle,
           content: content || undefined,
           tags: normalizedTags.length > 0 ? normalizedTags : undefined,
+          expectedContentHash: editNoteContentHash,
         });
         onCreated?.(result.id, result.path);
       } else {
