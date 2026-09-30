@@ -1573,7 +1573,6 @@ func TestHandleGetRunAudit(t *testing.T) {
 	}
 }
 
-
 func TestHandleProposeRunLearning(t *testing.T) {
 	s, database := setupTestServer(t)
 	defer database.Close()
