@@ -280,6 +280,7 @@ func (s *Server) RegisterRoutes() {
 	// explicit terminal review is required for acceptance, merge, or supersession.
 	s.mux.HandleFunc("GET /memory-candidates", s.withKnowledgeReady(s.handleListMemoryCandidates))
 	s.mux.HandleFunc("POST /memory-candidates", s.withKnowledgeReady(s.handleProposeMemoryCandidate))
+	s.mux.HandleFunc("POST /memory-candidates/extract", s.withKnowledgeReady(s.handleExtractMemoryCandidates))
 	s.mux.HandleFunc("GET /memory-candidates/{id}", s.withKnowledgeReady(s.handleGetMemoryCandidate))
 	s.mux.HandleFunc("POST /memory-candidates/{id}/accept", s.withKnowledgeReady(s.handleAcceptMemoryCandidate))
 	s.mux.HandleFunc("POST /memory-candidates/{id}/reject", s.withKnowledgeReady(s.handleRejectMemoryCandidate))
