@@ -10,6 +10,8 @@ import type {
   CaptureRequest,
   CaptureResponse,
   CommitPromotionRequest,
+  ContextCompileRequest,
+  ContextSnapshot,
   CreateEvaluationCaseRequest,
   CreateEvaluationDatasetRequest,
   CreateExperimentRequest,
@@ -87,6 +89,8 @@ export const routes: {
   readonly experiment: EndpointDef<{ id: string }, ExperimentDetail>;
   readonly createExperiment: EndpointDef<CreateExperimentRequest, Experiment>;
   readonly createExperimentResult: EndpointDef<CreateExperimentResultRequest, ExperimentResult>;
+  readonly compileContext: EndpointDef<ContextCompileRequest, ContextSnapshot>;
+  readonly contextSnapshot: EndpointDef<{ hash: string }, ContextSnapshot>;
 } = {
   health: {
     method: 'GET',
@@ -283,6 +287,20 @@ export const routes: {
     auth: true,
     request: undefined as unknown as CreateExperimentResultRequest,
     response: undefined as unknown as ExperimentResult,
+  },
+  compileContext: {
+    method: 'POST',
+    path: '/agents/{id}/context',
+    auth: true,
+    request: undefined as unknown as ContextCompileRequest,
+    response: undefined as unknown as ContextSnapshot,
+  },
+  contextSnapshot: {
+    method: 'GET',
+    path: '/contexts/{hash}',
+    auth: false,
+    request: undefined as unknown as { hash: string },
+    response: undefined as unknown as ContextSnapshot,
   },
 };
 
