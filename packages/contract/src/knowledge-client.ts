@@ -24,6 +24,7 @@ import type {
   MemoryFilter,
   MemoryRecord,
   CreateMemoryCandidateRequest,
+  ExtractMemoryCandidatesRequest,
   ReviewMemoryCandidateRequest,
   SupersedeMemoryCandidateRequest,
   MergeMemoryCandidateRequest,
@@ -64,6 +65,7 @@ export interface KnowledgeClient {
   recordMemory(req: CreateMemoryRequest): Promise<MemoryRecord>;
   listMemories(filter: MemoryFilter): Promise<MemoryRecord[]>;
   proposeMemoryCandidate(req: CreateMemoryCandidateRequest): Promise<MemoryCandidate>;
+  extractMemoryCandidates(req: ExtractMemoryCandidatesRequest): Promise<MemoryCandidate[]>;
   listMemoryCandidates(filter?: MemoryCandidateFilter): Promise<MemoryCandidate[]>;
   getMemoryCandidate(id: string): Promise<MemoryCandidate>;
   acceptMemoryCandidate(id: string, req: ReviewMemoryCandidateRequest): Promise<MemoryCandidate>;
@@ -176,6 +178,9 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions = {}): Knowle
     },
     proposeMemoryCandidate(req) {
       return call<MemoryCandidate>('POST', '/memory-candidates', req);
+    },
+    extractMemoryCandidates(req) {
+      return call<MemoryCandidate[]>('POST', '/memory-candidates/extract', req);
     },
     listMemoryCandidates(filter = {}) {
       const qs = queryString(filter);

@@ -29,6 +29,7 @@ type PromotionInput struct {
 	ProvenanceID string
 	Confidence   *float64
 	Metadata     map[string]interface{}
+	ObjectIDs    []string
 }
 
 // PromotionResult contains the durable provenance and episode representing one
@@ -36,6 +37,7 @@ type PromotionInput struct {
 type PromotionResult struct {
 	Provenance contract.ProvenanceRecord
 	Episode    contract.EpisodeRecord
+	Candidates []contract.MemoryCandidate
 }
 
 var promotionLocks sync.Map // deterministic source identity -> *sync.Mutex
@@ -100,7 +102,7 @@ func (s *Store) PromoteEvent(input PromotionInput) (PromotionResult, error) {
 	episodeID := deterministicPromotionID("episode", input.SourceType, input.SourceID, input.EventType)
 	episode, err := s.GetEpisode(episodeID)
 	if err == nil {
-		return PromotionResult{Provenance: provenance, Episode: episode}, nil
+		return s.finishPromotion(provenance, episode)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return PromotionResult{}, fmt.Errorf("load promoted episode: %w", err)
@@ -112,6 +114,7 @@ func (s *Store) PromoteEvent(input PromotionInput) (PromotionResult, error) {
 		ScopeID:      scopeID,
 		EventType:    input.EventType,
 		Summary:      input.Summary,
+		ObjectIDs:    normalizeIDs(input.ObjectIDs),
 		ProvenanceID: provenance.ID,
 		OccurredAt:   occurredAt,
 		Metadata:     promotionMetadata(input.Metadata, input),
@@ -125,7 +128,19 @@ func (s *Store) PromoteEvent(input PromotionInput) (PromotionResult, error) {
 		return PromotionResult{}, fmt.Errorf("record promoted episode: %w", err)
 	}
 
-	return PromotionResult{Provenance: provenance, Episode: episode}, nil
+	return s.finishPromotion(provenance, episode)
+}
+
+func (s *Store) finishPromotion(provenance contract.ProvenanceRecord, episode contract.EpisodeRecord) (PromotionResult, error) {
+	candidates, err := s.ExtractMemoryCandidatesFromEpisode(episode.ID)
+	if err != nil {
+		return PromotionResult{}, fmt.Errorf("extract promoted memory candidates: %w", err)
+	}
+	return PromotionResult{
+		Provenance: provenance,
+		Episode:    episode,
+		Candidates: candidates,
+	}, nil
 }
 
 func (s *Store) resolvePromotionScope(input PromotionInput) (string, string, error) {

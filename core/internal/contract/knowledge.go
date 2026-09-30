@@ -211,6 +211,12 @@ type CreateMemoryCandidateRequest struct {
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// ExtractMemoryCandidatesRequest runs deterministic semantic extraction for one
+// existing provenance-backed episode. It never performs terminal review.
+type ExtractMemoryCandidatesRequest struct {
+	EpisodeID string `json:"episodeId"`
+}
+
 // MemoryCandidateFilter scopes candidate review queues.
 type MemoryCandidateFilter struct {
 	Status     MemoryCandidateStatus `json:"status,omitempty"`

@@ -328,6 +328,45 @@ Pending/rejected candidates never enter the Context Compiler. Only an explicit
 accept/merge/supersede action creates durable semantic memory eligible for
 retrieval.
 
+### Deterministic extraction
+
+AgentVault's first extraction stage is intentionally model-free. It only
+proposes candidates when semantic intent is explicit:
+
+- the episode/event type is one of `observation`, `fact`, `preference`,
+  `decision`, `constraint`, or `summary` (including their supported
+  `.observed`/`.recorded` variants); or
+- the episode/session-event metadata explicitly provides a valid `memoryKind`.
+
+The candidate content defaults to the episode summary and may be overridden by
+explicit `memoryContent` metadata. `memoryObjectId` is accepted only when it
+references one of the episode's object IDs.
+
+Raw execution activity such as `capture.recorded`, `mutation.committed`,
+tool results, verification events, and generic architecture changes is not
+converted into semantic candidates merely because text exists.
+
+Before proposing a candidate, the extractor:
+
+1. preserves source episode scope, provenance, and provenance confidence;
+2. computes a deterministic candidate identity and normalized semantic
+   fingerprint;
+3. suppresses an equivalent pending candidate in the same scope/kind/object;
+4. suppresses an equivalent current accepted semantic memory;
+5. allows fresh evidence to create a new candidate after an earlier candidate
+   was rejected.
+
+Equivalent-content comparison is deliberately conservative: lowercased,
+trimmed, whitespace-normalized exact text. It is not embedding similarity or
+LLM adjudication.
+
+Explicit semantic session events are enriched after the session event itself is
+durably committed. Enrichment failure never makes the already-committed session
+event appear failed. Trusted HTTP/MCP startup reconciliation scans for missed
+semantic session-event promotions and backfills them idempotently. Scoped MCP
+runtimes do not run global reconciliation, preventing an identity scoped to one
+project from mutating another project's semantic state as a startup side effect.
+
 Capability-bound extraction agents with `memory:write` may submit candidates
 within their authorized project/session scope, but they are not given review
 tools. Trusted local/root surfaces perform terminal review. `knowledge:read`

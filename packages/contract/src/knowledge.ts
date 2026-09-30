@@ -202,6 +202,10 @@ export interface CreateMemoryCandidateRequest {
   metadata?: Record<string, unknown>;
 }
 
+export interface ExtractMemoryCandidatesRequest {
+  episodeId: string;
+}
+
 export interface MemoryCandidateFilter {
   status?: MemoryCandidateStatus;
   scopeType?: string;
