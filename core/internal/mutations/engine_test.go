@@ -396,3 +396,68 @@ func TestCommitPromotesMutationIntoSessionEpisode(t *testing.T) {
 		t.Fatalf("mutation provenance lost actor/session: %+v", provenance)
 	}
 }
+
+
+func TestRecoverBackfillsPromotionForAlreadyCommittedMutation(t *testing.T) {
+	vaultPath, store, engine := setupMutationEngine(t)
+	session, err := store.StartSession(contract.StartAgentSessionRequest{
+		ID:        "session_mutation_backfill",
+		AgentID:   "backend-engineer",
+		Project:   "agentvault",
+		Objective: "Recover promoted mutation context",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(vaultPath, "10-notes", "backfill.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("before\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	after := "after\n"
+	proposal, err := engine.Propose(contract.CreateMutationProposalRequest{
+		Kind:      contract.MutationReplace,
+		Path:      "10-notes/backfill.md",
+		Content:   ptr(after),
+		Reason:    "Simulate commit finalized before promotion",
+		AgentID:   "backend-engineer",
+		SessionID: session.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.Approve(proposal.ID, "reviewer"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.StartMutationCommit(proposal.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(after), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.FinishMutationCommit(proposal.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	beforeRecovery, err := store.ListEpisodes("session", session.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(beforeRecovery) != 0 {
+		t.Fatalf("test setup unexpectedly promoted mutation: %+v", beforeRecovery)
+	}
+
+	if problems := engine.Recover(); len(problems) != 0 {
+		t.Fatalf("recover: %+v", problems)
+	}
+	afterRecovery, err := store.ListEpisodes("session", session.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(afterRecovery) != 1 || afterRecovery[0].EventType != "mutation.committed" {
+		t.Fatalf("recover did not backfill committed mutation promotion: %+v", afterRecovery)
+	}
+}
