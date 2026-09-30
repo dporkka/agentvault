@@ -1533,11 +1533,7 @@ func (s *Server) handleEvaluationDataset(w http.ResponseWriter, r *http.Request)
 		Cases: make([]contract.EvaluationCase, 0, len(item.Cases)),
 	}
 	for _, evaluationCase := range item.Cases {
-		out.Cases = append(out.Cases, contract.EvaluationCase{
-			ID: evaluationCase.ID, DatasetID: evaluationCase.DatasetID, Name: evaluationCase.Name,
-			Input: evaluationCase.Input, Expected: evaluationCase.Expected,
-			Tags: evaluationCase.Tags, CreatedAt: evaluationCase.CreatedAt,
-		})
+		out.Cases = append(out.Cases, evaluationCaseResponse(&evaluationCase))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
