@@ -1413,7 +1413,6 @@ func TestRunAuditEndpoints(t *testing.T) {
 	})
 }
 
-
 func TestRunLearningCandidateEndpoint(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
 	defer database.Close()
