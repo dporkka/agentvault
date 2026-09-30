@@ -463,3 +463,34 @@ type RunLearningCandidateRequest struct {
 	SourceEvaluationIDs  []string `json:"sourceEvaluationIds,omitempty"`
 	SupersedesNoteID     string   `json:"supersedesNoteId,omitempty"`
 }
+
+
+// LearningSignal is one explicit failure signal surfaced from run evidence.
+type LearningSignal struct {
+	Kind          string   `json:"kind"`
+	ID            string   `json:"id"`
+	ObservationID string   `json:"observationId"`
+	Name          string   `json:"name"`
+	Status        string   `json:"status"`
+	Label         string   `json:"label"`
+	Score         *float64 `json:"score"`
+	Rationale     string   `json:"rationale"`
+}
+
+// LearningRecommendation is a deterministic, read-only set of evidence inputs
+// that a caller may use when deciding whether and how to propose learning.
+type LearningRecommendation struct {
+	RunID                string           `json:"runId"`
+	AgentID              string           `json:"agentId"`
+	AgentRevision        int              `json:"agentRevision"`
+	Eligible             bool             `json:"eligible"`
+	SupportLevel         string           `json:"supportLevel"`
+	EvidenceCount        int              `json:"evidenceCount"`
+	SuggestedTargetKind  string           `json:"suggestedTargetKind"`
+	ReasonCodes          []string         `json:"reasonCodes"`
+	SourceObservationIDs []string         `json:"sourceObservationIds"`
+	SourceEvaluationIDs  []string         `json:"sourceEvaluationIds"`
+	ContextMemoryRefs    []string         `json:"contextMemoryRefs"`
+	SupersedesNoteIDs    []string         `json:"supersedesNoteIds"`
+	Signals              []LearningSignal `json:"signals"`
+}
