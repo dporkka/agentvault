@@ -21,8 +21,8 @@ const (
 	defaultTokenBudget = 8000
 	minimumTokenBudget = 256
 	maximumTokenBudget = 128000
-	defaultMaxItems     = 40
-	maximumMaxItems     = 200
+	defaultMaxItems    = 40
+	maximumMaxItems    = 200
 )
 
 // Compiler builds model-agnostic context bundles without making an LLM call.
@@ -156,6 +156,7 @@ func (c *candidateCollector) add(item contract.ContextItem) {
 	if item.Metadata == nil {
 		item.Metadata = map[string]interface{}{}
 	}
+	item = c.rank(item)
 	c.items = append(c.items, item)
 }
 

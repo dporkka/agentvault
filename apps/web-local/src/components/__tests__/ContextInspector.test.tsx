@@ -57,6 +57,13 @@ describe('ContextInspector', () => {
             memoryClass: 'semantic',
             memoryKind: 'decision',
           },
+          ranking: {
+            algorithm: 'deterministic-multisignal-v1',
+            components: [
+              { signal: 'sourcePrior', value: 0.9, weight: 0.64, contribution: 0.576 },
+              { signal: 'lexicalRelevance', value: 1, weight: 0.16, contribution: 0.16 },
+            ],
+          },
         },
         {
           kind: 'note',
@@ -88,6 +95,7 @@ describe('ContextInspector', () => {
           task: 'Ship context inspector',
           project: 'alpha',
           tokenBudget: 8000,
+          explain: true,
         }),
       ),
     );
@@ -98,6 +106,8 @@ describe('ContextInspector', () => {
     expect(screen.getByText('Score 0.960')).toBeInTheDocument();
     expect(screen.getByText('human · 92% confidence')).toBeInTheDocument();
     expect(screen.getByText('Use deterministic context compilation.')).toBeInTheDocument();
+    expect(screen.getByText('Why this ranked here')).toBeInTheDocument();
+    expect(screen.getByText(/sourcePrior: 0\.90 × 0\.64 = 0\.576/)).toBeInTheDocument();
   });
 
   it('does not compile an empty task', async () => {

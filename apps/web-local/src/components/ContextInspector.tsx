@@ -26,6 +26,18 @@ function ItemCard({ item, index }: { item: ContextItem; index: number }) {
           {provenance.evidence?.length ? <span> · {provenance.evidence.length} evidence item{provenance.evidence.length === 1 ? '' : 's'}</span> : null}
         </div>
       )}
+      {item.ranking && (
+        <div className="mt-3 pt-3 border-t border-vault-border">
+          <div className="text-xs font-medium text-vault-text-muted mb-2">Why this ranked here</div>
+          <div className="flex flex-wrap gap-2">
+            {item.ranking.components.map((component) => (
+              <span key={component.signal} className="px-2 py-1 rounded bg-vault-bg-tertiary text-xs text-vault-text-secondary">
+                {component.signal}: {component.value.toFixed(2)} × {component.weight.toFixed(2)} = {component.contribution.toFixed(3)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -60,6 +72,7 @@ const ContextInspector: React.FC = () => {
         task: trimmed,
         project: project || undefined,
         tokenBudget,
+        explain: true,
       });
       setBundle(result);
     } catch (err) {
