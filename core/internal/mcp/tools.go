@@ -692,7 +692,6 @@ func (s *Server) registerGitStatus() {
 	}
 }
 
-
 // --- Tool: agentvault.open_daily ---
 
 func (s *Server) registerOpenDaily() {
@@ -1072,16 +1071,16 @@ func (s *Server) handleProposePromotion(args map[string]interface{}) (string, er
 	evaluationIDs := stringSliceArg(args, "source_evaluation_ids")
 	id := fmt.Sprintf("promo_%d", time.Now().UnixNano())
 	record := agentstate.PromotionRecord{
-		ID: id,
-		AgentID: stringArg(args, "agent_id"),
-		TargetKind: agentstate.PromotionTargetKind(stringArg(args, "target_kind")),
-		Status: agentstate.PromotionProposed,
-		Candidate: stringArg(args, "candidate"),
-		Rationale: stringArg(args, "rationale"),
-		SourceRunIDs: runIDs,
+		ID:                   id,
+		AgentID:              stringArg(args, "agent_id"),
+		TargetKind:           agentstate.PromotionTargetKind(stringArg(args, "target_kind")),
+		Status:               agentstate.PromotionProposed,
+		Candidate:            stringArg(args, "candidate"),
+		Rationale:            stringArg(args, "rationale"),
+		SourceRunIDs:         runIDs,
 		SourceObservationIDs: observationIDs,
-		SourceEvaluationIDs: evaluationIDs,
-		SupersedesNoteID: stringArg(args, "supersedes_note_id"),
+		SourceEvaluationIDs:  evaluationIDs,
+		SupersedesNoteID:     stringArg(args, "supersedes_note_id"),
 	}
 	if err := record.Validate(); err != nil {
 		return "", err
