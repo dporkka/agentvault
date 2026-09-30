@@ -993,3 +993,155 @@ func TestAgentStateReadEndpoints(t *testing.T) {
 		}
 	})
 }
+
+
+func TestAgentStateWriteEndpoints(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	srv := NewServer(vaultPath, database)
+	srv.RegisterRoutes()
+	var handler http.Handler = srv.mux
+	handler = srv.authMiddleware(handler)
+	handler = srv.corsMiddleware(handler)
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	post := func(t *testing.T, path string, body interface{}, withAuth bool) (*http.Response, map[string]interface{}) {
+		t.Helper()
+		payload, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal request: %v", err)
+		}
+		req, err := http.NewRequest(http.MethodPost, ts.URL+path, bytes.NewReader(payload))
+		if err != nil {
+			t.Fatalf("create request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if withAuth {
+			req.Header.Set("X-AgentVault-Token", srv.AuthToken())
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST %s: %v", path, err)
+		}
+		var decoded map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+			resp.Body.Close()
+			t.Fatalf("decode %s response: %v", path, err)
+		}
+		resp.Body.Close()
+		return resp, decoded
+	}
+
+	t.Run("writes require auth", func(t *testing.T) {
+		resp, body := post(t, "/evaluation-datasets", map[string]interface{}{"name": "No auth"}, false)
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d body=%#v", resp.StatusCode, body)
+		}
+	})
+
+	var promotionID string
+	t.Run("propose review and commit promotion", func(t *testing.T) {
+		resp, body := post(t, "/promotions", map[string]interface{}{
+			"agentId":              "agt_api_1",
+			"targetKind":           "memory",
+			"candidate":            "This is a test note for the API server.",
+			"rationale":            "Observed repeatedly",
+			"sourceObservationIds": []string{"obs_api_1"},
+		}, true)
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("expected 201 proposing promotion, got %d body=%#v", resp.StatusCode, body)
+		}
+		promotionID, _ = body["id"].(string)
+		if promotionID == "" || body["status"] != "proposed" {
+			t.Fatalf("unexpected promotion response: %#v", body)
+		}
+
+		resp, body = post(t, "/promotions/"+promotionID+"/review", map[string]interface{}{
+			"decision": "approve",
+			"reviewer": "human:test",
+			"note":     "Evidence is sufficient.",
+		}, true)
+		if resp.StatusCode != http.StatusOK || body["status"] != "approved" || body["reviewedBy"] != "human:test" {
+			t.Fatalf("unexpected review response: status=%d body=%#v", resp.StatusCode, body)
+		}
+
+		resp, body = post(t, "/promotions/"+promotionID+"/review", map[string]interface{}{
+			"decision": "reject",
+			"reviewer": "human:test",
+		}, true)
+		if resp.StatusCode != http.StatusConflict {
+			t.Fatalf("expected 409 for invalid promotion transition, got %d body=%#v", resp.StatusCode, body)
+		}
+
+		resp, body = post(t, "/promotions/"+promotionID+"/commit", map[string]interface{}{
+			"targetNoteId": "note_2024_01_15_123",
+		}, true)
+		if resp.StatusCode != http.StatusOK || body["status"] != "committed" || body["targetNoteId"] != "note_2024_01_15_123" {
+			t.Fatalf("unexpected commit response: status=%d body=%#v", resp.StatusCode, body)
+		}
+	})
+
+	var datasetID, caseID string
+	t.Run("create evaluation dataset and case", func(t *testing.T) {
+		resp, body := post(t, "/evaluation-datasets", map[string]interface{}{
+			"name":        "HTTP golden path",
+			"description": "Client-created regression set",
+			"agentId":     "agt_api_1",
+		}, true)
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("expected 201 creating dataset, got %d body=%#v", resp.StatusCode, body)
+		}
+		datasetID, _ = body["id"].(string)
+		if datasetID == "" || body["name"] != "HTTP golden path" {
+			t.Fatalf("unexpected dataset response: %#v", body)
+		}
+
+		resp, body = post(t, "/evaluation-datasets/"+datasetID+"/cases", map[string]interface{}{
+			"name":     "Create note",
+			"input":    map[string]interface{}{"prompt": "create a note"},
+			"expected": map[string]interface{}{"type": "note"},
+			"tags":     []string{"golden", "http"},
+		}, true)
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("expected 201 creating case, got %d body=%#v", resp.StatusCode, body)
+		}
+		caseID, _ = body["id"].(string)
+		if caseID == "" || body["datasetId"] != datasetID {
+			t.Fatalf("unexpected case response: %#v", body)
+		}
+	})
+
+	var experimentID string
+	t.Run("record experiment and result", func(t *testing.T) {
+		resp, body := post(t, "/experiments", map[string]interface{}{
+			"datasetId":     datasetID,
+			"name":          "HTTP baseline",
+			"agentId":       "agt_api_1",
+			"agentRevision": 4,
+			"status":        "completed",
+			"config":        map[string]interface{}{"model": "test"},
+		}, true)
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("expected 201 recording experiment, got %d body=%#v", resp.StatusCode, body)
+		}
+		experimentID, _ = body["id"].(string)
+		if experimentID == "" || body["status"] != "completed" || body["agentRevision"] != float64(4) {
+			t.Fatalf("unexpected experiment response: %#v", body)
+		}
+
+		resp, body = post(t, "/experiments/"+experimentID+"/results", map[string]interface{}{
+			"caseId":   caseID,
+			"score":    0.9,
+			"label":    "pass",
+			"metadata": map[string]interface{}{"latencyMs": 42},
+		}, true)
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("expected 201 recording result, got %d body=%#v", resp.StatusCode, body)
+		}
+		if body["experimentId"] != experimentID || body["caseId"] != caseID || body["score"] != 0.9 || body["label"] != "pass" {
+			t.Fatalf("unexpected experiment result response: %#v", body)
+		}
+	})
+}
