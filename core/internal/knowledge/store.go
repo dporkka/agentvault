@@ -728,7 +728,6 @@ func orEmptySlice(value []contract.ProvenanceEvidence) []contract.ProvenanceEvid
 	return value
 }
 
-
 func validateProvenanceEvidence(evidence []contract.ProvenanceEvidence) error {
 	for i, item := range evidence {
 		if item.Span == nil {
