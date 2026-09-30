@@ -30,8 +30,8 @@ func TestInlineFallbackCreatesLatestMemorySchema(t *testing.T) {
 	if err := database.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 7 {
-		t.Fatalf("inline schema version = %d, want 7", version)
+	if version != 8 {
+		t.Fatalf("inline schema version = %d, want 8", version)
 	}
 
 	for _, table := range []string{
@@ -48,6 +48,8 @@ func TestInlineFallbackCreatesLatestMemorySchema(t *testing.T) {
 		"episodes",
 		"temporal_facts",
 		"memory_candidates",
+		"memory_syntheses",
+		"memory_synthesis_sources",
 	} {
 		var count int
 		if err := database.QueryRow(

@@ -33,6 +33,12 @@ func validateReplayedJournalEvent(event JournalEvent) error {
 			return fmt.Errorf("decode memory payload: %w", err)
 		}
 		return validateJournalPayload(event.Type, memory)
+	case eventMemorySynthesized:
+		var synthesis memorySynthesisEvent
+		if err := json.Unmarshal(event.Payload, &synthesis); err != nil {
+			return fmt.Errorf("decode memory synthesis payload: %w", err)
+		}
+		return validateJournalPayload(event.Type, synthesis)
 	case eventProvenanceCreated:
 		var provenance contract.ProvenanceRecord
 		if err := json.Unmarshal(event.Payload, &provenance); err != nil {
