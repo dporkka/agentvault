@@ -46,12 +46,12 @@ func TestMemoryCandidateLifecycleRequiresExplicitReview(t *testing.T) {
 	episode := createCandidateEpisode(t, store, "project", "agentvault")
 	confidence := 0.87
 	candidate, err := store.ProposeMemoryCandidate(contract.CreateMemoryCandidateRequest{
-		EpisodeID:   episode.ID,
-		MemoryKind:  "decision",
-		Content:     "Keep automatic extraction separate from durable semantic memory.",
-		Confidence:  &confidence,
-		ProposedBy:  "extractor-agent",
-		Metadata:    map[string]interface{}{"extractor": "deterministic-test"},
+		EpisodeID:  episode.ID,
+		MemoryKind: "decision",
+		Content:    "Keep automatic extraction separate from durable semantic memory.",
+		Confidence: &confidence,
+		ProposedBy: "extractor-agent",
+		Metadata:   map[string]interface{}{"extractor": "deterministic-test"},
 	})
 	if err != nil {
 		t.Fatalf("ProposeMemoryCandidate: %v", err)
@@ -282,7 +282,6 @@ func TestMemoryCandidateRejectsUnprovenancedEpisodeAndConflictingReview(t *testi
 	}
 }
 
-
 func TestMemoryCandidateReplayRestoresReviewAndResultMemory(t *testing.T) {
 	store, database, vault := setupStore(t)
 	episode := createCandidateEpisode(t, store, "project", "replay-project")
@@ -345,7 +344,6 @@ func TestMemoryCandidateReplayRestoresReviewAndResultMemory(t *testing.T) {
 		t.Fatalf("candidate result memory did not replay exactly: %+v", memory)
 	}
 }
-
 
 func TestMemoryCandidateCannotAttachCrossProjectObject(t *testing.T) {
 	store, database, _ := setupStore(t)
