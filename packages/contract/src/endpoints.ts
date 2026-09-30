@@ -95,6 +95,7 @@ export const routes: {
   readonly createEvaluationDataset: EndpointDef<CreateEvaluationDatasetRequest, EvaluationDataset>;
   readonly createEvaluationCase: EndpointDef<CreateEvaluationCaseRequest, EvaluationCase>;
   readonly experiment: EndpointDef<{ id: string }, ExperimentDetail>;
+  readonly experimentComparison: EndpointDef<{ id: string; candidateId: string }, ExperimentComparison>;
   readonly createExperiment: EndpointDef<CreateExperimentRequest, Experiment>;
   readonly createExperimentResult: EndpointDef<CreateExperimentResultRequest, ExperimentResult>;
   readonly compileContext: EndpointDef<ContextCompileRequest, ContextSnapshot>;
