@@ -14,6 +14,8 @@ import type {
   CreateNoteRequest,
   CreateNoteResponse,
   DeleteNoteResponse,
+  EvaluationDatasetDetail,
+  ExperimentDetail,
   Graph,
   GitStatus,
   HealthResponse,
@@ -22,6 +24,8 @@ import type {
   NoteDetail,
   NoteLinks,
   Projects,
+  Promotion,
+  PromotionParams,
   RecentParams,
   SearchParams,
   SearchResult,
@@ -93,17 +97,21 @@ export interface ApiClient {
   getGitStatus(): Promise<GitStatus>;
   getGraph(center: string, depth?: number): Promise<Graph>;
   getGraphNeighbors(id: string): Promise<Graph>;
+  listPromotions(params?: PromotionParams): Promise<Promotion[]>;
+  getEvaluationDataset(id: string): Promise<EvaluationDatasetDetail>;
+  getExperiment(id: string): Promise<ExperimentDetail>;
   pinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
   unpinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
 }
 
-function buildSearch(params: SearchParams | RecentParams | StaleParams | undefined): string {
+function buildSearch(params: SearchParams | RecentParams | StaleParams | PromotionParams | undefined): string {
   const sp = new URLSearchParams();
   if (!params) return '';
   // The server expects snake_case for these query params while the TS API
   // stays camelCase to match the rest of the contract.
   const keyMap: Record<string, string> = {
     hybridWeight: 'hybrid_weight',
+    agentId: 'agent_id',
   };
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined || v === null) continue;
@@ -241,6 +249,16 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     },
     getGraphNeighbors(id) {
       return call<Graph>('GET', `/graph/neighbors?id=${encodeURIComponent(id)}`, undefined, false);
+    },
+    listPromotions(params) {
+      const qs = buildSearch(params);
+      return call<Promotion[]>('GET', qs ? `/promotions?${qs}` : '/promotions', undefined, false);
+    },
+    getEvaluationDataset(id) {
+      return call<EvaluationDatasetDetail>('GET', `/evaluation-datasets/${encodeURIComponent(id)}`, undefined, false);
+    },
+    getExperiment(id) {
+      return call<ExperimentDetail>('GET', `/experiments/${encodeURIComponent(id)}`, undefined, false);
     },
     pinNote(id) {
       return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/pin`, undefined, true);
