@@ -402,15 +402,15 @@ All endpoints are now aligned across server, tests, and clients:
 
 Returns a newest-first activity stream derived from existing canonical sources.
 The timeline does not introduce another source of truth: captures remain
-Markdown-backed, while structured machine-authored memories, episodes, and
-session events remain journal-backed.
+Markdown-backed, while structured machine-authored memories, episodes, session events, and mutation
+proposals remain journal-backed.
 
 Query parameters:
 
 - `project` — restrict to activity attributable to one project.
 - `agentId` — restrict to agent- or session-attributed activity.
 - `sessionId` — restrict to one durable agent session.
-- `kind` — one of `capture`, `session_event`, `episode`, or `memory`.
+- `kind` — one of `capture`, `session_event`, `episode`, `memory`, or `mutation`.
 - `since` / `until` — inclusive RFC3339 activity-time bounds.
 - `limit` — defaults to 100 and is capped at 500.
 
