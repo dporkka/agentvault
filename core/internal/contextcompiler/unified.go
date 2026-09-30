@@ -9,7 +9,6 @@ import (
 
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/memory"
-	"github.com/agentvault/core/internal/search"
 )
 
 // CompileUnified assembles one ranked context plane from both canonical memory
@@ -239,24 +238,13 @@ func addMarkdownMemories(c *candidateCollector, store *memory.Store) error {
 // memory notes can only enter through addMarkdownMemories, where workspace,
 // agent/session scope, validity, confidence, and supersession are enforced.
 func addNotesUnified(c *candidateCollector, store *memory.Store) error {
-	queryText := strings.Join(taskTerms(c.req.Task), " ")
-	if queryText == "" {
-		queryText = c.req.Task
-	}
-	results, err := c.compiler.searcher.Search(search.Query{
-		Q:       queryText,
-		Project: c.req.Project,
-		Limit:   24,
-	})
+	candidates, err := c.noteCandidates()
 	if err != nil {
-		return fmt.Errorf("search notes for context: %w", err)
-	}
-	semanticScores, err := c.semanticScoresForNotes(results)
-	if err != nil {
-		return fmt.Errorf("score semantic note candidates: %w", err)
+		return err
 	}
 
-	for i, result := range results {
+	for _, candidate := range candidates {
+		result := candidate.result
 		if c.seen["note:"+result.ID] {
 			continue
 		}
@@ -265,8 +253,8 @@ func addNotesUnified(c *candidateCollector, store *memory.Store) error {
 			return fmt.Errorf("inspect note %s memory classification: %w", result.ID, err)
 		}
 		if record.Class != "" || record.Kind != "" {
-			// This is a memory note that was not visible in the current scoped
-			// memory query. Never reintroduce it through broad FTS search.
+			// A scoped memory note that was not admitted by addMarkdownMemories
+			// must never be reintroduced through lexical or semantic retrieval.
 			continue
 		}
 
@@ -280,8 +268,8 @@ func addNotesUnified(c *candidateCollector, store *memory.Store) error {
 			Title:    result.Title,
 			Content:  detail.Snippet,
 			Path:     result.Path,
-			Score:    0.84 - float64(i)*0.012,
-			Metadata: noteContextMetadata(result, semanticScores[result.ID]),
+			Score:    candidate.baseScore,
+			Metadata: noteContextMetadata(result, candidate.semanticScore),
 		})
 	}
 	return nil

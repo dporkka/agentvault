@@ -409,46 +409,79 @@ func (c *candidateCollector) addRelations() error {
 }
 
 func (c *candidateCollector) addNotes() error {
-	queryText := strings.Join(taskTerms(c.req.Task), " ")
-	if queryText == "" {
-		queryText = c.req.Task
-	}
-	results, err := c.compiler.searcher.Search(search.Query{
-		Q:       queryText,
-		Project: c.req.Project,
-		Limit:   24,
-	})
+	candidates, err := c.noteCandidates()
 	if err != nil {
-		return fmt.Errorf("search notes for context: %w", err)
+		return err
 	}
-	semanticScores, err := c.semanticScoresForNotes(results)
-	if err != nil {
-		return fmt.Errorf("score semantic note candidates: %w", err)
-	}
-	for i, result := range results {
-		detail, err := c.compiler.searcher.GetByID(result.ID)
+	for _, candidate := range candidates {
+		detail, err := c.compiler.searcher.GetByID(candidate.result.ID)
 		if err != nil {
-			return fmt.Errorf("load note %s: %w", result.ID, err)
+			return fmt.Errorf("load note %s: %w", candidate.result.ID, err)
 		}
 		c.add(contract.ContextItem{
 			Kind:     "note",
-			ID:       result.ID,
-			Title:    result.Title,
+			ID:       candidate.result.ID,
+			Title:    candidate.result.Title,
 			Content:  detail.Snippet,
-			Path:     result.Path,
-			Score:    0.84 - float64(i)*0.012,
-			Metadata: noteContextMetadata(result, semanticScores[result.ID]),
+			Path:     candidate.result.Path,
+			Score:    candidate.baseScore,
+			Metadata: noteContextMetadata(candidate.result, candidate.semanticScore),
 		})
 	}
 	return nil
 }
 
-func (c *candidateCollector) semanticScoresForNotes(results []search.Result) (map[string]float64, error) {
-	ids := make([]string, 0, len(results))
-	for _, result := range results {
-		ids = append(ids, result.ID)
+type noteCandidate struct {
+	result        search.Result
+	baseScore     float64
+	semanticScore float64
+}
+
+func (c *candidateCollector) noteCandidates() ([]noteCandidate, error) {
+	queryText := strings.Join(taskTerms(c.req.Task), " ")
+	if queryText == "" {
+		queryText = c.req.Task
 	}
-	return c.compiler.searcher.SemanticScores(context.Background(), c.req.Task, ids)
+	lexical, err := c.compiler.searcher.Search(search.Query{
+		Q:       queryText,
+		Project: c.req.Project,
+		Limit:   24,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search notes for context: %w", err)
+	}
+
+	semantic, err := c.compiler.searcher.SemanticCandidates(context.Background(), c.req.Task, c.req.Project, 24)
+	if err != nil {
+		return nil, fmt.Errorf("search semantic notes for context: %w", err)
+	}
+	semanticScores := make(map[string]float64, len(semantic))
+	for _, result := range semantic {
+		semanticScores[result.ID] = result.Score
+	}
+
+	candidates := make([]noteCandidate, 0, len(lexical)+len(semantic))
+	seen := make(map[string]bool, len(lexical)+len(semantic))
+	for i, result := range lexical {
+		seen[result.ID] = true
+		candidates = append(candidates, noteCandidate{
+			result:        result,
+			baseScore:     0.84 - float64(i)*0.012,
+			semanticScore: semanticScores[result.ID],
+		})
+	}
+	for _, result := range semantic {
+		if seen[result.ID] {
+			continue
+		}
+		seen[result.ID] = true
+		candidates = append(candidates, noteCandidate{
+			result:        result,
+			baseScore:     0.70,
+			semanticScore: result.Score,
+		})
+	}
+	return candidates, nil
 }
 
 func noteContextMetadata(result search.Result, semanticScore float64) map[string]interface{} {
