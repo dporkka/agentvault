@@ -4,6 +4,7 @@
 package contextcompiler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -420,28 +421,48 @@ func (c *candidateCollector) addNotes() error {
 	if err != nil {
 		return fmt.Errorf("search notes for context: %w", err)
 	}
+	semanticScores, err := c.semanticScoresForNotes(results)
+	if err != nil {
+		return fmt.Errorf("score semantic note candidates: %w", err)
+	}
 	for i, result := range results {
 		detail, err := c.compiler.searcher.GetByID(result.ID)
 		if err != nil {
 			return fmt.Errorf("load note %s: %w", result.ID, err)
 		}
 		c.add(contract.ContextItem{
-			Kind:    "note",
-			ID:      result.ID,
-			Title:   result.Title,
-			Content: detail.Snippet,
-			Path:    result.Path,
-			Score:   0.84 - float64(i)*0.012,
-			Metadata: map[string]interface{}{
-				"type":      result.Type,
-				"project":   result.Project,
-				"status":    result.Status,
-				"tags":      result.Tags,
-				"updatedAt": result.UpdatedAt,
-			},
+			Kind:     "note",
+			ID:       result.ID,
+			Title:    result.Title,
+			Content:  detail.Snippet,
+			Path:     result.Path,
+			Score:    0.84 - float64(i)*0.012,
+			Metadata: noteContextMetadata(result, semanticScores[result.ID]),
 		})
 	}
 	return nil
+}
+
+func (c *candidateCollector) semanticScoresForNotes(results []search.Result) (map[string]float64, error) {
+	ids := make([]string, 0, len(results))
+	for _, result := range results {
+		ids = append(ids, result.ID)
+	}
+	return c.compiler.searcher.SemanticScores(context.Background(), c.req.Task, ids)
+}
+
+func noteContextMetadata(result search.Result, semanticScore float64) map[string]interface{} {
+	metadata := map[string]interface{}{
+		"type":      result.Type,
+		"project":   result.Project,
+		"status":    result.Status,
+		"tags":      result.Tags,
+		"updatedAt": result.UpdatedAt,
+	}
+	if semanticScore > 0 {
+		metadata["semanticSimilarity"] = semanticScore
+	}
+	return metadata
 }
 
 func (c *candidateCollector) addRecentSessions() error {

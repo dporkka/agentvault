@@ -34,6 +34,65 @@ type chunkEmbedding struct {
 	embedding []float32
 }
 
+// SemanticScores returns cosine similarity for an explicit allow-list of note IDs.
+// It is intentionally non-expansive: vector retrieval cannot introduce candidates
+// that were not already admitted by a scoped caller. Missing embeddings or an
+// unavailable embedding provider are soft fallbacks and return an empty score map.
+func (s *Searcher) SemanticScores(ctx context.Context, query string, allowedNoteIDs []string) (map[string]float64, error) {
+	scores := make(map[string]float64)
+	if strings.TrimSpace(query) == "" || len(allowedNoteIDs) == 0 || !s.HasEmbeddings() {
+		return scores, nil
+	}
+
+	embedClient, err := s.loadEmbedClient()
+	if err != nil {
+		return scores, nil
+	}
+	queryEmbedding, err := embedClient.Generate(ctx, query)
+	if err != nil {
+		return scores, nil
+	}
+	if len(queryEmbedding) == 0 {
+		return scores, nil
+	}
+	vectors.Normalize(queryEmbedding)
+
+	allowed := make(map[string]bool, len(allowedNoteIDs))
+	for _, id := range allowedNoteIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			allowed[id] = true
+		}
+	}
+	if len(allowed) == 0 {
+		return scores, nil
+	}
+
+	chunks, err := s.loadChunkEmbeddings()
+	if err != nil {
+		return nil, fmt.Errorf("load semantic candidate embeddings: %w", err)
+	}
+	for _, chunk := range chunks {
+		if !allowed[chunk.noteID] || len(chunk.embedding) != len(queryEmbedding) {
+			continue
+		}
+		similarity := float64(vectors.CosineSimilarity(queryEmbedding, chunk.embedding))
+		// Cosine similarity is [-1,1]. Normalize to [0,1] so it composes with
+		// the Context Compiler's other normalized ranking signals.
+		normalized := (similarity + 1) / 2
+		if normalized < 0 {
+			normalized = 0
+		}
+		if normalized > 1 {
+			normalized = 1
+		}
+		if current, ok := scores[chunk.noteID]; !ok || normalized > current {
+			scores[chunk.noteID] = normalized
+		}
+	}
+	return scores, nil
+}
+
 // VectorSearch performs semantic search using embeddings.
 // It generates an embedding for the query text, loads all chunk embeddings from the DB,
 // computes cosine similarity, and returns the top-k matching results.
