@@ -1520,3 +1520,59 @@ func TestRunLearningCandidateEndpoint(t *testing.T) {
 		}
 	})
 }
+
+
+func TestLearningRecommendationEndpoint(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO agent_runs (
+			id, agent_name, agent_id, agent_revision, task, status, created_at
+		) VALUES ('run_recommend_api', 'recommend-agent', 'agt_recommend_api', 2, 'fix regression', 'failed', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO run_observations (
+			id, run_id, kind, name, status, input_json, output_json, evidence_json, created_at
+		) VALUES ('obs_recommend_api', 'run_recommend_api', 'tool', 'go test', 'failed', '{}', '{}', '{}', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO evaluations (
+			id, run_id, observation_id, evaluator, name, label, rationale, metadata_json, created_at
+		) VALUES ('eval_recommend_api', 'run_recommend_api', 'obs_recommend_api', 'human:test',
+			'regression', 'fail', 'Focused test was skipped.',
+			'{"target_kind":"memory","supersedes_note_id":"memory_api_old"}', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := newTestServer(t, vaultPath, database)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/runs/run_recommend_api/learning-recommendation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var out map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out["agentId"] != "agt_recommend_api" || out["eligible"] != true || out["supportLevel"] != "strong" {
+		t.Fatalf("unexpected recommendation response: %#v", out)
+	}
+	if out["suggestedTargetKind"] != "memory" || out["evidenceCount"] != float64(2) {
+		t.Fatalf("unexpected recommendation hints: %#v", out)
+	}
+	evals, _ := out["sourceEvaluationIds"].([]interface{})
+	if len(evals) != 1 || evals[0] != "eval_recommend_api" {
+		t.Fatalf("unexpected evaluation sources: %#v", out["sourceEvaluationIds"])
+	}
+}
