@@ -98,7 +98,10 @@ func GetEvaluationDataset(database *db.DB, id string) (*EvaluationDatasetDetail,
 	}
 
 	rows, err := database.Query(`
-		SELECT id, dataset_id, name, input_json, COALESCE(expected_json, ''), tags_json, created_at
+		SELECT
+			id, dataset_id, name, input_json, COALESCE(expected_json, ''), tags_json,
+			COALESCE(source_run_id, ''), source_observation_ids_json, source_evaluation_ids_json,
+			COALESCE(agent_id, ''), COALESCE(agent_revision, 0), created_at
 		FROM evaluation_cases
 		WHERE dataset_id = ?
 		ORDER BY created_at, id
@@ -111,9 +114,11 @@ func GetEvaluationDataset(database *db.DB, id string) (*EvaluationDatasetDetail,
 	detail.Cases = []EvaluationCase{}
 	for rows.Next() {
 		var item EvaluationCase
-		var inputJSON, expectedJSON, tagsJSON string
+		var inputJSON, expectedJSON, tagsJSON, observationJSON, evaluationJSON string
 		if err := rows.Scan(
-			&item.ID, &item.DatasetID, &item.Name, &inputJSON, &expectedJSON, &tagsJSON, &item.CreatedAt,
+			&item.ID, &item.DatasetID, &item.Name, &inputJSON, &expectedJSON, &tagsJSON,
+			&item.SourceRunID, &observationJSON, &evaluationJSON,
+			&item.AgentID, &item.AgentRevision, &item.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan evaluation case: %w", err)
 		}
@@ -127,6 +132,12 @@ func GetEvaluationDataset(database *db.DB, id string) (*EvaluationDatasetDetail,
 		}
 		if err := decodeStringList(tagsJSON, &item.Tags); err != nil {
 			return nil, fmt.Errorf("decode evaluation case %s tags: %w", item.ID, err)
+		}
+		if err := decodeStringList(observationJSON, &item.SourceObservationIDs); err != nil {
+			return nil, fmt.Errorf("decode evaluation case %s source observations: %w", item.ID, err)
+		}
+		if err := decodeStringList(evaluationJSON, &item.SourceEvaluationIDs); err != nil {
+			return nil, fmt.Errorf("decode evaluation case %s source evaluations: %w", item.ID, err)
 		}
 		detail.Cases = append(detail.Cases, item)
 	}
