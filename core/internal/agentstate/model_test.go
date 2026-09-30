@@ -154,3 +154,68 @@ func TestExperimentResultValidate(t *testing.T) {
 		t.Fatal("experiment result without score or label should fail")
 	}
 }
+
+
+func TestActionIntentValidate(t *testing.T) {
+	valid := ActionIntent{
+		ID: "intent_1", RunID: "run_1", OperationID: "op_1",
+		Action: "github.create_pr", CapabilityRef: "github.write",
+		AuthorityHash: "sha256:authority", InputHash: "sha256:input",
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid action intent rejected: %v", err)
+	}
+
+	cases := []ActionIntent{
+		{RunID: "run_1", OperationID: "op_1", Action: "github.create_pr", CapabilityRef: "github.write", AuthorityHash: "sha256:a", InputHash: "sha256:i"},
+		{ID: "intent_1", OperationID: "op_1", Action: "github.create_pr", CapabilityRef: "github.write", AuthorityHash: "sha256:a", InputHash: "sha256:i"},
+		{ID: "intent_1", RunID: "run_1", Action: "github.create_pr", CapabilityRef: "github.write", AuthorityHash: "sha256:a", InputHash: "sha256:i"},
+		{ID: "intent_1", RunID: "run_1", OperationID: "op_1", CapabilityRef: "github.write", AuthorityHash: "sha256:a", InputHash: "sha256:i"},
+		{ID: "intent_1", RunID: "run_1", OperationID: "op_1", Action: "github.create_pr", AuthorityHash: "sha256:a", InputHash: "sha256:i"},
+		{ID: "intent_1", RunID: "run_1", OperationID: "op_1", Action: "github.create_pr", CapabilityRef: "github.write", InputHash: "sha256:i"},
+		{ID: "intent_1", RunID: "run_1", OperationID: "op_1", Action: "github.create_pr", CapabilityRef: "github.write", AuthorityHash: "sha256:a"},
+	}
+	for _, tc := range cases {
+		if err := tc.Validate(); err == nil {
+			t.Fatalf("expected invalid action intent to fail: %+v", tc)
+		}
+	}
+}
+
+func TestActionReceiptValidate(t *testing.T) {
+	completed := ActionReceipt{
+		ID: "receipt_1", IntentID: "intent_1",
+		Status: ActionCompleted, ResultHash: "sha256:result",
+	}
+	if err := completed.Validate(); err != nil {
+		t.Fatalf("valid completed receipt rejected: %v", err)
+	}
+	failed := ActionReceipt{
+		ID: "receipt_2", IntentID: "intent_1",
+		Status: ActionFailed, ErrorCode: "provider_error",
+	}
+	if err := failed.Validate(); err != nil {
+		t.Fatalf("valid failed receipt rejected: %v", err)
+	}
+	indeterminate := ActionReceipt{
+		ID: "receipt_3", IntentID: "intent_1",
+		Status: ActionIndeterminate, ErrorMessage: "provider outcome unknown",
+	}
+	if err := indeterminate.Validate(); err != nil {
+		t.Fatalf("valid indeterminate receipt rejected: %v", err)
+	}
+
+	for name, receipt := range map[string]ActionReceipt{
+		"missing intent": {ID: "r", Status: ActionFailed, ErrorCode: "x"},
+		"unknown status": {ID: "r", IntentID: "i", Status: "pending", ErrorCode: "x"},
+		"completed without result": {ID: "r", IntentID: "i", Status: ActionCompleted},
+		"failed without reason": {ID: "r", IntentID: "i", Status: ActionFailed},
+		"indeterminate without reason": {ID: "r", IntentID: "i", Status: ActionIndeterminate},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := receipt.Validate(); err == nil {
+				t.Fatalf("expected invalid receipt to fail: %+v", receipt)
+			}
+		})
+	}
+}
