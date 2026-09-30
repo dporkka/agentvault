@@ -395,7 +395,7 @@ const ActivityView: React.FC = () => {
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className={`flex min-h-0 flex-1 ${mode === 'review' ? 'flex-col lg:flex-row' : ''}`}>
         <section
           className="min-w-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6"
           aria-label={mode === 'activity' ? 'Activity timeline' : 'Memory review queue'}
@@ -530,7 +530,9 @@ const ActivityView: React.FC = () => {
         </section>
 
         <aside
-          className="hidden w-[23rem] shrink-0 overflow-y-auto border-l border-vault-border bg-vault-bg-secondary/40 p-4 lg:block"
+          className={mode === 'activity'
+            ? 'hidden w-[23rem] shrink-0 overflow-y-auto border-l border-vault-border bg-vault-bg-secondary/40 p-4 lg:block'
+            : 'w-full shrink-0 overflow-y-auto border-t border-vault-border bg-vault-bg-secondary/40 p-4 lg:w-[23rem] lg:border-l lg:border-t-0'}
           aria-label={mode === 'activity' ? 'Activity details' : 'Memory review details'}
         >
           {mode === 'activity' && !selected && (
