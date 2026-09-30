@@ -120,6 +120,8 @@ func (s *Server) RegisterTools() {
 	s.registerLogObservation()
 	s.registerLogEvaluation()
 	s.registerGetLearningRecommendation()
+	s.registerGetRegressionCaseProposal()
+	s.registerCaptureRunRegressionCase()
 	s.registerProposeRunLearning()
 	s.registerProposePromotion()
 	s.registerReviewPromotion()
