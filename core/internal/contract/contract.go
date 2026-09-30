@@ -333,3 +333,47 @@ type CreateExperimentResultRequest struct {
 	Label    string                 `json:"label,omitempty"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
+
+
+// ContextCompileRequest is the body for POST /agents/{id}/context.
+type ContextCompileRequest struct {
+	Task                    string   `json:"task,omitempty"`
+	ConversationID          string   `json:"conversationId,omitempty"`
+	RetrievedNoteIDs        []string `json:"retrievedNoteIds,omitempty"`
+	ArtifactNoteIDs         []string `json:"artifactNoteIds,omitempty"`
+	MaxConversationMessages int      `json:"maxConversationMessages,omitempty"`
+}
+
+// ContextSection is one ordered source included in a compiled context.
+type ContextSection struct {
+	Kind       string `json:"kind"`
+	SourceID   string `json:"sourceId"`
+	SourcePath string `json:"sourcePath"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+}
+
+// ContextReferenceIssue records a manifest or request reference that could not be resolved.
+type ContextReferenceIssue struct {
+	Kind     string `json:"kind"`
+	SourceID string `json:"sourceId"`
+	Reason   string `json:"reason"`
+}
+
+// ContextSnapshot is the immutable, provenance-carrying result of context compilation.
+type ContextSnapshot struct {
+	Hash               string                  `json:"hash"`
+	AgentID            string                  `json:"agentId"`
+	AgentRevision      int                     `json:"agentRevision"`
+	AgentTitle         string                  `json:"agentTitle"`
+	Task               string                  `json:"task"`
+	ConversationID     string                  `json:"conversationId"`
+	KnowledgeScopes    []string                `json:"knowledgeScopes"`
+	ArtifactScopes     []string                `json:"artifactScopes"`
+	ConversationScopes []string                `json:"conversationScopes"`
+	CapabilityRefs     []string                `json:"capabilityRefs"`
+	ContextPolicyRef   string                  `json:"contextPolicyRef"`
+	Sections           []ContextSection        `json:"sections"`
+	Unresolved         []ContextReferenceIssue `json:"unresolved"`
+	Text               string                  `json:"text"`
+}
