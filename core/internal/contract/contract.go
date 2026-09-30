@@ -231,13 +231,18 @@ type EvaluationDataset struct {
 
 // EvaluationCase is one stable input/expected-output pair in a dataset.
 type EvaluationCase struct {
-	ID        string                 `json:"id"`
-	DatasetID string                 `json:"datasetId"`
-	Name      string                 `json:"name"`
-	Input     map[string]interface{} `json:"input"`
-	Expected  map[string]interface{} `json:"expected"`
-	Tags      []string               `json:"tags"`
-	CreatedAt string                 `json:"createdAt"`
+	ID                   string                 `json:"id"`
+	DatasetID            string                 `json:"datasetId"`
+	Name                 string                 `json:"name"`
+	Input                map[string]interface{} `json:"input"`
+	Expected             map[string]interface{} `json:"expected"`
+	Tags                 []string               `json:"tags"`
+	SourceRunID          string                 `json:"sourceRunId"`
+	SourceObservationIDs []string               `json:"sourceObservationIds"`
+	SourceEvaluationIDs  []string               `json:"sourceEvaluationIds"`
+	AgentID              string                 `json:"agentId"`
+	AgentRevision        int                    `json:"agentRevision"`
+	CreatedAt            string                 `json:"createdAt"`
 }
 
 // EvaluationDatasetDetail returns a dataset together with its cases.
@@ -492,4 +497,30 @@ type LearningRecommendation struct {
 	ContextMemoryRefs    []string         `json:"contextMemoryRefs"`
 	SupersedesNoteIDs    []string         `json:"supersedesNoteIds"`
 	Signals              []LearningSignal `json:"signals"`
+}
+
+
+// RegressionCaseProposal is a deterministic read-only projection of one run
+// into an evaluation-case candidate.
+type RegressionCaseProposal struct {
+	RunID                string                 `json:"runId"`
+	AgentID              string                 `json:"agentId"`
+	AgentRevision        int                    `json:"agentRevision"`
+	Eligible             bool                   `json:"eligible"`
+	SupportLevel         string                 `json:"supportLevel"`
+	Name                 string                 `json:"name"`
+	Input                map[string]interface{} `json:"input"`
+	Expected             map[string]interface{} `json:"expected"`
+	Tags                 []string               `json:"tags"`
+	ReasonCodes          []string               `json:"reasonCodes"`
+	SourceObservationIDs []string               `json:"sourceObservationIds"`
+	SourceEvaluationIDs  []string               `json:"sourceEvaluationIds"`
+}
+
+// RunRegressionCaseCaptureRequest explicitly captures a run into a caller-selected dataset.
+type RunRegressionCaseCaptureRequest struct {
+	DatasetID string                 `json:"datasetId"`
+	Name      string                 `json:"name,omitempty"`
+	Expected  map[string]interface{} `json:"expected,omitempty"`
+	Tags      []string               `json:"tags,omitempty"`
 }
