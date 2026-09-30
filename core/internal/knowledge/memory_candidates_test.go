@@ -411,7 +411,6 @@ func TestMemoryCandidateCannotBranchAnAlreadySupersededMemory(t *testing.T) {
 	}
 }
 
-
 func TestMemoryCandidateConcurrentTerminalReviewCannotSplitOutcome(t *testing.T) {
 	store, database, _ := setupStore(t)
 	defer database.Close()
