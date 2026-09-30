@@ -523,3 +523,45 @@ type RunRegressionCaseCaptureRequest struct {
 	Expected  map[string]interface{} `json:"expected,omitempty"`
 	Tags      []string               `json:"tags,omitempty"`
 }
+
+
+// ExperimentCaseComparison compares one dataset case between two recorded experiments.
+type ExperimentCaseComparison struct {
+	CaseID         string   `json:"caseId"`
+	CaseName       string   `json:"caseName"`
+	Transition     string   `json:"transition"`
+	BaselineRunID  string   `json:"baselineRunId"`
+	CandidateRunID string   `json:"candidateRunId"`
+	BaselineLabel  string   `json:"baselineLabel"`
+	CandidateLabel string   `json:"candidateLabel"`
+	BaselineScore  *float64 `json:"baselineScore"`
+	CandidateScore *float64 `json:"candidateScore"`
+	ScoreDelta     *float64 `json:"scoreDelta"`
+}
+
+// ExperimentComparisonSummary counts explicit categorical transitions and missing evidence.
+type ExperimentComparisonSummary struct {
+	TotalCases       int `json:"totalCases"`
+	PairedResults    int `json:"pairedResults"`
+	Fixes            int `json:"fixes"`
+	Regressions      int `json:"regressions"`
+	StablePass       int `json:"stablePass"`
+	StableFail       int `json:"stableFail"`
+	Unclassified     int `json:"unclassified"`
+	MissingBaseline  int `json:"missingBaseline"`
+	MissingCandidate int `json:"missingCandidate"`
+}
+
+// ExperimentComparison is a read-only comparison of two persisted experiments.
+type ExperimentComparison struct {
+	BaselineExperimentID   string                      `json:"baselineExperimentId"`
+	CandidateExperimentID  string                      `json:"candidateExperimentId"`
+	DatasetID              string                      `json:"datasetId"`
+	AgentID                string                      `json:"agentId"`
+	BaselineAgentRevision  int                         `json:"baselineAgentRevision"`
+	CandidateAgentRevision int                         `json:"candidateAgentRevision"`
+	Comparable             bool                        `json:"comparable"`
+	ReasonCodes            []string                    `json:"reasonCodes"`
+	Summary                ExperimentComparisonSummary `json:"summary"`
+	Cases                  []ExperimentCaseComparison  `json:"cases"`
+}
