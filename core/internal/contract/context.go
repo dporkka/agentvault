@@ -53,6 +53,15 @@ type ContextItem struct {
 	Provenance      *ContextProvenance         `json:"provenance,omitempty"`
 	Metadata        map[string]interface{}     `json:"metadata,omitempty"`
 	Ranking         *ContextRankingExplanation `json:"ranking,omitempty"`
+	Retrieval       *ContextRetrievalTrace     `json:"retrieval,omitempty"`
+}
+
+type ContextRetrievalTrace struct {
+	Method   string `json:"method"`
+	Scope    string `json:"scope,omitempty"`
+	SourceID string `json:"sourceId,omitempty"`
+	SeedID   string `json:"seedId,omitempty"`
+	Distance int    `json:"distance,omitempty"`
 }
 
 // ContextRankingExplanation makes deterministic ranking auditable without
