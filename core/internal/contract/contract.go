@@ -112,11 +112,11 @@ type GitModifiedFile struct {
 // Link represents a link between two notes. It is populated during indexing
 // from wiki links and markdown links in note bodies.
 type Link struct {
-	ID          int     `json:"id"`
-	FromNoteID  string  `json:"fromNoteId"`
-	ToNoteID    *string `json:"toNoteId"`
-	RawTarget   string  `json:"rawTarget"`
-	LinkType    string  `json:"linkType"`
+	ID         int     `json:"id"`
+	FromNoteID string  `json:"fromNoteId"`
+	ToNoteID   *string `json:"toNoteId"`
+	RawTarget  string  `json:"rawTarget"`
+	LinkType   string  `json:"linkType"`
 }
 
 // NoteLinks groups backlinks and outgoing links for a note.
@@ -173,11 +173,11 @@ type Conversation struct {
 
 // ConversationMessage is a single message in a conversation.
 type ConversationMessage struct {
-	ID             int     `json:"id"`
-	Role           string  `json:"role"`
-	Content        string  `json:"content"`
-	SourcesJSON    *string `json:"sourcesJson,omitempty"`
-	CreatedAt      string  `json:"createdAt"`
+	ID          int     `json:"id"`
+	Role        string  `json:"role"`
+	Content     string  `json:"content"`
+	SourcesJSON *string `json:"sourcesJson,omitempty"`
+	CreatedAt   string  `json:"createdAt"`
 }
 
 // CreateConversationRequest is the body for POST /conversations.
@@ -199,7 +199,6 @@ type AnnotateRequest struct {
 	Priority  *int              `json:"priority,omitempty"`
 	Extra     map[string]string `json:"extra,omitempty"`
 }
-
 
 // Promotion is an evidence-backed memory or knowledge promotion record.
 type Promotion struct {
