@@ -129,6 +129,8 @@ func (s *Server) RegisterTools() {
 	s.registerListPromotions()
 	s.registerGetEvaluationDataset()
 	s.registerGetExperiment()
+	s.registerCompileContext()
+	s.registerGetContextSnapshot()
 	s.registerAnnotate()
 	s.registerSetStatus()
 	s.registerAsk()
