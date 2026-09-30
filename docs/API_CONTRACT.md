@@ -112,6 +112,7 @@ A missing or incorrect token on a write endpoint returns `401` with
 | GET | `/contexts/{hash}` | no | 200 / 400 / 404 | camelCase (`ContextSnapshot`) |
 | POST | `/runs` | yes | 201 / 400 / 404 / 409 | camelCase (`RunRecord`) |
 | GET | `/runs/{id}/audit` | no | 200 / 400 / 404 / 409 | camelCase (`RunAudit`) |
+| POST | `/runs/{id}/learning-candidates` | yes | 201 / 400 / 404 / 409 | camelCase (`Promotion`) |
 
 ---
 
@@ -497,6 +498,50 @@ run
 
 The audit read also verifies that persisted run identity still matches the referenced context snapshot; inconsistent stored evidence returns `409 Conflict`.
 
+## POST /runs/{id}/learning-candidates
+
+Auth required. Creates a reviewable memory or knowledge promotion proposal from one recorded run.
+
+The request intentionally has no `agentId`. AgentVault derives the agent identity from the persisted run so callers cannot attach learning from one run to another agent.
+
+Optional `sourceObservationIds` and `sourceEvaluationIds` are validated strictly:
+- each referenced observation/evaluation must exist,
+- each must belong to the same originating run,
+- cross-run evidence returns `409 Conflict`,
+- missing evidence returns `404`.
+
+Legacy runs without a canonical `agentId` / revision binding cannot produce run-derived learning and return `409 Conflict`.
+
+Request:
+
+```json
+{
+  "targetKind": "memory",
+  "candidate": "Run the focused regression test before broad verification.",
+  "rationale": "The failed evaluation identified a missing verification step.",
+  "sourceObservationIds": ["obs_..."],
+  "sourceEvaluationIds": ["eval_..."],
+  "supersedesNoteId": "note_..."
+}
+```
+
+The response is a normal `Promotion` with:
+- `status: "proposed"`,
+- `agentId` derived from the run,
+- `sourceRunIds` containing exactly the originating run,
+- validated observation/evaluation lineage.
+
+This endpoint does not mutate canonical memory or knowledge. It only enters the existing explicit promotion workflow:
+
+```text
+run
+ -> observation/evaluation evidence
+ -> proposed promotion
+ -> approve/reject
+ -> commit to canonical Markdown
+ -> future context compilation
+```
+
 ## GET /promotions
 
 No auth. Lists evidence-backed promotion records. With no query parameters, returns only `proposed` records (the pending review queue), newest first.
@@ -556,4 +601,4 @@ every client and the server now produce.
   `contract.VaultStatus` (`isVault`, not `isOpen`) and the Wails
   frontend checks `vaultStatus?.isVault`.
 
-All endpoints are now aligned across server, tests, and clients, including durable agent-state reads/writes, deterministic context compilation, context-bound run recording, and `/runs/{id}/audit` provenance reads.
+All endpoints are now aligned across server, tests, and clients, including durable agent-state reads/writes, deterministic context compilation, context-bound run recording, run audit provenance, and reviewable run-derived learning proposals.
