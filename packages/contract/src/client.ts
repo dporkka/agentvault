@@ -14,6 +14,7 @@ import type {
   CommitPromotionRequest,
   ContextCompileRequest,
   ContextSnapshot,
+  CreateRunRequest,
   CreateEvaluationCaseRequest,
   CreateEvaluationDatasetRequest,
   CreateExperimentRequest,
@@ -39,6 +40,8 @@ import type {
   PromotionParams,
   ProposePromotionRequest,
   ReviewPromotionRequest,
+  RunAudit,
+  RunRecord,
   RecentParams,
   SearchParams,
   SearchResult,
@@ -122,6 +125,8 @@ export interface ApiClient {
   createExperimentResult(experimentId: string, req: CreateExperimentResultRequest): Promise<ExperimentResult>;
   compileContext(agentId: string, req: ContextCompileRequest): Promise<ContextSnapshot>;
   getContextSnapshot(hash: string): Promise<ContextSnapshot>;
+  createRun(req: CreateRunRequest): Promise<RunRecord>;
+  getRunAudit(id: string): Promise<RunAudit>;
   pinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
   unpinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
 }
@@ -308,6 +313,12 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     },
     getContextSnapshot(hash) {
       return call<ContextSnapshot>('GET', `/contexts/${encodeURIComponent(hash)}`, undefined, false);
+    },
+    createRun(req) {
+      return call<RunRecord>('POST', '/runs', req);
+    },
+    getRunAudit(id) {
+      return call<RunAudit>('GET', `/runs/${encodeURIComponent(id)}/audit`, undefined, false);
     },
     pinNote(id) {
       return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/pin`, undefined, true);
