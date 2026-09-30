@@ -47,6 +47,9 @@ func TestEvaluateRetrievalAggregatesRecallLeakageProvenanceOrderingAndEfficiency
 	if len(result.OrderViolations) != 0 {
 		t.Fatalf("unexpected ordering violations %+v", result.OrderViolations)
 	}
+	if result.PreferenceAccuracy != 1 || report.MeanPreferenceAccuracy != 1 {
+		t.Fatalf("unexpected preference accuracy result=%f report=%f", result.PreferenceAccuracy, report.MeanPreferenceAccuracy)
+	}
 	if math.Abs(result.TokenUtilization-0.4) > 0.000001 {
 		t.Fatalf("unexpected token utilization %f", result.TokenUtilization)
 	}
@@ -91,7 +94,32 @@ func TestEvaluateRetrievalPassesPerfectCase(t *testing.T) {
 	if !report.Passed || !report.Cases[0].Passed {
 		t.Fatalf("perfect evaluation should pass: %+v", report)
 	}
-	if report.MacroRecall != 1 || report.TotalLeakage != 0 || report.MacroProvenanceCoverage != 1 {
+	if report.MacroRecall != 1 || report.TotalLeakage != 0 || report.MacroProvenanceCoverage != 1 || report.MeanPreferenceAccuracy != 1 {
 		t.Fatalf("unexpected aggregate metrics: %+v", report)
+	}
+}
+
+func TestEvaluateRetrievalCountsMissingPreferenceAsViolation(t *testing.T) {
+	report := EvaluateRetrieval([]RetrievalEvaluationCase{{
+		Name: "missing preferred item",
+		Bundle: contract.ContextBundle{
+			TokenBudget:     100,
+			EstimatedTokens: 10,
+			Items:           []contract.ContextItem{{ID: "lower"}},
+		},
+		Expect: RetrievalExpectation{
+			PreferredBefore: []RankingPreference{{HigherID: "missing", LowerID: "lower"}},
+		},
+	}})
+
+	result := report.Cases[0]
+	if result.PreferenceAccuracy != 0 {
+		t.Fatalf("missing preferred candidate must score zero accuracy, got %f", result.PreferenceAccuracy)
+	}
+	if len(result.OrderViolations) != 1 {
+		t.Fatalf("expected one preference violation, got %+v", result.OrderViolations)
+	}
+	if report.Passed {
+		t.Fatal("missing preferred candidate must fail evaluation")
 	}
 }
