@@ -198,6 +198,7 @@ The server prints an auth token at startup. `GET` endpoints are open locally; wr
 | `GET /contexts/{hash}` | Retrieve an immutable compiled context snapshot |
 | `POST /runs` | Record a runtime execution bound to an optional immutable context snapshot |
 | `GET /runs/{id}/audit` | Retrieve a run with context provenance, observations, and evaluations |
+| `GET /runs/{id}/learning-recommendation` | Inspect deterministic failure signals and explicit evaluator learning hints |
 | `POST /runs/{id}/learning-candidates` | Create a reviewable promotion proposal derived from one run |
 
 For the full contract, including exact request/response shapes, auth rules, CORS policy, and rate limits, see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
@@ -240,6 +241,7 @@ Registered tools:
 - `agentvault.compile_context`
 - `agentvault.get_context_snapshot`
 - `agentvault.get_run_audit`
+- `agentvault.get_learning_recommendation`
 - `agentvault.propose_run_learning`
 - `agentvault.ask`
 
