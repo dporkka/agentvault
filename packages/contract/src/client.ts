@@ -41,6 +41,7 @@ import type {
   ProposePromotionRequest,
   ReviewPromotionRequest,
   RunAudit,
+  RunLearningCandidateRequest,
   RunRecord,
   RecentParams,
   SearchParams,
@@ -127,6 +128,7 @@ export interface ApiClient {
   getContextSnapshot(hash: string): Promise<ContextSnapshot>;
   createRun(req: CreateRunRequest): Promise<RunRecord>;
   getRunAudit(id: string): Promise<RunAudit>;
+  proposeRunLearning(id: string, req: RunLearningCandidateRequest): Promise<Promotion>;
   pinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
   unpinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
 }
@@ -319,6 +321,9 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     },
     getRunAudit(id) {
       return call<RunAudit>('GET', `/runs/${encodeURIComponent(id)}/audit`, undefined, false);
+    },
+    proposeRunLearning(id, req) {
+      return call<Promotion>('POST', `/runs/${encodeURIComponent(id)}/learning-candidates`, req);
     },
     pinNote(id) {
       return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/pin`, undefined, true);
