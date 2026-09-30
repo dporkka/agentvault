@@ -1026,6 +1026,42 @@ func (s *Server) handleLogEvaluation(args map[string]interface{}) (string, error
 		id, runID, name, evaluator), nil
 }
 
+// --- Tool: agentvault.propose_run_learning ---
+
+func (s *Server) registerProposeRunLearning() {
+	s.tools["agentvault.propose_run_learning"] = Tool{
+		Name:        "agentvault.propose_run_learning",
+		Description: "Create a reviewable memory or knowledge promotion from one recorded run, deriving the agent identity and validating selected evidence lineage.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id":                 schemaString("Originating agent run ID"),
+			"target_kind":            schemaStringEnum("Promotion destination", []string{"memory", "knowledge"}),
+			"candidate":              schemaString("Candidate memory or knowledge text"),
+			"rationale":              schemaString("Why this run supports promotion"),
+			"source_observation_ids": schemaStringArray("Optional observations from the same run supporting the candidate"),
+			"source_evaluation_ids":  schemaStringArray("Optional evaluations from the same run supporting the candidate"),
+			"supersedes_note_id":     schemaString("Canonical note this candidate would supersede, if any"),
+		}, []string{"run_id", "target_kind", "candidate"}),
+		Handler: s.handleProposeRunLearning,
+	}
+}
+
+func (s *Server) handleProposeRunLearning(args map[string]interface{}) (string, error) {
+	record, err := agentstate.ProposeRunLearningCandidate(s.db, agentstate.RunLearningCandidate{
+		RunID:                stringArg(args, "run_id"),
+		TargetKind:           agentstate.PromotionTargetKind(stringArg(args, "target_kind")),
+		Candidate:            stringArg(args, "candidate"),
+		Rationale:            stringArg(args, "rationale"),
+		SourceObservationIDs: stringSliceArg(args, "source_observation_ids"),
+		SourceEvaluationIDs:  stringSliceArg(args, "source_evaluation_ids"),
+		SupersedesNoteID:     stringArg(args, "supersedes_note_id"),
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Run learning proposed: %s\n- **Run:** %s\n- **Agent:** %s\n- **Target:** %s\n- **Status:** %s",
+		record.ID, stringArg(args, "run_id"), record.AgentID, record.TargetKind, record.Status), nil
+}
+
 // --- Tool: agentvault.propose_promotion ---
 
 func (s *Server) registerProposePromotion() {
