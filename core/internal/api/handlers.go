@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1574,4 +1575,260 @@ func (s *Server) handleExperiment(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+
+// ── Agent State Writes ───────────────────────────────────────────────
+
+func writeAgentStateError(w http.ResponseWriter, summary string, err error) {
+	status := http.StatusInternalServerError
+	switch {
+	case errors.Is(err, agentstate.ErrInvalid):
+		status = http.StatusBadRequest
+	case errors.Is(err, agentstate.ErrNotFound):
+		status = http.StatusNotFound
+	case errors.Is(err, agentstate.ErrConflict):
+		status = http.StatusConflict
+	case errors.Is(err, agentstate.ErrStorage):
+		status = http.StatusInternalServerError
+	}
+	writeJSON(w, status, map[string]interface{}{"error": summary, "detail": err.Error()})
+}
+
+func promotionResponse(item *agentstate.PromotionRecord) contract.Promotion {
+	return contract.Promotion{
+		ID:                   item.ID,
+		AgentID:              item.AgentID,
+		TargetKind:           string(item.TargetKind),
+		Status:               string(item.Status),
+		Candidate:            item.Candidate,
+		Rationale:            item.Rationale,
+		SourceRunIDs:         item.SourceRunIDs,
+		SourceObservationIDs: item.SourceObservationIDs,
+		SourceEvaluationIDs:  item.SourceEvaluationIDs,
+		TargetNoteID:         item.TargetNoteID,
+		SupersedesNoteID:     item.SupersedesNoteID,
+		CreatedAt:            item.CreatedAt,
+		ReviewedAt:           item.ReviewedAt,
+		ReviewedBy:           item.ReviewedBy,
+		ReviewNote:           item.ReviewNote,
+		CommittedAt:          item.CommittedAt,
+	}
+}
+
+func evaluationDatasetResponse(item *agentstate.EvaluationDataset) contract.EvaluationDataset {
+	return contract.EvaluationDataset{
+		ID: item.ID, Name: item.Name, Description: item.Description,
+		AgentID: item.AgentID, CreatedAt: item.CreatedAt,
+	}
+}
+
+func evaluationCaseResponse(item *agentstate.EvaluationCase) contract.EvaluationCase {
+	return contract.EvaluationCase{
+		ID: item.ID, DatasetID: item.DatasetID, Name: item.Name,
+		Input: item.Input, Expected: item.Expected, Tags: item.Tags, CreatedAt: item.CreatedAt,
+	}
+}
+
+func experimentResponse(item *agentstate.Experiment) contract.Experiment {
+	return contract.Experiment{
+		ID: item.ID, DatasetID: item.DatasetID, Name: item.Name,
+		AgentID: item.AgentID, AgentRevision: item.AgentRevision,
+		Status: string(item.Status), Config: item.Config,
+		CreatedAt: item.CreatedAt, CompletedAt: item.CompletedAt,
+	}
+}
+
+func experimentResultResponse(item *agentstate.ExperimentResult) contract.ExperimentResult {
+	return contract.ExperimentResult{
+		ExperimentID: item.ExperimentID, CaseID: item.CaseID, RunID: item.RunID,
+		Score: item.Score, Label: item.Label, Metadata: item.Metadata, CreatedAt: item.CreatedAt,
+	}
+}
+
+func (s *Server) handleProposePromotion(w http.ResponseWriter, r *http.Request) {
+	var req contract.ProposePromotionRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.ProposePromotion(s.db, agentstate.PromotionRecord{
+		AgentID:              req.AgentID,
+		TargetKind:           agentstate.PromotionTargetKind(req.TargetKind),
+		Candidate:            req.Candidate,
+		Rationale:            req.Rationale,
+		SourceRunIDs:         req.SourceRunIDs,
+		SourceObservationIDs: req.SourceObservationIDs,
+		SourceEvaluationIDs:  req.SourceEvaluationIDs,
+		SupersedesNoteID:     req.SupersedesNoteID,
+	})
+	if err != nil {
+		writeAgentStateError(w, "promotion proposal failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, promotionResponse(item))
+}
+
+func (s *Server) handleReviewPromotion(w http.ResponseWriter, r *http.Request) {
+	var req contract.ReviewPromotionRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	var decision agentstate.PromotionStatus
+	switch req.Decision {
+	case "approve":
+		decision = agentstate.PromotionApproved
+	case "reject":
+		decision = agentstate.PromotionRejected
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid review decision", "detail": "decision must be approve or reject"})
+		return
+	}
+
+	item, err := agentstate.ReviewPromotion(s.db, r.PathValue("id"), decision, req.Reviewer, req.Note)
+	if err != nil {
+		writeAgentStateError(w, "promotion review failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, promotionResponse(item))
+}
+
+func (s *Server) handleCommitPromotion(w http.ResponseWriter, r *http.Request) {
+	var req contract.CommitPromotionRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	promotionID := r.PathValue("id")
+	item, err := agentstate.GetPromotion(s.db, promotionID)
+	if err != nil {
+		writeAgentStateError(w, "promotion lookup failed", err)
+		return
+	}
+	if req.TargetNoteID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": "targetNoteId is required"})
+		return
+	}
+
+	note, err := s.searcher.GetByID(req.TargetNoteID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]interface{}{"error": "target note not found", "detail": err.Error()})
+		return
+	}
+	fullPath := filepath.Join(s.vaultPath, note.Path)
+	absFull, err := filepath.Abs(fullPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "failed to resolve target note", "detail": err.Error()})
+		return
+	}
+	absVault, err := filepath.Abs(s.vaultPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "failed to resolve vault", "detail": err.Error()})
+		return
+	}
+	clean := filepath.Clean(absFull)
+	vaultClean := filepath.Clean(absVault)
+	if !strings.HasPrefix(clean, vaultClean+string(filepath.Separator)) && clean != vaultClean {
+		writeJSON(w, http.StatusForbidden, map[string]interface{}{"error": "path traversal detected"})
+		return
+	}
+	doc, err := markdown.ParseFile(clean)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "target note is not readable canonical Markdown", "detail": err.Error()})
+		return
+	}
+	if !strings.Contains(doc.Body, item.Candidate) {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "target note does not contain promotion candidate text"})
+		return
+	}
+
+	committed, err := agentstate.CommitPromotion(s.db, promotionID, req.TargetNoteID)
+	if err != nil {
+		writeAgentStateError(w, "promotion commit failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, promotionResponse(committed))
+}
+
+func (s *Server) handleCreateEvaluationDataset(w http.ResponseWriter, r *http.Request) {
+	var req contract.CreateEvaluationDatasetRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.CreateEvaluationDataset(s.db, agentstate.EvaluationDataset{
+		Name: req.Name, Description: req.Description, AgentID: req.AgentID,
+	})
+	if err != nil {
+		writeAgentStateError(w, "evaluation dataset creation failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, evaluationDatasetResponse(item))
+}
+
+func (s *Server) handleCreateEvaluationCase(w http.ResponseWriter, r *http.Request) {
+	var req contract.CreateEvaluationCaseRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.AddEvaluationCase(s.db, agentstate.EvaluationCase{
+		DatasetID: r.PathValue("id"),
+		Name:      req.Name,
+		Input:     req.Input,
+		Expected:  req.Expected,
+		Tags:      req.Tags,
+	})
+	if err != nil {
+		writeAgentStateError(w, "evaluation case creation failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, evaluationCaseResponse(item))
+}
+
+func (s *Server) handleRecordExperiment(w http.ResponseWriter, r *http.Request) {
+	var req contract.CreateExperimentRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.RecordExperiment(s.db, agentstate.Experiment{
+		DatasetID: req.DatasetID, Name: req.Name,
+		AgentID: req.AgentID, AgentRevision: req.AgentRevision,
+		Status: agentstate.ExperimentStatus(req.Status), Config: req.Config,
+	})
+	if err != nil {
+		writeAgentStateError(w, "experiment recording failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, experimentResponse(item))
+}
+
+func (s *Server) handleRecordExperimentResult(w http.ResponseWriter, r *http.Request) {
+	var req contract.CreateExperimentResultRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.RecordExperimentResult(s.db, agentstate.ExperimentResult{
+		ExperimentID: r.PathValue("id"),
+		CaseID:       req.CaseID,
+		RunID:        req.RunID,
+		Score:        req.Score,
+		Label:        req.Label,
+		Metadata:     req.Metadata,
+	})
+	if err != nil {
+		writeAgentStateError(w, "experiment result recording failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, experimentResultResponse(item))
 }
