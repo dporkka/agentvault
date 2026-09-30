@@ -629,6 +629,311 @@ func TestHandleProposePromotion_RequiresEvidence(t *testing.T) {
 	}
 }
 
+
+func TestHandleReviewPromotionApprove(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO promotion_records (
+			id, agent_id, target_kind, status, candidate,
+			source_observation_ids_json, created_at
+		) VALUES ('promo_review_1', 'agt_1', 'memory', 'proposed', 'Prefer focused tests.', '["obs_1"]', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed promotion: %v", err)
+	}
+
+	result, err := s.handleReviewPromotion(map[string]interface{}{
+		"promotion_id": "promo_review_1",
+		"decision":     "approve",
+		"reviewer":     "human:david",
+		"note":         "Evidence is consistent.",
+	})
+	if err != nil {
+		t.Fatalf("handleReviewPromotion error: %v", err)
+	}
+	if !strings.Contains(result, "approved") {
+		t.Fatalf("expected approved result, got:\n%s", result)
+	}
+
+	var status, reviewer, note string
+	var reviewedAt interface{}
+	if err := db.QueryRow(`
+		SELECT status, reviewed_by, review_note, reviewed_at
+		FROM promotion_records WHERE id = 'promo_review_1'
+	`).Scan(&status, &reviewer, &note, &reviewedAt); err != nil {
+		t.Fatalf("query reviewed promotion: %v", err)
+	}
+	if status != "approved" || reviewer != "human:david" || note != "Evidence is consistent." || reviewedAt == nil {
+		t.Fatalf("unexpected review state: status=%s reviewer=%s note=%s reviewedAt=%v", status, reviewer, note, reviewedAt)
+	}
+}
+
+func TestHandleReviewPromotionRejectsInvalidTransition(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO promotion_records (
+			id, agent_id, target_kind, status, candidate,
+			source_observation_ids_json, created_at
+		) VALUES ('promo_review_2', 'agt_1', 'memory', 'committed', 'Already done.', '["obs_1"]', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed promotion: %v", err)
+	}
+
+	_, err := s.handleReviewPromotion(map[string]interface{}{
+		"promotion_id": "promo_review_2",
+		"decision":     "approve",
+		"reviewer":     "human:david",
+	})
+	if err == nil || !strings.Contains(err.Error(), "transition") {
+		t.Fatalf("expected invalid transition error, got %v", err)
+	}
+}
+
+func TestHandleCommitPromotionRequiresCanonicalContent(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	candidate := "Prefer focused tests."
+	if _, err := db.Exec(`
+		INSERT INTO promotion_records (
+			id, agent_id, target_kind, status, candidate,
+			source_observation_ids_json, created_at, reviewed_at
+		) VALUES ('promo_commit_1', 'agt_1', 'memory', 'approved', ?, '["obs_1"]', datetime('now'), datetime('now'))
+	`, candidate); err != nil {
+		t.Fatalf("seed promotion: %v", err)
+	}
+
+	addTestNote(t, db, "note_memory_1", "Agent memory", "10-notes/agent-memory.md", "note", "", candidate, []string{"agent-memory"})
+	fullPath := filepath.Join(s.vaultPath, "10-notes", "agent-memory.md")
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		t.Fatalf("create note dir: %v", err)
+	}
+	if err := os.WriteFile(fullPath, []byte("---\nid: note_memory_1\ntype: note\ntitle: Agent memory\n---\n\n"+candidate+"\n"), 0644); err != nil {
+		t.Fatalf("write canonical note: %v", err)
+	}
+
+	result, err := s.handleCommitPromotion(map[string]interface{}{
+		"promotion_id": "promo_commit_1",
+		"target_note_id": "note_memory_1",
+	})
+	if err != nil {
+		t.Fatalf("handleCommitPromotion error: %v", err)
+	}
+	if !strings.Contains(result, "committed") {
+		t.Fatalf("expected committed result, got:\n%s", result)
+	}
+
+	var status, targetNote string
+	var committedAt interface{}
+	if err := db.QueryRow(`
+		SELECT status, target_note_id, committed_at
+		FROM promotion_records WHERE id = 'promo_commit_1'
+	`).Scan(&status, &targetNote, &committedAt); err != nil {
+		t.Fatalf("query committed promotion: %v", err)
+	}
+	if status != "committed" || targetNote != "note_memory_1" || committedAt == nil {
+		t.Fatalf("unexpected commit state: status=%s target=%s committedAt=%v", status, targetNote, committedAt)
+	}
+}
+
+func TestHandleCommitPromotionRejectsMissingCandidateContent(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO promotion_records (
+			id, agent_id, target_kind, status, candidate,
+			source_observation_ids_json, created_at, reviewed_at
+		) VALUES ('promo_commit_2', 'agt_1', 'memory', 'approved', 'Required memory text.', '["obs_1"]', datetime('now'), datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed promotion: %v", err)
+	}
+
+	addTestNote(t, db, "note_memory_2", "Agent memory", "10-notes/agent-memory-2.md", "note", "", "Different text.", nil)
+	fullPath := filepath.Join(s.vaultPath, "10-notes", "agent-memory-2.md")
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		t.Fatalf("create note dir: %v", err)
+	}
+	if err := os.WriteFile(fullPath, []byte("---\nid: note_memory_2\ntype: note\ntitle: Agent memory\n---\n\nDifferent text.\n"), 0644); err != nil {
+		t.Fatalf("write canonical note: %v", err)
+	}
+
+	_, err := s.handleCommitPromotion(map[string]interface{}{
+		"promotion_id": "promo_commit_2",
+		"target_note_id": "note_memory_2",
+	})
+	if err == nil || !strings.Contains(err.Error(), "candidate") {
+		t.Fatalf("expected candidate content error, got %v", err)
+	}
+}
+
+func TestHandleCreateEvaluationDataset(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	result, err := s.handleCreateEvaluationDataset(map[string]interface{}{
+		"name":        "Golden path",
+		"description": "Core agent behavior",
+		"agent_id":    "agt_1",
+	})
+	if err != nil {
+		t.Fatalf("handleCreateEvaluationDataset error: %v", err)
+	}
+	if !strings.Contains(result, "Golden path") {
+		t.Fatalf("expected dataset name in result, got:\n%s", result)
+	}
+
+	var name, agentID string
+	if err := db.QueryRow(`
+		SELECT name, agent_id FROM evaluation_datasets WHERE name = 'Golden path'
+	`).Scan(&name, &agentID); err != nil {
+		t.Fatalf("query dataset: %v", err)
+	}
+	if name != "Golden path" || agentID != "agt_1" {
+		t.Fatalf("unexpected dataset: name=%s agent=%s", name, agentID)
+	}
+}
+
+func TestHandleAddEvaluationCase(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO evaluation_datasets (id, name, created_at)
+		VALUES ('ds_1', 'Golden path', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed dataset: %v", err)
+	}
+
+	result, err := s.handleAddEvaluationCase(map[string]interface{}{
+		"dataset_id":    "ds_1",
+		"name":          "Create note",
+		"input_json":    `{"prompt":"create a note"}`,
+		"expected_json": `{"type":"note"}`,
+		"tags":          []interface{}{"golden", "notes"},
+	})
+	if err != nil {
+		t.Fatalf("handleAddEvaluationCase error: %v", err)
+	}
+	if !strings.Contains(result, "Create note") {
+		t.Fatalf("expected case name in result, got:\n%s", result)
+	}
+
+	var inputJSON, expectedJSON, tagsJSON string
+	if err := db.QueryRow(`
+		SELECT input_json, expected_json, tags_json
+		FROM evaluation_cases WHERE dataset_id = 'ds_1'
+	`).Scan(&inputJSON, &expectedJSON, &tagsJSON); err != nil {
+		t.Fatalf("query evaluation case: %v", err)
+	}
+	if inputJSON != `{"prompt":"create a note"}` || expectedJSON != `{"type":"note"}` || tagsJSON != `["golden","notes"]` {
+		t.Fatalf("unexpected case payloads: input=%s expected=%s tags=%s", inputJSON, expectedJSON, tagsJSON)
+	}
+}
+
+func TestHandleRecordExperimentAndResult(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO evaluation_datasets (id, name, created_at)
+		VALUES ('ds_exp_1', 'Golden path', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed dataset: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO evaluation_cases (id, dataset_id, name, input_json, created_at)
+		VALUES ('case_exp_1', 'ds_exp_1', 'Create note', '{"prompt":"create"}', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed case: %v", err)
+	}
+
+	experimentResult, err := s.handleRecordExperiment(map[string]interface{}{
+		"dataset_id":     "ds_exp_1",
+		"name":           "baseline",
+		"agent_id":       "agt_1",
+		"agent_revision": float64(2),
+		"status":         "completed",
+		"config_json":    `{"model":"test"}`,
+	})
+	if err != nil {
+		t.Fatalf("handleRecordExperiment error: %v", err)
+	}
+	if !strings.Contains(experimentResult, "baseline") {
+		t.Fatalf("expected experiment name in result, got:\n%s", experimentResult)
+	}
+
+	var experimentID string
+	if err := db.QueryRow(`
+		SELECT id FROM experiments WHERE dataset_id = 'ds_exp_1' AND name = 'baseline'
+	`).Scan(&experimentID); err != nil {
+		t.Fatalf("query experiment: %v", err)
+	}
+
+	result, err := s.handleRecordExperimentResult(map[string]interface{}{
+		"experiment_id": experimentID,
+		"case_id":       "case_exp_1",
+		"score":         float64(0.9),
+		"label":         "pass",
+		"metadata_json": `{"latency_ms":42}`,
+	})
+	if err != nil {
+		t.Fatalf("handleRecordExperimentResult error: %v", err)
+	}
+	if !strings.Contains(result, "case_exp_1") {
+		t.Fatalf("expected case id in result, got:\n%s", result)
+	}
+
+	var score float64
+	var label string
+	if err := db.QueryRow(`
+		SELECT score, label FROM experiment_results
+		WHERE experiment_id = ? AND case_id = 'case_exp_1'
+	`, experimentID).Scan(&score, &label); err != nil {
+		t.Fatalf("query experiment result: %v", err)
+	}
+	if score != 0.9 || label != "pass" {
+		t.Fatalf("unexpected experiment result: score=%v label=%s", score, label)
+	}
+}
+
+func TestHandleRecordExperimentResultRejectsCaseFromOtherDataset(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO evaluation_datasets (id, name, created_at) VALUES
+		('ds_a', 'A', datetime('now')),
+		('ds_b', 'B', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed datasets: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO evaluation_cases (id, dataset_id, name, input_json, created_at)
+		VALUES ('case_b', 'ds_b', 'B case', '{}', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed case: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO experiments (id, dataset_id, name, agent_id, agent_revision, status, config_json, created_at)
+		VALUES ('exp_a', 'ds_a', 'A exp', 'agt_1', 1, 'completed', '{}', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed experiment: %v", err)
+	}
+
+	_, err := s.handleRecordExperimentResult(map[string]interface{}{
+		"experiment_id": "exp_a",
+		"case_id":       "case_b",
+		"label":         "pass",
+	})
+	if err == nil || !strings.Contains(err.Error(), "dataset") {
+		t.Fatalf("expected dataset mismatch error, got %v", err)
+	}
+}
+
 func TestSanitizeFilename(t *testing.T) {
 	cases := []struct {
 		input    string
