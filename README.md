@@ -15,7 +15,7 @@ AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The sam
 
 - **Files first.** Markdown is the durable source of truth; the SQLite index can be rebuilt at any time.
 - **Local by default.** The CLI, HTTP API, and desktop app run on your machine.
-- **Durable agent state.** Canonical agent manifests, structured run evidence, explicit promotion review/commit, and reproducible evaluation datasets persist across runtimes without making AgentVault an execution engine.
+- **Durable agent state.** Canonical agent manifests, deterministic context snapshots, structured run evidence, explicit promotion review/commit, and reproducible evaluation datasets persist across runtimes without making AgentVault an execution engine.
 - **One shared contract.** Go and TypeScript clients share a single API contract so server and clients stay in sync. See [`packages/contract/`](packages/contract/) and [`core/internal/contract/`](core/internal/contract/).
 
 ## Table of Contents
@@ -194,6 +194,8 @@ The server prints an auth token at startup. `GET` endpoints are open locally; wr
 | `GET /experiments/{id}` | Fetch an experiment with its recorded results |
 | `POST /experiments` | Record an externally executed experiment |
 | `POST /experiments/{id}/results` | Record a case-level experiment result |
+| `POST /agents/{id}/context` | Compile and persist deterministic context for an agent |
+| `GET /contexts/{hash}` | Retrieve an immutable compiled context snapshot |
 
 For the full contract, including exact request/response shapes, auth rules, CORS policy, and rate limits, see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
 
@@ -232,6 +234,8 @@ Registered tools:
 - `agentvault.list_promotions`
 - `agentvault.get_evaluation_dataset`
 - `agentvault.get_experiment`
+- `agentvault.compile_context`
+- `agentvault.get_context_snapshot`
 - `agentvault.ask`
 
 ## Clients
