@@ -1622,6 +1622,66 @@ func (s *Server) handleGetEvaluationDataset(args map[string]interface{}) (string
 	return sb.String(), nil
 }
 
+// --- Tool: agentvault.compare_experiments ---
+
+func (s *Server) registerCompareExperiments() {
+	s.tools["agentvault.compare_experiments"] = Tool{
+		Name:        "agentvault.compare_experiments",
+		Description: "Compare two persisted experiments for the same dataset and agent. Reports explicit pass/fail transitions and raw score deltas without executing evaluations or interpreting score polarity.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"baseline_experiment_id":  schemaString("Baseline experiment ID"),
+			"candidate_experiment_id": schemaString("Candidate experiment ID"),
+		}, []string{"baseline_experiment_id", "candidate_experiment_id"}),
+		Handler: s.handleCompareExperiments,
+	}
+}
+
+func (s *Server) handleCompareExperiments(args map[string]interface{}) (string, error) {
+	comparison, err := agentstate.CompareExperiments(
+		s.db,
+		stringArg(args, "baseline_experiment_id"),
+		stringArg(args, "candidate_experiment_id"),
+	)
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Experiment Comparison\n\n")
+	sb.WriteString(fmt.Sprintf("- **Baseline:** %s (agent revision %d)\n", comparison.BaselineExperimentID, comparison.BaselineAgentRevision))
+	sb.WriteString(fmt.Sprintf("- **Candidate:** %s (agent revision %d)\n", comparison.CandidateExperimentID, comparison.CandidateAgentRevision))
+	sb.WriteString(fmt.Sprintf("- **Dataset:** %s\n", comparison.DatasetID))
+	sb.WriteString(fmt.Sprintf("- **Agent:** %s\n", comparison.AgentID))
+	sb.WriteString(fmt.Sprintf("- **Comparable:** %t\n", comparison.Comparable))
+	if len(comparison.ReasonCodes) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Reasons:** %s\n", strings.Join(comparison.ReasonCodes, ", ")))
+	}
+
+	sb.WriteString("\n## Summary\n\n")
+	sb.WriteString(fmt.Sprintf("- **Cases:** %d\n", comparison.Summary.TotalCases))
+	sb.WriteString(fmt.Sprintf("- **Paired results:** %d\n", comparison.Summary.PairedResults))
+	sb.WriteString(fmt.Sprintf("- **Fixes:** %d\n", comparison.Summary.Fixes))
+	sb.WriteString(fmt.Sprintf("- **Regressions:** %d\n", comparison.Summary.Regressions))
+	sb.WriteString(fmt.Sprintf("- **Stable pass:** %d\n", comparison.Summary.StablePass))
+	sb.WriteString(fmt.Sprintf("- **Stable fail:** %d\n", comparison.Summary.StableFail))
+	sb.WriteString(fmt.Sprintf("- **Unclassified:** %d\n", comparison.Summary.Unclassified))
+	sb.WriteString(fmt.Sprintf("- **Missing baseline:** %d\n", comparison.Summary.MissingBaseline))
+	sb.WriteString(fmt.Sprintf("- **Missing candidate:** %d\n", comparison.Summary.MissingCandidate))
+
+	sb.WriteString("\n## Cases\n\n")
+	for _, item := range comparison.Cases {
+		sb.WriteString(fmt.Sprintf("- **%s** (%s): %s", item.CaseName, item.CaseID, item.Transition))
+		if item.BaselineLabel != "" || item.CandidateLabel != "" {
+			sb.WriteString(fmt.Sprintf(" [%s → %s]", item.BaselineLabel, item.CandidateLabel))
+		}
+		if item.ScoreDelta != nil {
+			sb.WriteString(fmt.Sprintf(" score_delta=%g", *item.ScoreDelta))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
 // --- Tool: agentvault.get_experiment ---
 
 func (s *Server) registerGetExperiment() {
