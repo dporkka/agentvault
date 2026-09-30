@@ -394,3 +394,43 @@ All endpoints are now aligned across server, tests, and clients:
 `/health`, `/auth/verify`, `/vault/status`, `/vault/index`, `/search`,
 `/notes/{id}`, `/notes` (POST), `/capture`, `/ask`, `/projects`, `/recent`,
 `/stale`, and `/git/status`.
+
+
+## Activity timeline
+
+### `GET /timeline`
+
+Returns a newest-first activity stream derived from existing canonical sources.
+The timeline does not introduce another source of truth: captures remain
+Markdown-backed, while structured machine-authored memories, episodes, and
+session events remain journal-backed.
+
+Query parameters:
+
+- `project` — restrict to activity attributable to one project.
+- `agentId` — restrict to agent- or session-attributed activity.
+- `sessionId` — restrict to one durable agent session.
+- `kind` — one of `capture`, `session_event`, `episode`, or `memory`.
+- `since` / `until` — inclusive RFC3339 activity-time bounds.
+- `limit` — defaults to 100 and is capped at 500.
+
+Each item has a stable normalized envelope:
+
+```json
+{
+  "kind": "episode",
+  "id": "episode_...",
+  "summary": "Architecture changed",
+  "project": "agentvault",
+  "eventType": "architecture.changed",
+  "objectIds": ["obj_..."],
+  "provenanceId": "prov_...",
+  "occurredAt": "2026-09-30T12:00:00Z",
+  "createdAt": "2026-09-30T12:01:00Z",
+  "metadata": {}
+}
+```
+
+`occurredAt` is the event/activity ordering clock. For episodes it is the
+domain occurrence time; for captures, memories, and session events it is their
+creation time. Ties are deterministic.
