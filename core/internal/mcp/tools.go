@@ -12,9 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/agentstate"
 	"github.com/agentvault/core/internal/ai"
-	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/config"
+	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
 	"github.com/agentvault/core/internal/rag"
@@ -803,11 +804,22 @@ func (s *Server) handleGitStatus(args map[string]interface{}) (string, error) {
 func (s *Server) registerLogAgentRun() {
 	s.tools["agentvault.log_agent_run"] = Tool{
 		Name:        "agentvault.log_agent_run",
-		Description: "Log an agent run to the vault history. Records what the agent did for audit purposes.",
+		Description: "Log a structured agent run. AgentVault records execution evidence but does not execute the agent.",
 		InputSchema: makeSchema(map[string]interface{}{
-			"agent_name":    schemaString("Name of the agent that ran"),
-			"task":          schemaString("Description of the task performed"),
-			"files_changed": schemaStringArray("List of files changed during the run"),
+			"agent_name":               schemaString("Human-readable name of the agent that ran"),
+			"agent_id":                 schemaString("Canonical AgentVault agent manifest ID (optional for legacy callers)"),
+			"agent_revision":           schemaInt("Immutable agent manifest revision; required when agent_id is supplied", 0),
+			"task":                     schemaString("Description of the task performed"),
+			"status":                   schemaStringEnum("Run status", []string{"running", "succeeded", "failed", "cancelled"}),
+			"conversation_id":          schemaString("Conversation/session ID associated with this run"),
+			"context_hash":             schemaString("Hash of the compiled context used for this run"),
+			"input_json":               schemaString("JSON object describing run inputs"),
+			"output_json":              schemaString("JSON object describing run outputs"),
+			"capability_snapshot_json": schemaString("JSON object describing capability grants at execution time"),
+			"runtime_metadata_json":    schemaString("JSON object describing runtime/model/application revisions"),
+			"started_at":               schemaString("RFC3339 run start timestamp"),
+			"ended_at":                 schemaString("RFC3339 run end timestamp"),
+			"files_changed":            schemaStringArray("List of files changed during the run"),
 		}, []string{"agent_name", "task"}),
 		Handler: s.handleLogAgentRun,
 	}
@@ -815,30 +827,301 @@ func (s *Server) registerLogAgentRun() {
 
 func (s *Server) handleLogAgentRun(args map[string]interface{}) (string, error) {
 	agentName := stringArg(args, "agent_name")
+	agentID := stringArg(args, "agent_id")
+	agentRevision := intArg(args, "agent_revision", 0)
 	task := stringArg(args, "task")
+	status := stringArg(args, "status")
+	conversationID := stringArg(args, "conversation_id")
+	contextHash := stringArg(args, "context_hash")
+	startedAt := stringArg(args, "started_at")
+	endedAt := stringArg(args, "ended_at")
 	filesChanged := stringSliceArg(args, "files_changed")
 
 	if agentName == "" || task == "" {
 		return "", fmt.Errorf("agent_name and task are required")
 	}
+	if status == "" {
+		status = string(agentstate.RunSucceeded)
+	}
+	if agentID != "" && agentRevision < 1 {
+		return "", fmt.Errorf("agent_revision must be at least 1 when agent_id is supplied")
+	}
+	if agentID == "" && agentRevision > 0 {
+		return "", fmt.Errorf("agent_id is required when agent_revision is supplied")
+	}
+	switch agentstate.RunStatus(status) {
+	case agentstate.RunRunning, agentstate.RunSucceeded, agentstate.RunFailed, agentstate.RunCancelled:
+	default:
+		return "", fmt.Errorf("unknown run status %q", status)
+	}
 
-	id := fmt.Sprintf("run_%d", time.Now().Unix())
+	inputJSON, err := normalizedJSONObjectArg(args, "input_json")
+	if err != nil {
+		return "", err
+	}
+	outputJSON, err := normalizedJSONObjectArg(args, "output_json")
+	if err != nil {
+		return "", err
+	}
+	capabilityJSON, err := normalizedJSONObjectArg(args, "capability_snapshot_json")
+	if err != nil {
+		return "", err
+	}
+	runtimeJSON, err := normalizedJSONObjectArg(args, "runtime_metadata_json")
+	if err != nil {
+		return "", err
+	}
+
+	id := fmt.Sprintf("run_%d", time.Now().UnixNano())
 	now := currentTimestamp()
 	filesJSON, _ := json.Marshal(filesChanged)
+	if startedAt == "" {
+		startedAt = now
+	}
+	if status != string(agentstate.RunRunning) && endedAt == "" {
+		endedAt = now
+	}
 
-	_, err := s.db.Exec(
-		`INSERT INTO agent_runs (id, agent_name, task, input_json, output_json, files_changed_json, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		id, agentName, task,
-		"{}", "{}", string(filesJSON),
-		now,
+	_, err = s.db.Exec(
+		`INSERT INTO agent_runs (
+			id, agent_name, agent_id, agent_revision, task, status, conversation_id,
+			context_hash, input_json, output_json, capability_snapshot_json,
+			runtime_metadata_json, started_at, ended_at, files_changed_json, created_at
+		) VALUES (?, ?, ?, NULLIF(?, 0), ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?)`,
+		id, agentName, agentID, agentRevision, task, status, conversationID,
+		contextHash, inputJSON, outputJSON, capabilityJSON, runtimeJSON,
+		startedAt, endedAt, string(filesJSON), now,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to log agent run: %w", err)
 	}
 
-	return fmt.Sprintf("Logged agent run: %s\n- **Agent:** %s\n- **Task:** %s\n- **Files changed:** %d",
-		id, agentName, task, len(filesChanged)), nil
+	agentLabel := agentName
+	if agentID != "" {
+		agentLabel = fmt.Sprintf("%s@%d", agentID, agentRevision)
+	}
+	return fmt.Sprintf("Logged agent run: %s\n- **Agent:** %s\n- **Task:** %s\n- **Status:** %s\n- **Files changed:** %d",
+		id, agentLabel, task, status, len(filesChanged)), nil
+}
+
+// --- Tool: agentvault.log_observation ---
+
+func (s *Server) registerLogObservation() {
+	s.tools["agentvault.log_observation"] = Tool{
+		Name:        "agentvault.log_observation",
+		Description: "Record one structured step inside an existing agent run, such as context compilation, retrieval, generation, tool use, or artifact mutation.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id":                schemaString("Parent agent run ID"),
+			"parent_observation_id": schemaString("Optional parent observation ID for nested spans"),
+			"kind":                  schemaStringEnum("Observation kind", []string{"context.compile", "retrieval", "generation", "tool", "artifact.write", "event"}),
+			"name":                  schemaString("Stable operation name"),
+			"status":                schemaString("Runtime-defined observation status"),
+			"input_json":            schemaString("JSON object describing observation inputs"),
+			"output_json":           schemaString("JSON object describing observation outputs"),
+			"evidence_json":         schemaString("JSON object with source IDs, artifact refs, tool metadata, or other evidence"),
+			"started_at":            schemaString("RFC3339 observation start timestamp"),
+			"ended_at":              schemaString("RFC3339 observation end timestamp"),
+		}, []string{"run_id", "kind", "name"}),
+		Handler: s.handleLogObservation,
+	}
+}
+
+func (s *Server) handleLogObservation(args map[string]interface{}) (string, error) {
+	runID := stringArg(args, "run_id")
+	parentID := stringArg(args, "parent_observation_id")
+	kind := agentstate.ObservationKind(stringArg(args, "kind"))
+	name := stringArg(args, "name")
+	status := stringArg(args, "status")
+	startedAt := stringArg(args, "started_at")
+	endedAt := stringArg(args, "ended_at")
+
+	id := fmt.Sprintf("obs_%d", time.Now().UnixNano())
+	observation := agentstate.Observation{ID: id, RunID: runID, Kind: kind, Name: name}
+	if err := observation.Validate(); err != nil {
+		return "", err
+	}
+
+	inputJSON, err := normalizedJSONObjectArg(args, "input_json")
+	if err != nil {
+		return "", err
+	}
+	outputJSON, err := normalizedJSONObjectArg(args, "output_json")
+	if err != nil {
+		return "", err
+	}
+	evidenceJSON, err := normalizedJSONObjectArg(args, "evidence_json")
+	if err != nil {
+		return "", err
+	}
+	now := currentTimestamp()
+	if startedAt == "" {
+		startedAt = now
+	}
+
+	_, err = s.db.Exec(
+		`INSERT INTO run_observations (
+			id, run_id, parent_observation_id, kind, name, status,
+			input_json, output_json, evidence_json, started_at, ended_at, created_at
+		) VALUES (?, ?, NULLIF(?, ''), ?, ?, NULLIF(?, ''), ?, ?, ?, ?, NULLIF(?, ''), ?)`,
+		id, runID, parentID, string(kind), name, status,
+		inputJSON, outputJSON, evidenceJSON, startedAt, endedAt, now,
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to log observation: %w", err)
+	}
+
+	return fmt.Sprintf("Logged observation: %s\n- **Run:** %s\n- **Kind:** %s\n- **Name:** %s",
+		id, runID, kind, name), nil
+}
+
+// --- Tool: agentvault.log_evaluation ---
+
+func (s *Server) registerLogEvaluation() {
+	s.tools["agentvault.log_evaluation"] = Tool{
+		Name:        "agentvault.log_evaluation",
+		Description: "Attach a human, rule-based, or model-based evaluation to an agent run or observation.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id":         schemaString("Agent run being evaluated"),
+			"observation_id": schemaString("Optional observation being evaluated"),
+			"evaluator":      schemaString("Evaluator identity or type"),
+			"name":           schemaString("Evaluation dimension, such as correctness or groundedness"),
+			"score":          map[string]interface{}{"type": "number", "description": "Optional numeric score"},
+			"label":          schemaString("Optional categorical label"),
+			"rationale":      schemaString("Why this score or label was assigned"),
+			"metadata_json":  schemaString("JSON object with evaluator metadata"),
+		}, []string{"run_id", "evaluator", "name"}),
+		Handler: s.handleLogEvaluation,
+	}
+}
+
+func (s *Server) handleLogEvaluation(args map[string]interface{}) (string, error) {
+	runID := stringArg(args, "run_id")
+	observationID := stringArg(args, "observation_id")
+	evaluator := stringArg(args, "evaluator")
+	name := stringArg(args, "name")
+	label := stringArg(args, "label")
+	rationale := stringArg(args, "rationale")
+
+	var score *float64
+	if raw, ok := args["score"]; ok {
+		switch v := raw.(type) {
+		case float64:
+			score = &v
+		case int:
+			value := float64(v)
+			score = &value
+		default:
+			return "", fmt.Errorf("score must be numeric")
+		}
+	}
+
+	id := fmt.Sprintf("eval_%d", time.Now().UnixNano())
+	evaluation := agentstate.Evaluation{
+		ID: id, RunID: runID, ObservationID: observationID,
+		Evaluator: evaluator, Name: name, Score: score, Label: label, Rationale: rationale,
+	}
+	if err := evaluation.Validate(); err != nil {
+		return "", err
+	}
+	metadataJSON, err := normalizedJSONObjectArg(args, "metadata_json")
+	if err != nil {
+		return "", err
+	}
+
+	var scoreValue interface{}
+	if score != nil {
+		scoreValue = *score
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO evaluations (
+			id, run_id, observation_id, evaluator, name, score, label, rationale, metadata_json, created_at
+		) VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?)`,
+		id, runID, observationID, evaluator, name, scoreValue, label, rationale, metadataJSON, currentTimestamp(),
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to log evaluation: %w", err)
+	}
+
+	return fmt.Sprintf("Logged evaluation: %s\n- **Run:** %s\n- **Name:** %s\n- **Evaluator:** %s",
+		id, runID, name, evaluator), nil
+}
+
+// --- Tool: agentvault.propose_promotion ---
+
+func (s *Server) registerProposePromotion() {
+	s.tools["agentvault.propose_promotion"] = Tool{
+		Name:        "agentvault.propose_promotion",
+		Description: "Propose evidence-backed knowledge or memory for later review. This records lineage only; it does not create or mutate canonical notes.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"agent_id":               schemaString("Agent manifest ID that would receive the promoted state"),
+			"target_kind":            schemaStringEnum("Promotion destination", []string{"memory", "knowledge"}),
+			"candidate":              schemaString("Candidate memory or knowledge text"),
+			"rationale":              schemaString("Why the candidate should be promoted"),
+			"source_run_ids":         schemaStringArray("Runs supporting the candidate"),
+			"source_observation_ids": schemaStringArray("Observations supporting the candidate"),
+			"source_evaluation_ids":  schemaStringArray("Evaluations supporting the candidate"),
+			"supersedes_note_id":     schemaString("Canonical note this candidate would supersede, if any"),
+		}, []string{"agent_id", "target_kind", "candidate"}),
+		Handler: s.handleProposePromotion,
+	}
+}
+
+func (s *Server) handleProposePromotion(args map[string]interface{}) (string, error) {
+	runIDs := stringSliceArg(args, "source_run_ids")
+	observationIDs := stringSliceArg(args, "source_observation_ids")
+	evaluationIDs := stringSliceArg(args, "source_evaluation_ids")
+	id := fmt.Sprintf("promo_%d", time.Now().UnixNano())
+	record := agentstate.PromotionRecord{
+		ID: id,
+		AgentID: stringArg(args, "agent_id"),
+		TargetKind: agentstate.PromotionTargetKind(stringArg(args, "target_kind")),
+		Status: agentstate.PromotionProposed,
+		Candidate: stringArg(args, "candidate"),
+		Rationale: stringArg(args, "rationale"),
+		SourceRunIDs: runIDs,
+		SourceObservationIDs: observationIDs,
+		SourceEvaluationIDs: evaluationIDs,
+		SupersedesNoteID: stringArg(args, "supersedes_note_id"),
+	}
+	if err := record.Validate(); err != nil {
+		return "", err
+	}
+
+	runJSON, _ := json.Marshal(runIDs)
+	observationJSON, _ := json.Marshal(observationIDs)
+	evaluationJSON, _ := json.Marshal(evaluationIDs)
+	_, err := s.db.Exec(
+		`INSERT INTO promotion_records (
+			id, agent_id, target_kind, status, candidate, rationale,
+			source_run_ids_json, source_observation_ids_json, source_evaluation_ids_json,
+			supersedes_note_id, created_at
+		) VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, NULLIF(?, ''), ?)`,
+		record.ID, record.AgentID, string(record.TargetKind), string(record.Status),
+		record.Candidate, record.Rationale, string(runJSON), string(observationJSON),
+		string(evaluationJSON), record.SupersedesNoteID, currentTimestamp(),
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to propose promotion: %w", err)
+	}
+
+	return fmt.Sprintf("Promotion proposed: %s\n- **Agent:** %s\n- **Target:** %s\n- **Status:** %s",
+		record.ID, record.AgentID, record.TargetKind, record.Status), nil
+}
+
+func normalizedJSONObjectArg(args map[string]interface{}, key string) (string, error) {
+	raw := stringArg(args, key)
+	if raw == "" {
+		return "{}", nil
+	}
+	var value map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return "", fmt.Errorf("%s must be a JSON object: %w", key, err)
+	}
+	normalized, err := json.Marshal(value)
+	if err != nil {
+		return "", fmt.Errorf("%s could not be normalized: %w", key, err)
+	}
+	return string(normalized), nil
 }
 
 // sanitizeFilename creates a safe filename from a title.
