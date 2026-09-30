@@ -499,7 +499,6 @@ type LearningRecommendation struct {
 	Signals              []LearningSignal `json:"signals"`
 }
 
-
 // RegressionCaseProposal is a deterministic read-only projection of one run
 // into an evaluation-case candidate.
 type RegressionCaseProposal struct {
