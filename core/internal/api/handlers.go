@@ -14,14 +14,14 @@ import (
 
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/git"
+	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
 	"github.com/agentvault/core/internal/rag"
 	"github.com/agentvault/core/internal/search"
-	"github.com/agentvault/core/internal/graph"
+	"github.com/agentvault/core/internal/templates"
 	"github.com/agentvault/core/internal/vault"
 	"gopkg.in/yaml.v3"
-	"github.com/agentvault/core/internal/templates"
 )
 
 // ── Health ──────────────────────────────────────────────────────────
@@ -766,11 +766,11 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Question     string  `json:"question"`
-		UseVector    *bool   `json:"useVector,omitempty"`
+		Question     string   `json:"question"`
+		UseVector    *bool    `json:"useVector,omitempty"`
 		HybridWeight *float64 `json:"hybridWeight,omitempty"`
-		TopK         *int    `json:"topK,omitempty"`
-		MaxSources   *int    `json:"maxSources,omitempty"`
+		TopK         *int     `json:"topK,omitempty"`
+		MaxSources   *int     `json:"maxSources,omitempty"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
@@ -805,25 +805,25 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.HybridWeight != nil {
 			opts.HybridWeight = *req.HybridWeight
+		}
+		if req.TopK != nil {
+			opts.TopK = *req.TopK
+		}
+		if req.MaxSources != nil {
+			opts.MaxSources = *req.MaxSources
+		}
 	}
-	if req.TopK != nil {
-		opts.TopK = *req.TopK
-	}
-	if req.MaxSources != nil {
-		opts.MaxSources = *req.MaxSources
-	}
-}
 
-answer, err := rag.New(s.searcher, provider).AskWithOptions(r.Context(), req.Question, opts)
-if err != nil {
-	writeJSON(w, http.StatusBadGateway, map[string]interface{}{
-		"error":  "AI provider failed",
-		"detail": err.Error(),
-	})
-	return
-}
+	answer, err := rag.New(s.searcher, provider).AskWithOptions(r.Context(), req.Question, opts)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]interface{}{
+			"error":  "AI provider failed",
+			"detail": err.Error(),
+		})
+		return
+	}
 
-writeJSON(w, http.StatusOK, answer)
+	writeJSON(w, http.StatusOK, answer)
 }
 
 // ── Daily Note ───────────────────────────────────────────────────────
@@ -1397,7 +1397,6 @@ func (s *Server) handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-
 // ── Graph ────────────────────────────────────────────────────────────
 
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
@@ -1452,6 +1451,7 @@ func (s *Server) handleGraphNeighbors(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, g)
 }
+
 // safeCloseBody is a helper to safely close request bodies.
 func safeCloseBody(r *http.Request) {
 	if r != nil && r.Body != nil {
