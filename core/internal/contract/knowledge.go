@@ -159,6 +159,48 @@ type CreateMemoryRequest struct {
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// MemorySynthesisKind describes a higher-order learning product built from
+// already-durable semantic or procedural memories. The synthesis role is kept
+// separate from MemoryKind so existing retrieval/storage semantics stay stable.
+type MemorySynthesisKind string
+
+const (
+	MemorySynthesisSummary MemorySynthesisKind = "summary"
+	MemorySynthesisModel   MemorySynthesisKind = "model"
+	MemorySynthesisPolicy  MemorySynthesisKind = "policy"
+	MemorySynthesisSkill   MemorySynthesisKind = "skill"
+)
+
+// MemorySynthesis records the immutable lineage behind one higher-order memory.
+// SourceMemoryIDs are ordered deterministically and always share the target's
+// scope. TargetMemoryID points at the normal MemoryRecord used by retrieval.
+type MemorySynthesis struct {
+	ID              string              `json:"id"`
+	Kind            MemorySynthesisKind `json:"kind"`
+	ScopeType       string              `json:"scopeType"`
+	ScopeID         string              `json:"scopeId"`
+	TargetMemoryID  string              `json:"targetMemoryId"`
+	SourceMemoryIDs []string            `json:"sourceMemoryIds"`
+	ProvenanceID    string              `json:"provenanceId,omitempty"`
+	CreatedBy       string              `json:"createdBy,omitempty"`
+	Rationale       string              `json:"rationale,omitempty"`
+	CreatedAt       string              `json:"createdAt"`
+}
+
+// CreateMemorySynthesisRequest creates a scope-safe higher-order memory from
+// current durable memories. Confidence defaults to the weakest source memory.
+type CreateMemorySynthesisRequest struct {
+	ID              string                 `json:"id,omitempty"`
+	Kind            MemorySynthesisKind    `json:"kind"`
+	SourceMemoryIDs []string               `json:"sourceMemoryIds"`
+	Content         string                 `json:"content"`
+	ProvenanceID    string                 `json:"provenanceId,omitempty"`
+	Confidence      *float64               `json:"confidence,omitempty"`
+	CreatedBy       string                 `json:"createdBy,omitempty"`
+	Rationale       string                 `json:"rationale,omitempty"`
+	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+}
+
 // MemoryCandidateStatus is the explicit review lifecycle for proposed
 // semantic memory. Candidates are not durable MemoryRecords until a terminal
 // review action materializes one.
