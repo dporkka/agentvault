@@ -80,8 +80,8 @@ func (s *Store) ExtractMemoryCandidatesFromEpisode(episodeID string) ([]contract
 	}
 
 	metadata := map[string]interface{}{
-		"extractor":          deterministicExtractorID,
-		"sourceEventType":    episode.EventType,
+		"extractor":           deterministicExtractorID,
+		"sourceEventType":     episode.EventType,
 		"semanticFingerprint": fingerprint,
 	}
 	candidate, err := s.ProposeMemoryCandidate(contract.CreateMemoryCandidateRequest{
@@ -98,7 +98,6 @@ func (s *Store) ExtractMemoryCandidatesFromEpisode(episodeID string) ([]contract
 	}
 	return []contract.MemoryCandidate{candidate}, nil
 }
-
 
 // promoteSemanticSessionEvent turns an explicitly semantic durable session event
 // into a provenance-backed episode and review candidate. It returns eligible=false
