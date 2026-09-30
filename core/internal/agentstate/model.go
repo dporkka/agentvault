@@ -230,7 +230,6 @@ func (p PromotionRecord) Validate() error {
 	return nil
 }
 
-
 func ValidatePromotionTransition(from, to PromotionStatus) error {
 	switch {
 	case from == PromotionProposed && (to == PromotionApproved || to == PromotionRejected):
