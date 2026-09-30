@@ -276,7 +276,6 @@ type ExperimentDetail struct {
 	Results []ExperimentResult `json:"results"`
 }
 
-
 // ProposePromotionRequest is the body for POST /promotions.
 type ProposePromotionRequest struct {
 	AgentID              string   `json:"agentId"`
