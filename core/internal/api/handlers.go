@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/agentstate"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/git"
 	"github.com/agentvault/core/internal/indexer"
@@ -1458,4 +1459,120 @@ func safeCloseBody(r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		r.Body.Close()
 	}
+}
+
+
+// ── Agent State Reads ────────────────────────────────────────────────
+
+func (s *Server) handlePromotions(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status")
+	agentID := r.URL.Query().Get("agent_id")
+	limit := 50
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	items, err := agentstate.ListPromotions(s.db, status, agentID, limit)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "invalid promotion status") {
+			code = http.StatusBadRequest
+		}
+		writeJSON(w, code, map[string]interface{}{"error": "promotion query failed", "detail": err.Error()})
+		return
+	}
+
+	out := make([]contract.Promotion, 0, len(items))
+	for _, item := range items {
+		out = append(out, contract.Promotion{
+			ID:                   item.ID,
+			AgentID:              item.AgentID,
+			TargetKind:           string(item.TargetKind),
+			Status:               string(item.Status),
+			Candidate:            item.Candidate,
+			Rationale:            item.Rationale,
+			SourceRunIDs:         item.SourceRunIDs,
+			SourceObservationIDs: item.SourceObservationIDs,
+			SourceEvaluationIDs:  item.SourceEvaluationIDs,
+			TargetNoteID:         item.TargetNoteID,
+			SupersedesNoteID:     item.SupersedesNoteID,
+			CreatedAt:            item.CreatedAt,
+			ReviewedAt:           item.ReviewedAt,
+			ReviewedBy:           item.ReviewedBy,
+			ReviewNote:           item.ReviewNote,
+			CommittedAt:          item.CommittedAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleEvaluationDataset(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "missing dataset id"})
+		return
+	}
+
+	item, err := agentstate.GetEvaluationDataset(s.db, id)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "not found") {
+			code = http.StatusNotFound
+		}
+		writeJSON(w, code, map[string]interface{}{"error": "dataset lookup failed", "detail": err.Error()})
+		return
+	}
+
+	out := contract.EvaluationDatasetDetail{
+		EvaluationDataset: contract.EvaluationDataset{
+			ID: item.ID, Name: item.Name, Description: item.Description,
+			AgentID: item.AgentID, CreatedAt: item.CreatedAt,
+		},
+		Cases: make([]contract.EvaluationCase, 0, len(item.Cases)),
+	}
+	for _, evaluationCase := range item.Cases {
+		out.Cases = append(out.Cases, contract.EvaluationCase{
+			ID: evaluationCase.ID, DatasetID: evaluationCase.DatasetID, Name: evaluationCase.Name,
+			Input: evaluationCase.Input, Expected: evaluationCase.Expected,
+			Tags: evaluationCase.Tags, CreatedAt: evaluationCase.CreatedAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleExperiment(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "missing experiment id"})
+		return
+	}
+
+	item, err := agentstate.GetExperiment(s.db, id)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "not found") {
+			code = http.StatusNotFound
+		}
+		writeJSON(w, code, map[string]interface{}{"error": "experiment lookup failed", "detail": err.Error()})
+		return
+	}
+
+	out := contract.ExperimentDetail{
+		Experiment: contract.Experiment{
+			ID: item.ID, DatasetID: item.DatasetID, Name: item.Name,
+			AgentID: item.AgentID, AgentRevision: item.AgentRevision,
+			Status: string(item.Status), Config: item.Config,
+			CreatedAt: item.CreatedAt, CompletedAt: item.CompletedAt,
+		},
+		Results: make([]contract.ExperimentResult, 0, len(item.Results)),
+	}
+	for _, result := range item.Results {
+		out.Results = append(out.Results, contract.ExperimentResult{
+			ExperimentID: result.ExperimentID, CaseID: result.CaseID, RunID: result.RunID,
+			Score: result.Score, Label: result.Label, Metadata: result.Metadata, CreatedAt: result.CreatedAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
