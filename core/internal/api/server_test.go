@@ -1143,3 +1143,133 @@ func TestAgentStateWriteEndpoints(t *testing.T) {
 		}
 	})
 }
+
+
+func TestContextCompilerEndpoints(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	identity := `---
+id: identity_api_1
+type: note
+title: API Agent Identity
+---
+Prefer deterministic, evidence-backed changes.
+`
+	agent := `---
+id: agt_api_context
+type: agent
+title: API Context Agent
+revision: 2
+identity_ref: identity_api_1
+memory_refs: [note_2024_01_15_123]
+knowledge_scopes: [project:test-project]
+artifact_scopes: []
+conversation_scopes: []
+capability_refs: [filesystem]
+context_policy_ref: ""
+---
+Compile only explicit retrieved evidence.
+`
+	if err := os.WriteFile(filepath.Join(vaultPath, "10-notes", "identity-api.md"), []byte(identity), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(vaultPath, "75-agents"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vaultPath, "75-agents", "api-context-agent.md"), []byte(agent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := indexer.New(database, vaultPath).Index(indexer.IndexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServer(vaultPath, database)
+	srv.RegisterRoutes()
+	var handler http.Handler = srv.mux
+	handler = srv.authMiddleware(handler)
+	handler = srv.corsMiddleware(handler)
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	payload := map[string]interface{}{
+		"task":             "Prepare the next implementation slice.",
+		"retrievedNoteIds": []string{"note_2024_01_15_123"},
+	}
+	bodyBytes, _ := json.Marshal(payload)
+
+	t.Run("compile requires auth", func(t *testing.T) {
+		resp, err := http.Post(ts.URL+"/agents/agt_api_context/context", "application/json", bytes.NewReader(bodyBytes))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.StatusCode)
+		}
+	})
+
+	var hash string
+	t.Run("compile is deterministic and persisted", func(t *testing.T) {
+		compile := func() map[string]interface{} {
+			req, err := http.NewRequest(http.MethodPost, ts.URL+"/agents/agt_api_context/context", bytes.NewReader(bodyBytes))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-AgentVault-Token", srv.AuthToken())
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200, got %d", resp.StatusCode)
+			}
+			var out map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatal(err)
+			}
+			return out
+		}
+
+		first := compile()
+		second := compile()
+		hash, _ = first["hash"].(string)
+		if !strings.HasPrefix(hash, "sha256:") {
+			t.Fatalf("expected sha256 hash, got %#v", first["hash"])
+		}
+		if second["hash"] != hash {
+			t.Fatalf("expected deterministic hash, first=%s second=%v", hash, second["hash"])
+		}
+		if first["agentRevision"] != float64(2) {
+			t.Fatalf("expected revision 2, got %#v", first["agentRevision"])
+		}
+		sections, ok := first["sections"].([]interface{})
+		if !ok || len(sections) < 5 {
+			t.Fatalf("expected compiled sections, got %#v", first["sections"])
+		}
+	})
+
+	t.Run("stored snapshot is retrievable", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/contexts/" + hash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		var out map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		if out["hash"] != hash || out["agentId"] != "agt_api_context" {
+			t.Fatalf("unexpected snapshot: %#v", out)
+		}
+		text, _ := out["text"].(string)
+		if !strings.Contains(text, "Prepare the next implementation slice.") {
+			t.Fatalf("compiled text missing task: %q", text)
+		}
+	})
+}
