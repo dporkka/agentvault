@@ -1710,7 +1710,6 @@ func TestHandleRegressionCaseProposalAndCapture(t *testing.T) {
 	}
 }
 
-
 func TestHandleCompareExperiments(t *testing.T) {
 	s, database := setupTestServer(t)
 	defer database.Close()
@@ -1747,7 +1746,7 @@ func TestHandleCompareExperiments(t *testing.T) {
 	}
 
 	result, err := s.handleCompareExperiments(map[string]interface{}{
-		"baseline_experiment_id": "exp_compare_mcp_base",
+		"baseline_experiment_id":  "exp_compare_mcp_base",
 		"candidate_experiment_id": "exp_compare_mcp_candidate",
 	})
 	if err != nil {
