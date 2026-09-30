@@ -524,7 +524,6 @@ type RunRegressionCaseCaptureRequest struct {
 	Tags      []string               `json:"tags,omitempty"`
 }
 
-
 // ExperimentCaseComparison compares one dataset case between two recorded experiments.
 type ExperimentCaseComparison struct {
 	CaseID         string   `json:"caseId"`
