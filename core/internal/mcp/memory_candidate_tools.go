@@ -28,6 +28,7 @@ func (s *Server) RegisterMemoryCandidateTools() {
 	}
 
 	registerMemoryCandidateProposalTool(s, store, ready, false)
+	registerMemoryCandidateExtractionTool(s, store, ready, false)
 	registerMemoryCandidateReadTools(s, store, ready, false)
 
 	s.tools["agentvault.accept_memory_candidate"] = Tool{
@@ -144,6 +145,49 @@ func (s *Server) RegisterMemoryCandidateProposalTool() {
 		}
 	}
 	registerMemoryCandidateProposalTool(s, store, ready, true)
+	registerMemoryCandidateExtractionTool(s, store, ready, true)
+}
+
+func registerMemoryCandidateExtractionTool(
+	s *Server,
+	store *knowledge.Store,
+	ready func(func(*knowledge.Store, map[string]interface{}) (string, error)) func(map[string]interface{}) (string, error),
+	scoped bool,
+) {
+	s.tools["agentvault.extract_memory_candidates"] = Tool{
+		Name:        "agentvault.extract_memory_candidates",
+		Description: "Run deterministic semantic candidate extraction for one provenance-backed episode. This never accepts candidates into durable memory.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"episode_id": schemaString("Source provenance-backed episode ID"),
+		}, []string{"episode_id"}),
+		Handler: ready(func(store *knowledge.Store, args map[string]interface{}) (string, error) {
+			episodeID := strings.TrimSpace(stringArg(args, "episode_id"))
+			if episodeID == "" {
+				return "", fmt.Errorf("episode_id is required")
+			}
+			if scoped {
+				principal, ok := s.capabilityIdentity()
+				if !ok {
+					return "", authz.ErrUnauthenticated
+				}
+				if !authz.HasCapability(principal, authz.MemoryWrite) {
+					return "", authz.ErrForbidden
+				}
+				episode, err := store.GetEpisode(episodeID)
+				if err != nil {
+					return "", err
+				}
+				if err := authorizeCandidateScope(store, principal, authz.MemoryWrite, episode.ScopeType, episode.ScopeID); err != nil {
+					return "", err
+				}
+			}
+			candidates, err := store.ExtractMemoryCandidatesFromEpisode(episodeID)
+			if err != nil {
+				return "", err
+			}
+			return prettyJSON(candidates)
+		}),
+	}
 }
 
 func registerMemoryCandidateProposalTool(
