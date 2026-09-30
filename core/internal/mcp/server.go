@@ -121,6 +121,8 @@ func (s *Server) RegisterTools() {
 	s.registerSetStatus()
 	s.registerAsk()
 	s.registerTogglePin()
+	s.registerCreateMemoryCandidate()
+	s.registerPromoteMemory()
 }
 
 // SetAuthToken sets the auth token for HTTP requests.
