@@ -199,3 +199,80 @@ type AnnotateRequest struct {
 	Priority  *int              `json:"priority,omitempty"`
 	Extra     map[string]string `json:"extra,omitempty"`
 }
+
+
+// Promotion is an evidence-backed memory or knowledge promotion record.
+type Promotion struct {
+	ID                   string   `json:"id"`
+	AgentID              string   `json:"agentId"`
+	TargetKind           string   `json:"targetKind"`
+	Status               string   `json:"status"`
+	Candidate            string   `json:"candidate"`
+	Rationale            string   `json:"rationale"`
+	SourceRunIDs         []string `json:"sourceRunIds"`
+	SourceObservationIDs []string `json:"sourceObservationIds"`
+	SourceEvaluationIDs  []string `json:"sourceEvaluationIds"`
+	TargetNoteID         string   `json:"targetNoteId"`
+	SupersedesNoteID     string   `json:"supersedesNoteId"`
+	CreatedAt            string   `json:"createdAt"`
+	ReviewedAt           string   `json:"reviewedAt"`
+	ReviewedBy           string   `json:"reviewedBy"`
+	ReviewNote           string   `json:"reviewNote"`
+	CommittedAt          string   `json:"committedAt"`
+}
+
+// EvaluationDataset is the metadata for a reusable evaluation dataset.
+type EvaluationDataset struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	AgentID     string `json:"agentId"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+// EvaluationCase is one stable input/expected-output pair in a dataset.
+type EvaluationCase struct {
+	ID        string                 `json:"id"`
+	DatasetID string                 `json:"datasetId"`
+	Name      string                 `json:"name"`
+	Input     map[string]interface{} `json:"input"`
+	Expected  map[string]interface{} `json:"expected"`
+	Tags      []string               `json:"tags"`
+	CreatedAt string                 `json:"createdAt"`
+}
+
+// EvaluationDatasetDetail returns a dataset together with its cases.
+type EvaluationDatasetDetail struct {
+	EvaluationDataset
+	Cases []EvaluationCase `json:"cases"`
+}
+
+// Experiment is an externally executed evaluation run recorded by AgentVault.
+type Experiment struct {
+	ID            string                 `json:"id"`
+	DatasetID     string                 `json:"datasetId"`
+	Name          string                 `json:"name"`
+	AgentID       string                 `json:"agentId"`
+	AgentRevision int                    `json:"agentRevision"`
+	Status        string                 `json:"status"`
+	Config        map[string]interface{} `json:"config"`
+	CreatedAt     string                 `json:"createdAt"`
+	CompletedAt   string                 `json:"completedAt"`
+}
+
+// ExperimentResult is one case-level result within an experiment.
+type ExperimentResult struct {
+	ExperimentID string                 `json:"experimentId"`
+	CaseID       string                 `json:"caseId"`
+	RunID        string                 `json:"runId"`
+	Score        *float64               `json:"score"`
+	Label        string                 `json:"label"`
+	Metadata     map[string]interface{} `json:"metadata"`
+	CreatedAt    string                 `json:"createdAt"`
+}
+
+// ExperimentDetail returns an experiment together with all recorded case results.
+type ExperimentDetail struct {
+	Experiment
+	Results []ExperimentResult `json:"results"`
+}
