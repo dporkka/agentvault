@@ -155,7 +155,6 @@ func indexOf(s, sub string) int {
 	return -1
 }
 
-
 func TestAgentStateReadContractJSONTags(t *testing.T) {
 	p := Promotion{
 		ID: "promo_1", AgentID: "agt_1", TargetKind: "memory", Status: "proposed",
@@ -179,7 +178,7 @@ func TestAgentStateReadContractJSONTags(t *testing.T) {
 
 	d := EvaluationDatasetDetail{
 		EvaluationDataset: EvaluationDataset{ID: "ds_1", Name: "Golden", CreatedAt: "now"},
-		Cases: []EvaluationCase{{ID: "case_1", DatasetID: "ds_1", Name: "Case", Input: map[string]interface{}{"x": true}, Tags: []string{}}},
+		Cases:             []EvaluationCase{{ID: "case_1", DatasetID: "ds_1", Name: "Case", Input: map[string]interface{}{"x": true}, Tags: []string{}}},
 	}
 	b, err = json.Marshal(d)
 	if err != nil {
@@ -192,7 +191,7 @@ func TestAgentStateReadContractJSONTags(t *testing.T) {
 
 	e := ExperimentDetail{
 		Experiment: Experiment{ID: "exp_1", DatasetID: "ds_1", Name: "baseline", AgentID: "agt_1", AgentRevision: 1, Status: "completed", Config: map[string]interface{}{}, CreatedAt: "now"},
-		Results: []ExperimentResult{{ExperimentID: "exp_1", CaseID: "case_1", Label: "pass", Metadata: map[string]interface{}{}, CreatedAt: "now"}},
+		Results:    []ExperimentResult{{ExperimentID: "exp_1", CaseID: "case_1", Label: "pass", Metadata: map[string]interface{}{}, CreatedAt: "now"}},
 	}
 	b, err = json.Marshal(e)
 	if err != nil {
@@ -203,4 +202,3 @@ func TestAgentStateReadContractJSONTags(t *testing.T) {
 		t.Errorf("expected experiment detail fields in JSON, got %s", got)
 	}
 }
-
