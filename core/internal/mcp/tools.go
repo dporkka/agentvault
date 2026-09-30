@@ -1464,6 +1464,167 @@ func (s *Server) handleRecordExperimentResult(args map[string]interface{}) (stri
 	return fmt.Sprintf("Recorded experiment result\n- **Experiment:** %s\n- **Case:** %s", record.ExperimentID, record.CaseID), nil
 }
 
+// --- Tool: agentvault.list_promotions ---
+
+func (s *Server) registerListPromotions() {
+	s.tools["agentvault.list_promotions"] = Tool{
+		Name:        "agentvault.list_promotions",
+		Description: "List promotion records awaiting review or filtered by status and agent. Defaults to proposed promotions.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"status":   schemaStringEnum("Promotion status filter", []string{"proposed", "approved", "rejected", "committed", "superseded", "all"}),
+			"agent_id": schemaString("Optional agent manifest ID"),
+			"limit":    schemaInt("Maximum records to return (max 100)", 50),
+		}, []string{}),
+		Handler: s.handleListPromotions,
+	}
+}
+
+func (s *Server) handleListPromotions(args map[string]interface{}) (string, error) {
+	items, err := agentstate.ListPromotions(
+		s.db,
+		stringArg(args, "status"),
+		stringArg(args, "agent_id"),
+		intArg(args, "limit", 50),
+	)
+	if err != nil {
+		return "", err
+	}
+	if len(items) == 0 {
+		return "# Promotions\n\nNo matching promotions.", nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Promotions\n\n")
+	for _, item := range items {
+		sb.WriteString(fmt.Sprintf("## %s\n", item.ID))
+		sb.WriteString(fmt.Sprintf("- **Agent:** %s\n", item.AgentID))
+		sb.WriteString(fmt.Sprintf("- **Status:** %s\n", item.Status))
+		sb.WriteString(fmt.Sprintf("- **Target:** %s\n", item.TargetKind))
+		sb.WriteString(fmt.Sprintf("- **Candidate:** %s\n", item.Candidate))
+		if item.Rationale != "" {
+			sb.WriteString(fmt.Sprintf("- **Rationale:** %s\n", item.Rationale))
+		}
+		if len(item.SourceRunIDs) > 0 {
+			sb.WriteString(fmt.Sprintf("- **Runs:** %s\n", strings.Join(item.SourceRunIDs, ", ")))
+		}
+		if len(item.SourceObservationIDs) > 0 {
+			sb.WriteString(fmt.Sprintf("- **Observations:** %s\n", strings.Join(item.SourceObservationIDs, ", ")))
+		}
+		if len(item.SourceEvaluationIDs) > 0 {
+			sb.WriteString(fmt.Sprintf("- **Evaluations:** %s\n", strings.Join(item.SourceEvaluationIDs, ", ")))
+		}
+		if item.ReviewedBy != "" {
+			sb.WriteString(fmt.Sprintf("- **Reviewed by:** %s\n", item.ReviewedBy))
+		}
+		if item.TargetNoteID != "" {
+			sb.WriteString(fmt.Sprintf("- **Target note:** %s\n", item.TargetNoteID))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
+// --- Tool: agentvault.get_evaluation_dataset ---
+
+func (s *Server) registerGetEvaluationDataset() {
+	s.tools["agentvault.get_evaluation_dataset"] = Tool{
+		Name:        "agentvault.get_evaluation_dataset",
+		Description: "Fetch an evaluation dataset and all of its reproducible cases.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"dataset_id": schemaString("Evaluation dataset ID"),
+		}, []string{"dataset_id"}),
+		Handler: s.handleGetEvaluationDataset,
+	}
+}
+
+func (s *Server) handleGetEvaluationDataset(args map[string]interface{}) (string, error) {
+	id := stringArg(args, "dataset_id")
+	if id == "" {
+		return "", fmt.Errorf("dataset_id is required")
+	}
+	item, err := agentstate.GetEvaluationDataset(s.db, id)
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Evaluation Dataset: %s\n\n", item.Name))
+	sb.WriteString(fmt.Sprintf("- **ID:** %s\n", item.ID))
+	if item.Description != "" {
+		sb.WriteString(fmt.Sprintf("- **Description:** %s\n", item.Description))
+	}
+	if item.AgentID != "" {
+		sb.WriteString(fmt.Sprintf("- **Agent:** %s\n", item.AgentID))
+	}
+	sb.WriteString(fmt.Sprintf("- **Cases:** %d\n\n", len(item.Cases)))
+
+	for _, evaluationCase := range item.Cases {
+		inputJSON, _ := json.Marshal(evaluationCase.Input)
+		expectedJSON := []byte("null")
+		if evaluationCase.Expected != nil {
+			expectedJSON, _ = json.Marshal(evaluationCase.Expected)
+		}
+		sb.WriteString(fmt.Sprintf("## %s (%s)\n", evaluationCase.Name, evaluationCase.ID))
+		sb.WriteString(fmt.Sprintf("- **Input:** %s\n", inputJSON))
+		sb.WriteString(fmt.Sprintf("- **Expected:** %s\n", expectedJSON))
+		if len(evaluationCase.Tags) > 0 {
+			sb.WriteString(fmt.Sprintf("- **Tags:** %s\n", strings.Join(evaluationCase.Tags, ", ")))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
+// --- Tool: agentvault.get_experiment ---
+
+func (s *Server) registerGetExperiment() {
+	s.tools["agentvault.get_experiment"] = Tool{
+		Name:        "agentvault.get_experiment",
+		Description: "Fetch one recorded evaluation experiment and all case-level results.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"experiment_id": schemaString("Experiment ID"),
+		}, []string{"experiment_id"}),
+		Handler: s.handleGetExperiment,
+	}
+}
+
+func (s *Server) handleGetExperiment(args map[string]interface{}) (string, error) {
+	id := stringArg(args, "experiment_id")
+	if id == "" {
+		return "", fmt.Errorf("experiment_id is required")
+	}
+	item, err := agentstate.GetExperiment(s.db, id)
+	if err != nil {
+		return "", err
+	}
+
+	configJSON, _ := json.Marshal(item.Config)
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Experiment: %s\n\n", item.Name))
+	sb.WriteString(fmt.Sprintf("- **ID:** %s\n", item.ID))
+	sb.WriteString(fmt.Sprintf("- **Dataset:** %s\n", item.DatasetID))
+	sb.WriteString(fmt.Sprintf("- **Agent:** %s@%d\n", item.AgentID, item.AgentRevision))
+	sb.WriteString(fmt.Sprintf("- **Status:** %s\n", item.Status))
+	sb.WriteString(fmt.Sprintf("- **Config:** %s\n", configJSON))
+	sb.WriteString(fmt.Sprintf("- **Results:** %d\n\n", len(item.Results)))
+
+	for _, result := range item.Results {
+		metadataJSON, _ := json.Marshal(result.Metadata)
+		sb.WriteString(fmt.Sprintf("## Case %s\n", result.CaseID))
+		if result.RunID != "" {
+			sb.WriteString(fmt.Sprintf("- **Run:** %s\n", result.RunID))
+		}
+		if result.Score != nil {
+			sb.WriteString(fmt.Sprintf("- **Score:** %g\n", *result.Score))
+		}
+		if result.Label != "" {
+			sb.WriteString(fmt.Sprintf("- **Label:** %s\n", result.Label))
+		}
+		sb.WriteString(fmt.Sprintf("- **Metadata:** %s\n\n", metadataJSON))
+	}
+	return sb.String(), nil
+}
+
 func normalizedJSONObjectArg(args map[string]interface{}, key string) (string, error) {
 	raw := stringArg(args, key)
 	if raw == "" {
