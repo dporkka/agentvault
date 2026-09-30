@@ -112,6 +112,7 @@ A missing or incorrect token on a write endpoint returns `401` with
 | GET | `/contexts/{hash}` | no | 200 / 400 / 404 | camelCase (`ContextSnapshot`) |
 | POST | `/runs` | yes | 201 / 400 / 404 / 409 | camelCase (`RunRecord`) |
 | GET | `/runs/{id}/audit` | no | 200 / 400 / 404 / 409 | camelCase (`RunAudit`) |
+| GET | `/runs/{id}/learning-recommendation` | no | 200 / 400 / 404 / 409 | camelCase (`LearningRecommendation`) |
 | POST | `/runs/{id}/learning-candidates` | yes | 201 / 400 / 404 / 409 | camelCase (`Promotion`) |
 
 ---
@@ -497,6 +498,60 @@ run
 ```
 
 The audit read also verifies that persisted run identity still matches the referenced context snapshot; inconsistent stored evidence returns `409 Conflict`.
+
+## GET /runs/{id}/learning-recommendation
+
+No auth. Returns a deterministic, read-only `LearningRecommendation` derived from the persisted run audit.
+
+AgentVault does not synthesize candidate memory text and does not create a promotion. It only surfaces explicit evidence that a caller can review:
+
+- observations whose status is explicitly `failed` or `error`,
+- evaluations whose categorical label explicitly indicates failure/regression,
+- the originating agent/revision,
+- existing memory refs that were present in the immutable context snapshot,
+- optional `target_kind` / `targetKind` evaluator metadata,
+- optional `supersedes_note_id` / `supersedesNoteId` evaluator metadata.
+
+Numeric scores are deliberately not interpreted by themselves because evaluators may use different scales and polarity. A low score with no categorical failure label therefore does not become negative evidence.
+
+Support levels are deterministic evidence summaries:
+- `none`: no explicit negative evidence,
+- `weak`: failed observation(s) only,
+- `moderate`: negative evaluation(s) without a failed observation,
+- `strong`: a negative evaluation plus failed observation, or multiple negative evaluations.
+
+`eligible` is true only when the run has a canonical agent/revision binding and there is explicit negative evidence. Legacy unbound runs still return visible signals for diagnosis but are marked ineligible.
+
+Example response:
+
+```json
+{
+  "runId": "run_...",
+  "agentId": "agt_...",
+  "agentRevision": 4,
+  "eligible": true,
+  "supportLevel": "strong",
+  "evidenceCount": 2,
+  "suggestedTargetKind": "memory",
+  "reasonCodes": ["run_failed", "failed_observation", "negative_evaluation"],
+  "sourceObservationIds": ["obs_..."],
+  "sourceEvaluationIds": ["eval_..."],
+  "contextMemoryRefs": ["memory_..."],
+  "supersedesNoteIds": ["memory_..."],
+  "signals": [
+    {
+      "kind": "evaluation",
+      "id": "eval_...",
+      "observationId": "obs_...",
+      "name": "regression",
+      "status": "",
+      "label": "fail",
+      "score": 0.1,
+      "rationale": "Focused regression test was skipped."
+    }
+  ]
+}
+```
 
 ## POST /runs/{id}/learning-candidates
 
