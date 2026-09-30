@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "name": "agentvault",
+  "commands": {
+    "test": {
+      "run": "make test-ci",
+      "timeout_seconds": 1800
+    },
+    "lint": {
+      "run": "make lint",
+      "timeout_seconds": 900
+    },
+    "typecheck": {
+      "run": "make contract-check",
+      "timeout_seconds": 1800
+    },
+    "build": {
+      "run": "make build",
+      "timeout_seconds": 900
+    },
+    "dev": {
+      "run": "make dev-core"
+    }
+  },
+  "validation": {
+    "fallback_checks": [
+      "lint",
+      "typecheck",
+      "test"
+    ]
+  },
+  "components": {
+    "core": {
+      "paths": [
+        "core/**"
+      ],
+      "checks": {
+        "lint": {
+          "run": "cd core && go vet ./...",
+          "timeout_seconds": 600
+        },
+        "test": {
+          "run": "cd core && go test -race -count=1 ./...",
+          "timeout_seconds": 1200
+        },
+        "build": {
+          "run": "cd core && go build ./cmd/agentvault",
+          "timeout_seconds": 600
+        }
+      }
+    },
+    "clients": {
+      "paths": [
+        "packages/contract/**",
+        "apps/**"
+      ],
+      "checks": {
+        "typecheck": {
+          "run": "make contract-check",
+          "timeout_seconds": 1800
+        }
+      }
+    }
+  }
+}
