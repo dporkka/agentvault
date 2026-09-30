@@ -182,8 +182,15 @@ func (s *Server) RegisterRoutes() {
 
 	// Durable agent state and evaluation evidence
 	s.mux.HandleFunc("GET /promotions", s.handlePromotions)
+	s.mux.HandleFunc("POST /promotions", s.handleProposePromotion)
+	s.mux.HandleFunc("POST /promotions/{id}/review", s.handleReviewPromotion)
+	s.mux.HandleFunc("POST /promotions/{id}/commit", s.handleCommitPromotion)
 	s.mux.HandleFunc("GET /evaluation-datasets/{id}", s.handleEvaluationDataset)
+	s.mux.HandleFunc("POST /evaluation-datasets", s.handleCreateEvaluationDataset)
+	s.mux.HandleFunc("POST /evaluation-datasets/{id}/cases", s.handleCreateEvaluationCase)
 	s.mux.HandleFunc("GET /experiments/{id}", s.handleExperiment)
+	s.mux.HandleFunc("POST /experiments", s.handleRecordExperiment)
+	s.mux.HandleFunc("POST /experiments/{id}/results", s.handleRecordExperimentResult)
 
 	// Conversations
 	s.mux.HandleFunc("POST /conversations", s.handleCreateConversation)
