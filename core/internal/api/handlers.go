@@ -1990,7 +1990,6 @@ func (s *Server) handleProposeRunLearning(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusCreated, promotionResponse(item))
 }
 
-
 func learningRecommendationResponse(item *agentstate.LearningRecommendation) contract.LearningRecommendation {
 	signals := make([]contract.LearningSignal, 0, len(item.Signals))
 	for _, signal := range item.Signals {
