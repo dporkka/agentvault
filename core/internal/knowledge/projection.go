@@ -9,12 +9,12 @@ import (
 
 const (
 	eventProvenanceCreated = "provenance.created"
-	eventObjectUpserted     = "object.upserted"
-	eventRelationCreated    = "relation.created"
-	eventMemoryRecorded     = "memory.recorded"
-	eventSessionStarted     = "session.started"
-	eventSessionEvent       = "session.event"
-	eventSessionClosed      = "session.closed"
+	eventObjectUpserted    = "object.upserted"
+	eventRelationCreated   = "relation.created"
+	eventMemoryRecorded    = "memory.recorded"
+	eventSessionStarted    = "session.started"
+	eventSessionEvent      = "session.event"
+	eventSessionClosed     = "session.closed"
 )
 
 type sessionCloseProjection struct {
