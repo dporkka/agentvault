@@ -1831,3 +1831,61 @@ func (s *Server) handleRecordExperimentResult(w http.ResponseWriter, r *http.Req
 	}
 	writeJSON(w, http.StatusCreated, experimentResultResponse(item))
 }
+
+
+// ── Context Compiler ─────────────────────────────────────────────────
+
+func contextSnapshotResponse(item *agentstate.ContextSnapshot) contract.ContextSnapshot {
+	sections := make([]contract.ContextSection, 0, len(item.Sections))
+	for _, section := range item.Sections {
+		sections = append(sections, contract.ContextSection{
+			Kind: string(section.Kind), SourceID: section.SourceID,
+			SourcePath: section.SourcePath, Title: section.Title, Content: section.Content,
+		})
+	}
+	unresolved := make([]contract.ContextReferenceIssue, 0, len(item.Unresolved))
+	for _, issue := range item.Unresolved {
+		unresolved = append(unresolved, contract.ContextReferenceIssue{
+			Kind: string(issue.Kind), SourceID: issue.SourceID, Reason: issue.Reason,
+		})
+	}
+	return contract.ContextSnapshot{
+		Hash: item.Hash, AgentID: item.AgentID, AgentRevision: item.AgentRevision,
+		AgentTitle: item.AgentTitle, Task: item.Task, ConversationID: item.ConversationID,
+		KnowledgeScopes: item.KnowledgeScopes, ArtifactScopes: item.ArtifactScopes,
+		ConversationScopes: item.ConversationScopes, CapabilityRefs: item.CapabilityRefs,
+		ContextPolicyRef: item.ContextPolicyRef, Sections: sections,
+		Unresolved: unresolved, Text: item.Text,
+	}
+}
+
+func (s *Server) handleCompileContext(w http.ResponseWriter, r *http.Request) {
+	var req contract.ContextCompileRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.CompileContext(s.db, s.vaultPath, agentstate.ContextCompileRequest{
+		AgentID:                 r.PathValue("id"),
+		Task:                    req.Task,
+		ConversationID:          req.ConversationID,
+		RetrievedNoteIDs:        req.RetrievedNoteIDs,
+		ArtifactNoteIDs:         req.ArtifactNoteIDs,
+		MaxConversationMessages: req.MaxConversationMessages,
+	})
+	if err != nil {
+		writeAgentStateError(w, "context compilation failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, contextSnapshotResponse(item))
+}
+
+func (s *Server) handleGetContextSnapshot(w http.ResponseWriter, r *http.Request) {
+	item, err := agentstate.GetContextSnapshot(s.db, r.PathValue("hash"))
+	if err != nil {
+		writeAgentStateError(w, "context snapshot lookup failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, contextSnapshotResponse(item))
+}
