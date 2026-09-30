@@ -164,10 +164,10 @@ func TestEmbeddedMigrationsPresent(t *testing.T) {
 		t.Fatalf("Failed to read embedded migrations: %v", err)
 	}
 	expected := map[string]bool{
-		"001_init.sql":          false,
-		"002_conversations.sql": false,
-		"003_agent_state.sql":   false,
-		"004_evaluations.sql":   false,
+		"001_init.sql":              false,
+		"002_conversations.sql":     false,
+		"003_agent_state.sql":       false,
+		"004_evaluations.sql":       false,
 		"005_context_snapshots.sql": false,
 	}
 	for _, e := range entries {
