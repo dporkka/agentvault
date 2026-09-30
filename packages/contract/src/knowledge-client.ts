@@ -19,8 +19,14 @@ import type {
   CreateProvenanceRequest,
   KnowledgeObject,
   KnowledgeObjectFilter,
+  MemoryCandidate,
+  MemoryCandidateFilter,
   MemoryFilter,
   MemoryRecord,
+  CreateMemoryCandidateRequest,
+  ReviewMemoryCandidateRequest,
+  SupersedeMemoryCandidateRequest,
+  MergeMemoryCandidateRequest,
   ObjectRelation,
   ProvenanceRecord,
   SessionEvent,
@@ -57,6 +63,13 @@ export interface KnowledgeClient {
   getProvenance(id: string): Promise<ProvenanceRecord>;
   recordMemory(req: CreateMemoryRequest): Promise<MemoryRecord>;
   listMemories(filter: MemoryFilter): Promise<MemoryRecord[]>;
+  proposeMemoryCandidate(req: CreateMemoryCandidateRequest): Promise<MemoryCandidate>;
+  listMemoryCandidates(filter?: MemoryCandidateFilter): Promise<MemoryCandidate[]>;
+  getMemoryCandidate(id: string): Promise<MemoryCandidate>;
+  acceptMemoryCandidate(id: string, req: ReviewMemoryCandidateRequest): Promise<MemoryCandidate>;
+  rejectMemoryCandidate(id: string, req: ReviewMemoryCandidateRequest): Promise<MemoryCandidate>;
+  mergeMemoryCandidate(id: string, req: MergeMemoryCandidateRequest): Promise<MemoryCandidate>;
+  supersedeMemoryCandidate(id: string, req: SupersedeMemoryCandidateRequest): Promise<MemoryCandidate>;
   startSession(req: StartAgentSessionRequest): Promise<AgentSession>;
   getSession(id: string): Promise<AgentSession>;
   appendSessionEvent(id: string, req: AppendSessionEventRequest): Promise<SessionEvent>;
@@ -160,6 +173,28 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions = {}): Knowle
     listMemories(filter) {
       const qs = queryString(filter);
       return call<MemoryRecord[]>('GET', `/memory?${qs}`);
+    },
+    proposeMemoryCandidate(req) {
+      return call<MemoryCandidate>('POST', '/memory-candidates', req);
+    },
+    listMemoryCandidates(filter = {}) {
+      const qs = queryString(filter);
+      return call<MemoryCandidate[]>('GET', qs ? `/memory-candidates?${qs}` : '/memory-candidates');
+    },
+    getMemoryCandidate(id) {
+      return call<MemoryCandidate>('GET', `/memory-candidates/${encodeURIComponent(id)}`);
+    },
+    acceptMemoryCandidate(id, req) {
+      return call<MemoryCandidate>('POST', `/memory-candidates/${encodeURIComponent(id)}/accept`, req);
+    },
+    rejectMemoryCandidate(id, req) {
+      return call<MemoryCandidate>('POST', `/memory-candidates/${encodeURIComponent(id)}/reject`, req);
+    },
+    mergeMemoryCandidate(id, req) {
+      return call<MemoryCandidate>('POST', `/memory-candidates/${encodeURIComponent(id)}/merge`, req);
+    },
+    supersedeMemoryCandidate(id, req) {
+      return call<MemoryCandidate>('POST', `/memory-candidates/${encodeURIComponent(id)}/supersede`, req);
     },
     startSession(req) {
       return call<AgentSession>('POST', '/sessions', req);
