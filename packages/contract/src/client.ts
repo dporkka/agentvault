@@ -26,6 +26,7 @@ import type {
   EvaluationDataset,
   EvaluationDatasetDetail,
   Experiment,
+  ExperimentComparison,
   ExperimentDetail,
   ExperimentResult,
   Graph,
@@ -125,6 +126,7 @@ export interface ApiClient {
   createEvaluationDataset(req: CreateEvaluationDatasetRequest): Promise<EvaluationDataset>;
   createEvaluationCase(datasetId: string, req: CreateEvaluationCaseRequest): Promise<EvaluationCase>;
   getExperiment(id: string): Promise<ExperimentDetail>;
+  compareExperiments(baselineId: string, candidateId: string): Promise<ExperimentComparison>;
   createExperiment(req: CreateExperimentRequest): Promise<Experiment>;
   createExperimentResult(experimentId: string, req: CreateExperimentResultRequest): Promise<ExperimentResult>;
   compileContext(agentId: string, req: ContextCompileRequest): Promise<ContextSnapshot>;
@@ -309,6 +311,14 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     },
     getExperiment(id) {
       return call<ExperimentDetail>('GET', `/experiments/${encodeURIComponent(id)}`, undefined, false);
+    },
+    compareExperiments(baselineId, candidateId) {
+      return call<ExperimentComparison>(
+        'GET',
+        `/experiments/${encodeURIComponent(baselineId)}/compare/${encodeURIComponent(candidateId)}`,
+        undefined,
+        false,
+      );
     },
     createExperiment(req) {
       return call<Experiment>('POST', '/experiments', req);
