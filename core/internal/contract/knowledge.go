@@ -209,7 +209,6 @@ type CloseAgentSessionRequest struct {
 	Status string `json:"status,omitempty"`
 }
 
-
 // EpisodeRecord is an immutable occurrence in durable agent knowledge.
 // occurredAt describes when the event happened; provenance.observedAt
 // independently describes when AgentVault learned about it.
@@ -279,16 +278,14 @@ type CreateTemporalFactRequest struct {
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 }
 
-
 // EntityProfile is a deterministic standing view over one durable knowledge
 // object and the temporal facts currently visible at AsOf. It is derived state:
 // objects and facts remain the canonical journal-backed records.
 type EntityProfile struct {
-	Subject KnowledgeObject  `json:"subject"`
-	AsOf    string           `json:"asOf"`
-	Facts   []TemporalFact   `json:"facts"`
+	Subject KnowledgeObject `json:"subject"`
+	AsOf    string          `json:"asOf"`
+	Facts   []TemporalFact  `json:"facts"`
 }
-
 
 // TimelineFilter scopes the derived activity stream across canonical capture,
 // memory, episode, durable session-event, and mutation sources.
