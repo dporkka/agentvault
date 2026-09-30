@@ -64,3 +64,34 @@ without granting arbitrary SQL or introducing a second query runtime.
 - Unsupported versions fail closed.
 - Views never store note content or derived query results.
 - SQLite remains a rebuildable index; Markdown/YAML remains canonical.
+
+
+## Context Compiler scope
+
+A saved view can be used as an explicit file-backed retrieval scope for
+deterministic context compilation:
+
+```json
+{
+  "task": "prepare the production deployment",
+  "project": "adacavo",
+  "viewId": "production"
+}
+```
+
+The MCP equivalent is `view_id` on `agentvault.compile_context`.
+
+When `viewId` is present:
+
+- ordinary Markdown notes must match the saved view;
+- classified Markdown memories must match both their normal
+  workspace/session validity rules and the saved view;
+- an explicit `project` request intersects the saved view project filter and
+  can never be broadened by it;
+- structured journal memories, objects, relations, facts, episodes, and
+  sessions keep their existing project/session scope and authorization rules;
+- missing, invalid, or unsupported saved views fail closed.
+
+The view is a selector, not a second ranking engine. Once file-backed candidates
+are selected, Context Compiler still applies its normal deterministic
+task-relevance, ranking, token-budget, and max-item logic.

@@ -4,6 +4,7 @@ export interface CompileContextRequest {
   task: string;
   workspaceId?: string;
   project?: string;
+  viewId?: string;
   agentId?: string;
   sessionId?: string;
   objectIds?: string[];
@@ -49,6 +50,7 @@ export interface ContextBundle {
   task: string;
   workspaceId?: string;
   project?: string;
+  viewId?: string;
   agentId?: string;
   sessionId?: string;
   asOf: string;

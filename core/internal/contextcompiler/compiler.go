@@ -21,19 +21,26 @@ const (
 	defaultTokenBudget = 8000
 	minimumTokenBudget = 256
 	maximumTokenBudget = 128000
-	defaultMaxItems     = 40
-	maximumMaxItems     = 200
+	defaultMaxItems    = 40
+	maximumMaxItems    = 200
 )
 
 // Compiler builds model-agnostic context bundles without making an LLM call.
 type Compiler struct {
 	searcher  *search.Searcher
 	knowledge *knowledge.Store
+	vaultPath string
 }
 
 // New creates a context compiler over the existing search and knowledge stores.
 func New(searcher *search.Searcher, knowledgeStore *knowledge.Store) *Compiler {
 	return &Compiler{searcher: searcher, knowledge: knowledgeStore}
+}
+
+// WithVaultPath enables file-backed saved-view resolution for context requests.
+func (c *Compiler) WithVaultPath(vaultPath string) *Compiler {
+	c.vaultPath = strings.TrimSpace(vaultPath)
+	return c
 }
 
 // Compile assembles and ranks context for one task. TokenBudget applies to the
@@ -59,6 +66,10 @@ func (c *Compiler) Compile(req contract.CompileContextRequest) (contract.Context
 	if err != nil {
 		return contract.ContextBundle{}, err
 	}
+	viewScope, err := c.resolveSavedViewScope(req)
+	if err != nil {
+		return contract.ContextBundle{}, err
+	}
 
 	collector := &candidateCollector{
 		compiler:   c,
@@ -66,6 +77,7 @@ func (c *Compiler) Compile(req contract.CompileContextRequest) (contract.Context
 		asOf:       asOf,
 		seen:       make(map[string]bool),
 		provenance: make(map[string]*contract.ContextProvenance),
+		viewScope:  viewScope,
 	}
 
 	if err := collector.addCurrentSession(); err != nil {
@@ -116,6 +128,7 @@ func (c *Compiler) Compile(req contract.CompileContextRequest) (contract.Context
 		Version:         "1",
 		Task:            req.Task,
 		Project:         req.Project,
+		ViewID:          strings.TrimSpace(req.ViewID),
 		AgentID:         req.AgentID,
 		SessionID:       req.SessionID,
 		AsOf:            asOf.Format(time.RFC3339Nano),
@@ -141,6 +154,7 @@ type candidateCollector struct {
 	objectIDs  []string
 	objectSeen map[string]bool
 	provenance map[string]*contract.ContextProvenance
+	viewScope  *savedViewScope
 }
 
 func (c *candidateCollector) add(item contract.ContextItem) {
@@ -407,6 +421,9 @@ func (c *candidateCollector) addRelations() error {
 }
 
 func (c *candidateCollector) addNotes() error {
+	if c.viewScope != nil {
+		return c.addScopedNotes(nil)
+	}
 	queryText := strings.Join(taskTerms(c.req.Task), " ")
 	if queryText == "" {
 		queryText = c.req.Task
@@ -420,25 +437,9 @@ func (c *candidateCollector) addNotes() error {
 		return fmt.Errorf("search notes for context: %w", err)
 	}
 	for i, result := range results {
-		detail, err := c.compiler.searcher.GetByID(result.ID)
-		if err != nil {
-			return fmt.Errorf("load note %s: %w", result.ID, err)
+		if err := c.addNoteResult(result, i); err != nil {
+			return err
 		}
-		c.add(contract.ContextItem{
-			Kind:    "note",
-			ID:      result.ID,
-			Title:   result.Title,
-			Content: detail.Snippet,
-			Path:    result.Path,
-			Score:   0.84 - float64(i)*0.012,
-			Metadata: map[string]interface{}{
-				"type":      result.Type,
-				"project":   result.Project,
-				"status":    result.Status,
-				"tags":      result.Tags,
-				"updatedAt": result.UpdatedAt,
-			},
-		})
 	}
 	return nil
 }

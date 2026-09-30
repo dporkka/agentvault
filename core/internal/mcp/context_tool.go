@@ -25,6 +25,7 @@ func (s *Server) RegisterContextTool() {
 			"task":         schemaString("Task or objective the context should support"),
 			"workspace_id": schemaString("Optional memory workspace scope; defaults to project when omitted"),
 			"project":      schemaString("Optional project content scope"),
+			"view_id":      schemaString("Optional saved view ID that scopes file-backed notes and Markdown memories"),
 			"agent_id":     schemaString("Optional stable agent identity"),
 			"session_id":   schemaString("Optional current durable AgentVault session ID"),
 			"object_ids":   schemaStringArray("Optional stable object IDs that must receive priority"),
@@ -40,6 +41,7 @@ func (s *Server) RegisterContextTool() {
 				Task:        stringArg(args, "task"),
 				WorkspaceID: stringArg(args, "workspace_id"),
 				Project:     stringArg(args, "project"),
+				ViewID:      stringArg(args, "view_id"),
 				AgentID:     stringArg(args, "agent_id"),
 				SessionID:   stringArg(args, "session_id"),
 				ObjectIDs:   stringSliceArg(args, "object_ids"),
@@ -52,7 +54,7 @@ func (s *Server) RegisterContextTool() {
 				return "", err
 			}
 			bundle, err := contextcompiler.CompileUnified(
-				contextcompiler.New(s.searcher, store),
+				contextcompiler.New(s.searcher, store).WithVaultPath(s.vaultPath),
 				fileMemories,
 				request,
 			)

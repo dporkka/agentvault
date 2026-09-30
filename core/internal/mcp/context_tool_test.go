@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/agentvault/core/internal/contract"
@@ -60,5 +62,44 @@ func TestCompileContextTool(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected procedural memory in compiled context: %+v", bundle.Items)
+	}
+}
+
+func TestCompileContextToolAppliesSavedViewScope(t *testing.T) {
+	server, database, vault := setupKnowledgeMCPServer(t)
+	defer database.Close()
+
+	viewDir := filepath.Join(vault, ".agentvault", "views")
+	if err := os.MkdirAll(viewDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(viewDir, "agentvault-only.yaml"), []byte(`version: 1
+name: AgentVault only
+query:
+  projects: [agentvault]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server.RegisterContextTool()
+	tool := server.tools["agentvault.compile_context"]
+	text, err := tool.Handler(map[string]interface{}{
+		"task":         "context compiler",
+		"project":      "agentvault",
+		"view_id":      "agentvault-only",
+		"as_of":        "2026-09-10T12:00:00Z",
+		"max_items":    float64(10),
+		"token_budget": float64(1000),
+	})
+	if err != nil {
+		t.Fatalf("compile_context: %v", err)
+	}
+
+	var bundle contract.ContextBundle
+	if err := json.Unmarshal([]byte(text), &bundle); err != nil {
+		t.Fatal(err)
+	}
+	if bundle.ViewID != "agentvault-only" {
+		t.Fatalf("viewId = %q, want agentvault-only", bundle.ViewID)
 	}
 }

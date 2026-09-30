@@ -15,7 +15,7 @@ func (s *Server) handleCompileContext(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	bundle, err := contextcompiler.CompileUnified(
-		contextcompiler.New(s.searcher, s.knowledge),
+		contextcompiler.New(s.searcher, s.knowledge).WithVaultPath(s.vaultPath),
 		memory.NewStore(s.db),
 		req,
 	)
