@@ -29,6 +29,7 @@ import type {
   EvaluationDataset,
   EvaluationDatasetDetail,
   Experiment,
+  ExperimentComparison,
   ExperimentDetail,
   ExperimentResult,
   IndexOptions,
@@ -251,6 +252,13 @@ export const routes: {
     auth: false,
     request: undefined as unknown as { id: string },
     response: undefined as unknown as ExperimentDetail,
+  },
+  experimentComparison: {
+    method: 'GET',
+    path: '/experiments/{id}/compare/{candidateId}',
+    auth: false,
+    request: undefined as unknown as { id: string; candidateId: string },
+    response: undefined as unknown as ExperimentComparison,
   },
   proposePromotion: {
     method: 'POST',
