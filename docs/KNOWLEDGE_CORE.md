@@ -62,8 +62,25 @@ partially rebuild SQLite.
 
 The hash chain provides corruption and rewrite detection relative to a trusted
 head/checkpoint. It is not an authenticity mechanism by itself: an attacker who
-can rewrite the entire journal can also recompute unsigned hashes. Signed or
-externally trusted checkpoints are a separate future integrity layer.
+can rewrite the entire journal can also recompute unsigned hashes.
+
+AgentVault can emit a **portable external checkpoint** with the current event
+counts, legacy-prefix anchor, chain head, and SHA-256 digest of the complete
+journal. Checkpoints are created with no-overwrite semantics and should be stored
+outside the writable vault boundary or in immutable/versioned storage when they
+are used as a trust anchor. Verifying against such a checkpoint detects a full
+journal replacement even when the replacement has a fresh internally valid hash
+chain.
+
+```bash
+agentvault journal verify
+agentvault journal checkpoint --output /trusted/agentvault-checkpoint.json
+agentvault journal verify --checkpoint /trusted/agentvault-checkpoint.json
+```
+
+Portable checkpoints are still unsigned witnesses. Their trust comes from where
+the operator stores or publishes them. Cryptographic signatures, hardware-backed
+keys, transparency logs, or remote attestation are separate future layers.
 
 ## 2. Universal object model
 
