@@ -1,6 +1,9 @@
 package contextcompiler
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -259,5 +262,87 @@ query:
 	}
 	if !foundIncluded {
 		t.Fatal("direct compiler did not include saved-view note")
+	}
+}
+
+func TestCompileUnifiedRecordsAndPinsSavedViewDefinition(t *testing.T) {
+	compiler, _, database, vault := setupCompiler(t)
+	defer database.Close()
+
+	writeAndIndexNote(t, database, vault, "pin.md", `---
+id: pin_note
+type: note
+title: Pinned scope note
+project: pin
+status: active
+created: 2026-09-10T10:00:00Z
+updated: 2026-09-10T10:00:00Z
+---
+Pinned scope content.
+`)
+
+	viewDir := filepath.Join(vault, ".agentvault", "views")
+	if err := os.MkdirAll(viewDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	viewBytes := []byte("version: 1\nname: Pinned scope\nquery:\n  projects: [pin]\n  statuses: [active]\n")
+	viewPath := filepath.Join(viewDir, "pinned.yaml")
+	if err := os.WriteFile(viewPath, viewBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(viewBytes)
+	expectedHash := hex.EncodeToString(sum[:])
+
+	bundle, err := CompileUnified(
+		compiler.WithVaultPath(vault),
+		memory.NewStore(database),
+		contract.CompileContextRequest{
+			Task:                    "pinned scope content",
+			Project:                 "pin",
+			ViewID:                  "pinned",
+			ExpectedViewContentHash: expectedHash,
+			AsOf:                    "2026-09-10T12:00:00Z",
+		},
+	)
+	if err != nil {
+		t.Fatalf("CompileUnified: %v", err)
+	}
+	if bundle.ViewVersion != 1 {
+		t.Fatalf("viewVersion = %d, want 1", bundle.ViewVersion)
+	}
+	if bundle.ViewContentHash != expectedHash {
+		t.Fatalf("viewContentHash = %q, want %q", bundle.ViewContentHash, expectedHash)
+	}
+
+	changed := append(append([]byte{}, viewBytes...), []byte("# changed\n")...)
+	if err := os.WriteFile(viewPath, changed, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = CompileUnified(
+		compiler.WithVaultPath(vault),
+		memory.NewStore(database),
+		contract.CompileContextRequest{
+			Task:                    "pinned scope content",
+			Project:                 "pin",
+			ViewID:                  "pinned",
+			ExpectedViewContentHash: expectedHash,
+			AsOf:                    "2026-09-10T12:00:00Z",
+		},
+	)
+	if !errors.Is(err, ErrViewContentHashMismatch) {
+		t.Fatalf("expected ErrViewContentHashMismatch, got %v", err)
+	}
+}
+
+func TestCompileRejectsExpectedViewHashWithoutViewID(t *testing.T) {
+	compiler, _, database, vault := setupCompiler(t)
+	defer database.Close()
+
+	_, err := compiler.WithVaultPath(vault).Compile(contract.CompileContextRequest{
+		Task:                    "invalid pin",
+		ExpectedViewContentHash: strings.Repeat("a", 64),
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires viewId") {
+		t.Fatalf("expected view hash without viewId to fail, got %v", err)
 	}
 }

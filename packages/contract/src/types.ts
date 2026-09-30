@@ -183,6 +183,7 @@ export interface SavedViewQuery {
 
 export interface SavedView {
   id: string;
+  contentHash: string;
   version: number;
   name: string;
   query?: SavedViewQuery;
