@@ -1351,3 +1351,107 @@ func TestLogWrite(t *testing.T) {
 		t.Errorf("expected 1 run logged, got %d", count)
 	}
 }
+
+
+func TestHandleRecordActionIntentAndReceipt(t *testing.T) {
+	s, database := setupTestServer(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO agent_runs (
+			id, agent_name, task, status, capability_snapshot_json, created_at
+		) VALUES ('run_action_mcp', 'coding-agent', 'create PR', 'running', '{"github.write":true}', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed agent run: %v", err)
+	}
+
+	intentResult, err := s.handleRecordActionIntent(map[string]interface{}{
+		"run_id":         "run_action_mcp",
+		"operation_id":   "op_create_pr",
+		"action":         "github.create_pr",
+		"capability_ref": "github.write",
+		"input_hash":     "sha256:input",
+		"metadata_json":  `{"repo":"owner/repo"}`,
+	})
+	if err != nil {
+		t.Fatalf("handleRecordActionIntent: %v", err)
+	}
+	if !strings.Contains(intentResult, "Recorded action intent:") {
+		t.Fatalf("unexpected intent result: %s", intentResult)
+	}
+
+	var intentID, authorityHash string
+	if err := database.QueryRow(`
+		SELECT id, authority_hash
+		FROM action_intents
+		WHERE run_id = ? AND operation_id = ?
+	`, "run_action_mcp", "op_create_pr").Scan(&intentID, &authorityHash); err != nil {
+		t.Fatalf("query action intent: %v", err)
+	}
+	if intentID == "" || !strings.HasPrefix(authorityHash, "sha256:") {
+		t.Fatalf("unexpected intent identity/hash: id=%q authority=%q", intentID, authorityHash)
+	}
+
+	idempotentResult, err := s.handleRecordActionIntent(map[string]interface{}{
+		"run_id":         "run_action_mcp",
+		"operation_id":   "op_create_pr",
+		"action":         "github.create_pr",
+		"capability_ref": "github.write",
+		"input_hash":     "sha256:input",
+		"metadata_json":  `{"repo":"owner/repo"}`,
+	})
+	if err != nil {
+		t.Fatalf("idempotent intent retry: %v", err)
+	}
+	if !strings.Contains(idempotentResult, "idempotent") {
+		t.Fatalf("expected idempotent marker, got: %s", idempotentResult)
+	}
+
+	if _, err := s.handleRecordActionIntent(map[string]interface{}{
+		"run_id":         "run_action_mcp",
+		"operation_id":   "op_create_pr",
+		"action":         "github.create_pr",
+		"capability_ref": "github.write",
+		"input_hash":     "sha256:different",
+	}); err == nil || !strings.Contains(err.Error(), "conflict") {
+		t.Fatalf("conflicting intent error = %v", err)
+	}
+
+	receiptResult, err := s.handleRecordActionReceipt(map[string]interface{}{
+		"intent_id":           intentID,
+		"status":              "completed",
+		"result_hash":         "sha256:result",
+		"external_receipt_id": "github-pr-123",
+	})
+	if err != nil {
+		t.Fatalf("handleRecordActionReceipt: %v", err)
+	}
+	if !strings.Contains(receiptResult, "Recorded action receipt:") {
+		t.Fatalf("unexpected receipt result: %s", receiptResult)
+	}
+
+	if _, err := s.handleRecordActionReceipt(map[string]interface{}{
+		"intent_id":   intentID,
+		"status":      "indeterminate",
+		"error_code":  "timeout",
+		"error_message": "provider outcome unknown",
+	}); err == nil || !strings.Contains(err.Error(), "conflict") {
+		t.Fatalf("conflicting receipt error = %v", err)
+	}
+}
+
+func TestHandleRecordActionIntentRequiresExistingRun(t *testing.T) {
+	s, database := setupTestServer(t)
+	defer database.Close()
+
+	_, err := s.handleRecordActionIntent(map[string]interface{}{
+		"run_id":         "missing",
+		"operation_id":   "op_1",
+		"action":         "github.create_pr",
+		"capability_ref": "github.write",
+		"input_hash":     "sha256:input",
+	})
+	if err == nil || !strings.Contains(err.Error(), "run not found") {
+		t.Fatalf("error = %v, want run not found", err)
+	}
+}
