@@ -1,0 +1,231 @@
+package agentstate
+
+import (
+	"fmt"
+	"time"
+)
+
+// AgentManifest is the canonical, file-backed aggregate describing an agent.
+// References point at other AgentVault objects; the manifest does not duplicate
+// memory, knowledge, artifacts, conversations, or capability definitions.
+type AgentManifest struct {
+	ID                 string
+	Name               string
+	Purpose            string
+	Revision           int
+	IdentityRef        string
+	MemoryRefs         []string
+	KnowledgeScopes    []string
+	ArtifactScopes     []string
+	ConversationScopes []string
+	CapabilityRefs     []string
+	ContextPolicyRef   string
+}
+
+func (m AgentManifest) Validate() error {
+	if m.ID == "" {
+		return fmt.Errorf("agent id is required")
+	}
+	if m.Name == "" {
+		return fmt.Errorf("agent name is required")
+	}
+	if m.Revision < 1 {
+		return fmt.Errorf("agent revision must be at least 1")
+	}
+	return nil
+}
+
+type RunStatus string
+
+const (
+	RunRunning   RunStatus = "running"
+	RunSucceeded RunStatus = "succeeded"
+	RunFailed    RunStatus = "failed"
+	RunCancelled RunStatus = "cancelled"
+)
+
+func (s RunStatus) valid() bool {
+	switch s {
+	case RunRunning, RunSucceeded, RunFailed, RunCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Run captures execution evidence for a specific agent revision. It describes
+// what happened; AgentVault remains independent from the runtime that executed it.
+type Run struct {
+	ID                 string
+	AgentID            string
+	AgentRevision      int
+	ConversationID     string
+	Status             RunStatus
+	StartedAt          time.Time
+	EndedAt            *time.Time
+	ContextHash        string
+	CapabilitySnapshot map[string]any
+	RuntimeMetadata    map[string]any
+}
+
+func (r Run) Validate() error {
+	if r.ID == "" {
+		return fmt.Errorf("run id is required")
+	}
+	if r.AgentID == "" {
+		return fmt.Errorf("agent id is required")
+	}
+	if r.AgentRevision < 1 {
+		return fmt.Errorf("agent revision must be at least 1")
+	}
+	if !r.Status.valid() {
+		return fmt.Errorf("unknown run status %q", r.Status)
+	}
+	return nil
+}
+
+// Evaluation is evidence about the quality of a run or one of its observations.
+type Evaluation struct {
+	ID            string
+	RunID         string
+	ObservationID string
+	Evaluator     string
+	Name          string
+	Score         *float64
+	Label         string
+	Rationale     string
+	Metadata      map[string]any
+}
+
+func (e Evaluation) Validate() error {
+	if e.ID == "" {
+		return fmt.Errorf("evaluation id is required")
+	}
+	if e.RunID == "" {
+		return fmt.Errorf("run id is required")
+	}
+	if e.Evaluator == "" {
+		return fmt.Errorf("evaluator is required")
+	}
+	if e.Name == "" {
+		return fmt.Errorf("evaluation name is required")
+	}
+	if e.Score == nil && e.Label == "" {
+		return fmt.Errorf("evaluation requires a score or label")
+	}
+	return nil
+}
+
+type ObservationKind string
+
+const (
+	ObservationContextCompile ObservationKind = "context.compile"
+	ObservationRetrieval      ObservationKind = "retrieval"
+	ObservationGeneration     ObservationKind = "generation"
+	ObservationTool           ObservationKind = "tool"
+	ObservationArtifactWrite  ObservationKind = "artifact.write"
+	ObservationEvent          ObservationKind = "event"
+)
+
+func (k ObservationKind) valid() bool {
+	switch k {
+	case ObservationContextCompile, ObservationRetrieval, ObservationGeneration,
+		ObservationTool, ObservationArtifactWrite, ObservationEvent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Observation is one structured step inside a Run. ParentObservationID allows
+// nesting without turning the evidence model into an execution engine.
+type Observation struct {
+	ID                  string
+	RunID               string
+	ParentObservationID string
+	Kind                ObservationKind
+	Name                string
+	Status              string
+	Input               map[string]any
+	Output              map[string]any
+	Evidence            map[string]any
+	StartedAt           time.Time
+	EndedAt             *time.Time
+}
+
+func (o Observation) Validate() error {
+	if o.ID == "" {
+		return fmt.Errorf("observation id is required")
+	}
+	if o.RunID == "" {
+		return fmt.Errorf("run id is required")
+	}
+	if !o.Kind.valid() {
+		return fmt.Errorf("unknown observation kind %q", o.Kind)
+	}
+	if o.Name == "" {
+		return fmt.Errorf("observation name is required")
+	}
+	return nil
+}
+
+type PromotionTargetKind string
+
+const (
+	PromotionMemory    PromotionTargetKind = "memory"
+	PromotionKnowledge PromotionTargetKind = "knowledge"
+)
+
+type PromotionStatus string
+
+const (
+	PromotionProposed   PromotionStatus = "proposed"
+	PromotionApproved   PromotionStatus = "approved"
+	PromotionRejected   PromotionStatus = "rejected"
+	PromotionCommitted  PromotionStatus = "committed"
+	PromotionSuperseded PromotionStatus = "superseded"
+)
+
+// PromotionRecord records lineage and review state. TargetNoteID points at the
+// canonical Markdown note after commit; promoted content is never a second
+// hidden memory store.
+type PromotionRecord struct {
+	ID                   string
+	AgentID              string
+	TargetKind           PromotionTargetKind
+	Status               PromotionStatus
+	Candidate            string
+	Rationale            string
+	SourceRunIDs         []string
+	SourceObservationIDs []string
+	SourceEvaluationIDs  []string
+	TargetNoteID         string
+	SupersedesNoteID     string
+}
+
+func (p PromotionRecord) Validate() error {
+	if p.ID == "" {
+		return fmt.Errorf("promotion id is required")
+	}
+	if p.AgentID == "" {
+		return fmt.Errorf("agent id is required")
+	}
+	if p.TargetKind != PromotionMemory && p.TargetKind != PromotionKnowledge {
+		return fmt.Errorf("unknown promotion target kind %q", p.TargetKind)
+	}
+	switch p.Status {
+	case PromotionProposed, PromotionApproved, PromotionRejected, PromotionCommitted, PromotionSuperseded:
+	default:
+		return fmt.Errorf("unknown promotion status %q", p.Status)
+	}
+	if p.Candidate == "" {
+		return fmt.Errorf("promotion candidate is required")
+	}
+	if len(p.SourceRunIDs)+len(p.SourceObservationIDs)+len(p.SourceEvaluationIDs) == 0 {
+		return fmt.Errorf("promotion requires at least one evidence source")
+	}
+	if (p.Status == PromotionCommitted || p.Status == PromotionSuperseded) && p.TargetNoteID == "" {
+		return fmt.Errorf("%s promotion requires target note id", p.Status)
+	}
+	return nil
+}
