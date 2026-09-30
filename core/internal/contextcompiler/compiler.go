@@ -425,7 +425,7 @@ func (c *candidateCollector) addNotes() error {
 			Content:  detail.Snippet,
 			Path:     candidate.result.Path,
 			Score:    candidate.baseScore,
-			Metadata: noteContextMetadata(candidate.result, candidate.semanticScore),
+			Metadata: noteContextMetadata(candidate.result, candidate.semanticScore, candidate.graphDistance),
 		})
 	}
 	return nil
@@ -435,6 +435,7 @@ type noteCandidate struct {
 	result        search.Result
 	baseScore     float64
 	semanticScore float64
+	graphDistance float64
 }
 
 func (c *candidateCollector) noteCandidates() ([]noteCandidate, error) {
@@ -460,8 +461,8 @@ func (c *candidateCollector) noteCandidates() ([]noteCandidate, error) {
 		semanticScores[result.ID] = result.Score
 	}
 
-	candidates := make([]noteCandidate, 0, len(lexical)+len(semantic))
-	seen := make(map[string]bool, len(lexical)+len(semantic))
+	candidates := make([]noteCandidate, 0, len(lexical)+len(semantic)+12)
+	seen := make(map[string]bool, len(lexical)+len(semantic)+12)
 	for i, result := range lexical {
 		seen[result.ID] = true
 		candidates = append(candidates, noteCandidate{
@@ -481,10 +482,30 @@ func (c *candidateCollector) noteCandidates() ([]noteCandidate, error) {
 			semanticScore: result.Score,
 		})
 	}
+
+	seedIDs := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		seedIDs = append(seedIDs, candidate.result.ID)
+	}
+	linked, err := c.compiler.searcher.LinkedCandidates(seedIDs, c.req.Project, 12)
+	if err != nil {
+		return nil, fmt.Errorf("search linked notes for context: %w", err)
+	}
+	for _, result := range linked {
+		if seen[result.ID] {
+			continue
+		}
+		seen[result.ID] = true
+		candidates = append(candidates, noteCandidate{
+			result:        result,
+			baseScore:     0.66,
+			graphDistance: 1,
+		})
+	}
 	return candidates, nil
 }
 
-func noteContextMetadata(result search.Result, semanticScore float64) map[string]interface{} {
+func noteContextMetadata(result search.Result, semanticScore, graphDistance float64) map[string]interface{} {
 	metadata := map[string]interface{}{
 		"type":      result.Type,
 		"project":   result.Project,
@@ -494,6 +515,9 @@ func noteContextMetadata(result search.Result, semanticScore float64) map[string
 	}
 	if semanticScore > 0 {
 		metadata["semanticSimilarity"] = semanticScore
+	}
+	if graphDistance > 0 {
+		metadata["graphDistance"] = graphDistance
 	}
 	return metadata
 }
