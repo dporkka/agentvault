@@ -53,6 +53,18 @@ and the projection can recover on replay. The reverse order is forbidden.
 Journal events are versioned and contain stable IDs, timestamps, event type,
 and a complete payload. Replay must be idempotent.
 
+New journal events are hash-chained. Each event stores the previous integrity
+hash and a SHA-256 hash over its immutable envelope and payload. Journals written
+before hash chaining remain valid: the first chained event commits to the exact
+legacy JSONL prefix through a legacy-prefix digest. Replay verifies the complete
+chain before applying any projection side effects, so detected corruption cannot
+partially rebuild SQLite.
+
+The hash chain provides corruption and rewrite detection relative to a trusted
+head/checkpoint. It is not an authenticity mechanism by itself: an attacker who
+can rewrite the entire journal can also recompute unsigned hashes. Signed or
+externally trusted checkpoints are a separate future integrity layer.
+
 ## 2. Universal object model
 
 A `KnowledgeObject` is the stable envelope shared by application-specific
