@@ -337,3 +337,55 @@ export interface ExperimentResult {
 export interface ExperimentDetail extends Experiment {
   results: ExperimentResult[];
 }
+
+
+export interface ProposePromotionRequest {
+  agentId: string;
+  targetKind: 'memory' | 'knowledge';
+  candidate: string;
+  rationale?: string;
+  sourceRunIds?: string[];
+  sourceObservationIds?: string[];
+  sourceEvaluationIds?: string[];
+  supersedesNoteId?: string;
+}
+
+export interface ReviewPromotionRequest {
+  decision: 'approve' | 'reject';
+  reviewer: string;
+  note?: string;
+}
+
+export interface CommitPromotionRequest {
+  targetNoteId: string;
+}
+
+export interface CreateEvaluationDatasetRequest {
+  name: string;
+  description?: string;
+  agentId?: string;
+}
+
+export interface CreateEvaluationCaseRequest {
+  name: string;
+  input: Record<string, unknown>;
+  expected?: Record<string, unknown>;
+  tags?: string[];
+}
+
+export interface CreateExperimentRequest {
+  datasetId: string;
+  name: string;
+  agentId: string;
+  agentRevision: number;
+  status?: Experiment['status'];
+  config?: Record<string, unknown>;
+}
+
+export interface CreateExperimentResultRequest {
+  caseId: string;
+  runId?: string;
+  score?: number;
+  label?: string;
+  metadata?: Record<string, unknown>;
+}
