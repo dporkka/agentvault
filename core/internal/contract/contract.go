@@ -464,7 +464,6 @@ type RunLearningCandidateRequest struct {
 	SupersedesNoteID     string   `json:"supersedesNoteId,omitempty"`
 }
 
-
 // LearningSignal is one explicit failure signal surfaced from run evidence.
 type LearningSignal struct {
 	Kind          string   `json:"kind"`
