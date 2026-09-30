@@ -420,6 +420,216 @@ func TestHandleLogAgentRun_MissingFields(t *testing.T) {
 	}
 }
 
+
+func TestHandleLogAgentRun_StructuredEvidence(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	result, err := s.handleLogAgentRun(map[string]interface{}{
+		"agent_name":               "coding-agent",
+		"agent_id":                 "agt_1",
+		"agent_revision":           float64(3),
+		"task":                     "review change",
+		"status":                   "succeeded",
+		"conversation_id":          "conv_1",
+		"context_hash":             "sha256:abc",
+		"input_json":               "{"issue":123}",
+		"output_json":              "{"result":"ok"}",
+		"capability_snapshot_json": "{"github.read":true}",
+		"runtime_metadata_json":    "{"runtime":"test"}",
+	})
+	if err != nil {
+		t.Fatalf("handleLogAgentRun structured error: %v", err)
+	}
+	if !strings.Contains(result, "agt_1@3") {
+		t.Fatalf("expected agent revision in result, got:\n%s", result)
+	}
+
+	var agentID, status, conversationID, contextHash, inputJSON string
+	var revision int
+	err = db.QueryRow(`
+		SELECT agent_id, agent_revision, status, conversation_id, context_hash, input_json
+		FROM agent_runs WHERE agent_name = ?
+	`, "coding-agent").Scan(&agentID, &revision, &status, &conversationID, &contextHash, &inputJSON)
+	if err != nil {
+		t.Fatalf("query structured agent run: %v", err)
+	}
+	if agentID != "agt_1" || revision != 3 || status != "succeeded" {
+		t.Fatalf("unexpected structured run identity: %s@%d status=%s", agentID, revision, status)
+	}
+	if conversationID != "conv_1" || contextHash != "sha256:abc" {
+		t.Fatalf("unexpected run linkage: conversation=%s context=%s", conversationID, contextHash)
+	}
+	if inputJSON != "{"issue":123}" {
+		t.Fatalf("unexpected normalized input JSON: %s", inputJSON)
+	}
+}
+
+func TestHandleLogAgentRun_RejectsInvalidStructuredFields(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	_, err := s.handleLogAgentRun(map[string]interface{}{
+		"agent_name":     "coding-agent",
+		"agent_id":       "agt_1",
+		"agent_revision": float64(0),
+		"task":           "review",
+	})
+	if err == nil || !strings.Contains(err.Error(), "agent_revision") {
+		t.Fatalf("expected invalid agent revision error, got %v", err)
+	}
+
+	_, err = s.handleLogAgentRun(map[string]interface{}{
+		"agent_name": "coding-agent",
+		"task":       "review",
+		"status":     "mystery",
+	})
+	if err == nil || !strings.Contains(err.Error(), "status") {
+		t.Fatalf("expected invalid status error, got %v", err)
+	}
+
+	_, err = s.handleLogAgentRun(map[string]interface{}{
+		"agent_name": "coding-agent",
+		"task":       "review",
+		"input_json": "not-json",
+	})
+	if err == nil || !strings.Contains(err.Error(), "input_json") {
+		t.Fatalf("expected invalid JSON error, got %v", err)
+	}
+}
+
+func TestHandleLogObservation(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO agent_runs (id, agent_name, task, status, created_at)
+		VALUES ('run_obs_1', 'test-agent', 'test', 'succeeded', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+
+	result, err := s.handleLogObservation(map[string]interface{}{
+		"run_id":        "run_obs_1",
+		"kind":          "tool",
+		"name":          "github.search",
+		"status":        "succeeded",
+		"input_json":    "{"query":"agent"}",
+		"evidence_json": "{"result_count":4}",
+	})
+	if err != nil {
+		t.Fatalf("handleLogObservation error: %v", err)
+	}
+	if !strings.Contains(result, "github.search") {
+		t.Fatalf("expected observation name in result, got:\n%s", result)
+	}
+
+	var kind, name, evidence string
+	if err := db.QueryRow(`
+		SELECT kind, name, evidence_json FROM run_observations WHERE run_id = ?
+	`, "run_obs_1").Scan(&kind, &name, &evidence); err != nil {
+		t.Fatalf("query observation: %v", err)
+	}
+	if kind != "tool" || name != "github.search" || evidence != "{"result_count":4}" {
+		t.Fatalf("unexpected observation: kind=%s name=%s evidence=%s", kind, name, evidence)
+	}
+}
+
+func TestHandleLogObservation_RejectsInvalidKind(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	_, err := s.handleLogObservation(map[string]interface{}{
+		"run_id": "run_1",
+		"kind":   "unknown",
+		"name":   "bad",
+	})
+	if err == nil || !strings.Contains(err.Error(), "observation kind") {
+		t.Fatalf("expected invalid observation kind error, got %v", err)
+	}
+}
+
+func TestHandleLogEvaluation(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO agent_runs (id, agent_name, task, status, created_at)
+		VALUES ('run_eval_1', 'test-agent', 'test', 'succeeded', datetime('now'))
+	`); err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+
+	result, err := s.handleLogEvaluation(map[string]interface{}{
+		"run_id":    "run_eval_1",
+		"evaluator": "human",
+		"name":      "correctness",
+		"score":     float64(0.95),
+		"rationale": "grounded answer",
+	})
+	if err != nil {
+		t.Fatalf("handleLogEvaluation error: %v", err)
+	}
+	if !strings.Contains(result, "correctness") {
+		t.Fatalf("expected evaluation name in result, got:\n%s", result)
+	}
+
+	var score float64
+	var evaluator string
+	if err := db.QueryRow(`
+		SELECT score, evaluator FROM evaluations WHERE run_id = ?
+	`, "run_eval_1").Scan(&score, &evaluator); err != nil {
+		t.Fatalf("query evaluation: %v", err)
+	}
+	if score != 0.95 || evaluator != "human" {
+		t.Fatalf("unexpected evaluation: score=%v evaluator=%s", score, evaluator)
+	}
+}
+
+func TestHandleProposePromotion(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	result, err := s.handleProposePromotion(map[string]interface{}{
+		"agent_id":               "agt_1",
+		"target_kind":            "memory",
+		"candidate":              "Run generated-code checks before formatting.",
+		"rationale":              "Repeated successful behavior",
+		"source_observation_ids": []interface{}{"obs_1", "obs_2"},
+	})
+	if err != nil {
+		t.Fatalf("handleProposePromotion error: %v", err)
+	}
+	if !strings.Contains(result, "proposed") {
+		t.Fatalf("expected proposed status in result, got:\n%s", result)
+	}
+
+	var status, targetKind, sourceIDs string
+	if err := db.QueryRow(`
+		SELECT status, target_kind, source_observation_ids_json
+		FROM promotion_records WHERE agent_id = ?
+	`, "agt_1").Scan(&status, &targetKind, &sourceIDs); err != nil {
+		t.Fatalf("query promotion: %v", err)
+	}
+	if status != "proposed" || targetKind != "memory" || sourceIDs != "["obs_1","obs_2"]" {
+		t.Fatalf("unexpected promotion: status=%s kind=%s sources=%s", status, targetKind, sourceIDs)
+	}
+}
+
+func TestHandleProposePromotion_RequiresEvidence(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	_, err := s.handleProposePromotion(map[string]interface{}{
+		"agent_id":    "agt_1",
+		"target_kind": "memory",
+		"candidate":   "Remember this",
+	})
+	if err == nil || !strings.Contains(err.Error(), "evidence") {
+		t.Fatalf("expected evidence requirement error, got %v", err)
+	}
+}
+
 func TestSanitizeFilename(t *testing.T) {
 	cases := []struct {
 		input    string
