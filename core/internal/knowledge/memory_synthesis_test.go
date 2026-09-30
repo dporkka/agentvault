@@ -61,7 +61,10 @@ func TestSynthesizeMemoryCreatesHigherOrderMemoryWithLineage(t *testing.T) {
 	if target.MemoryClass != "semantic" || target.MemoryKind != "summary" {
 		t.Fatalf("unexpected target memory classification: %+v", target)
 	}
-	if target.Metadata["synthesisKind"] != "model" {\n\t\tt.Fatalf("target memory missing model classification: %+v", target.Metadata)\n\t}\n\tif target.Metadata["synthesisId"] != synthesis.ID {
+	if target.Metadata["synthesisKind"] != "model" {
+		t.Fatalf("target memory missing model classification: %+v", target.Metadata)
+	}
+	if target.Metadata["synthesisId"] != synthesis.ID {
 		t.Fatalf("target memory missing synthesis lineage: %+v", target.Metadata)
 	}
 
