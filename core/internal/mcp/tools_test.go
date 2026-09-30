@@ -1536,3 +1536,32 @@ Keep runtime execution outside AgentVault.
 		t.Fatalf("unexpected stored context output:\n%s", stored)
 	}
 }
+
+
+func TestHandleGetRunAudit(t *testing.T) {
+	s, database := setupTestServer(t)
+	defer database.Close()
+
+	snapshot := `{"hash":"sha256:mcp-run-context","agentId":"agt_mcp_run","agentRevision":2,"agentTitle":"MCP Run Agent","task":"audit","conversationId":"","knowledgeScopes":[],"artifactScopes":[],"conversationScopes":[],"capabilityRefs":[],"contextPolicyRef":"","sections":[{"kind":"identity","sourceId":"identity_mcp_run","sourcePath":"10-notes/id.md","title":"Identity","content":"Be precise."}],"unresolved":[],"text":"compiled"}`
+	if _, err := database.Exec(`
+		INSERT INTO context_snapshots (hash, agent_id, agent_revision, task, context_json, created_at)
+		VALUES ('sha256:mcp-run-context', 'agt_mcp_run', 2, 'audit', ?, datetime('now'))
+	`, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	run, err := agentstate.RecordRun(database, agentstate.RunRecord{
+		AgentName: "mcp-agent", AgentID: "agt_mcp_run", AgentRevision: 2,
+		Task: "audit", Status: agentstate.RunSucceeded, ContextHash: "sha256:mcp-run-context",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := s.handleGetRunAudit(map[string]interface{}{"run_id": run.ID})
+	if err != nil {
+		t.Fatalf("handleGetRunAudit: %v", err)
+	}
+	if !strings.Contains(result, run.ID) || !strings.Contains(result, "sha256:mcp-run-context") || !strings.Contains(result, "identity_mcp_run") {
+		t.Fatalf("unexpected run audit output:\n%s", result)
+	}
+}
