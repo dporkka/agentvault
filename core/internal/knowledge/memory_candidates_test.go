@@ -3,6 +3,7 @@ package knowledge
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/agentvault/core/internal/contract"
@@ -407,5 +408,74 @@ func TestMemoryCandidateCannotBranchAnAlreadySupersededMemory(t *testing.T) {
 		ReviewedBy: "reviewer", TargetMemoryID: old.ID,
 	}); err == nil {
 		t.Fatal("expected already-superseded target to reject a divergent replacement")
+	}
+}
+
+
+func TestMemoryCandidateConcurrentTerminalReviewCannotSplitOutcome(t *testing.T) {
+	store, database, _ := setupStore(t)
+	defer database.Close()
+
+	episode := createCandidateEpisode(t, store, "project", "concurrent-review")
+	candidate, err := store.ProposeMemoryCandidate(contract.CreateMemoryCandidateRequest{
+		EpisodeID: episode.ID, MemoryKind: "decision", Content: "One terminal review outcome only.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const workers = 16
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	acceptedSuccess := 0
+	rejectedSuccess := 0
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			<-start
+			if index%2 == 0 {
+				_, err := store.AcceptMemoryCandidate(candidate.ID, contract.ReviewMemoryCandidateRequest{ReviewedBy: "accept-reviewer"})
+				if err == nil {
+					mu.Lock()
+					acceptedSuccess++
+					mu.Unlock()
+				}
+				return
+			}
+			_, err := store.RejectMemoryCandidate(candidate.ID, contract.ReviewMemoryCandidateRequest{ReviewedBy: "reject-reviewer"})
+			if err == nil {
+				mu.Lock()
+				rejectedSuccess++
+				mu.Unlock()
+			}
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	if acceptedSuccess > 0 && rejectedSuccess > 0 {
+		t.Fatalf("conflicting terminal reviews both succeeded: accepted=%d rejected=%d", acceptedSuccess, rejectedSuccess)
+	}
+	if acceptedSuccess == 0 && rejectedSuccess == 0 {
+		t.Fatal("expected one terminal review outcome to succeed")
+	}
+
+	final, err := store.GetMemoryCandidate(candidate.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	switch final.Status {
+	case contract.MemoryCandidateAccepted:
+		if acceptedSuccess == 0 || final.ResultMemoryID == "" {
+			t.Fatalf("accepted final state is inconsistent: %+v", final)
+		}
+	case contract.MemoryCandidateRejected:
+		if rejectedSuccess == 0 || final.ResultMemoryID != "" {
+			t.Fatalf("rejected final state is inconsistent: %+v", final)
+		}
+	default:
+		t.Fatalf("candidate did not reach one terminal state: %+v", final)
 	}
 }
