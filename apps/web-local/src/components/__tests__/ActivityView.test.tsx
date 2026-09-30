@@ -83,6 +83,15 @@ describe('ActivityView', () => {
 
     mockGetProjects.mockResolvedValue(['agentvault', 'adacavo']);
     mockListTimeline.mockResolvedValue([mutation, episode]);
+    mockGetProvenance.mockResolvedValue({
+      id: 'prov_candidate_1',
+      sourceType: 'session-event',
+      sourceId: 'event_candidate_1',
+      confidence: 0.91,
+      observedAt: '2026-09-30T12:09:00Z',
+      createdAt: '2026-09-30T12:10:00Z',
+      evidence: [],
+    });
     mockListMemoryCandidates.mockResolvedValue([]);
     mockAcceptMemoryCandidate.mockImplementation(async (id: string, request: { reviewedBy: string; reason?: string }) => ({
       id,
