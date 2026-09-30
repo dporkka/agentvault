@@ -41,6 +41,8 @@ import type {
   ProposePromotionRequest,
   ReviewPromotionRequest,
   LearningRecommendation,
+  RegressionCaseProposal,
+  RunRegressionCaseCaptureRequest,
   RunAudit,
   RunLearningCandidateRequest,
   RunRecord,
@@ -130,6 +132,8 @@ export interface ApiClient {
   createRun(req: CreateRunRequest): Promise<RunRecord>;
   getRunAudit(id: string): Promise<RunAudit>;
   getLearningRecommendation(id: string): Promise<LearningRecommendation>;
+  getRegressionCaseProposal(id: string): Promise<RegressionCaseProposal>;
+  captureRunRegressionCase(id: string, req: RunRegressionCaseCaptureRequest): Promise<EvaluationCase>;
   proposeRunLearning(id: string, req: RunLearningCandidateRequest): Promise<Promotion>;
   pinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
   unpinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
@@ -326,6 +330,12 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     },
     getLearningRecommendation(id) {
       return call<LearningRecommendation>('GET', `/runs/${encodeURIComponent(id)}/learning-recommendation`, undefined, false);
+    },
+    getRegressionCaseProposal(id) {
+      return call<RegressionCaseProposal>('GET', `/runs/${encodeURIComponent(id)}/regression-case-proposal`, undefined, false);
+    },
+    captureRunRegressionCase(id, req) {
+      return call<EvaluationCase>('POST', `/runs/${encodeURIComponent(id)}/regression-cases`, req);
     },
     proposeRunLearning(id, req) {
       return call<Promotion>('POST', `/runs/${encodeURIComponent(id)}/learning-candidates`, req);
