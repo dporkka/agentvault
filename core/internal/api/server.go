@@ -192,6 +192,10 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("POST /experiments", s.handleRecordExperiment)
 	s.mux.HandleFunc("POST /experiments/{id}/results", s.handleRecordExperimentResult)
 
+	// Deterministic compiled context evidence
+	s.mux.HandleFunc("POST /agents/{id}/context", s.handleCompileContext)
+	s.mux.HandleFunc("GET /contexts/{hash}", s.handleGetContextSnapshot)
+
 	// Conversations
 	s.mux.HandleFunc("POST /conversations", s.handleCreateConversation)
 	s.mux.HandleFunc("GET /conversations", s.handleListConversations)
