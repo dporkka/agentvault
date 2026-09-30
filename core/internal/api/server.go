@@ -199,6 +199,7 @@ func (s *Server) RegisterRoutes() {
 	// Runtime execution evidence and audit
 	s.mux.HandleFunc("POST /runs", s.handleCreateRun)
 	s.mux.HandleFunc("GET /runs/{id}/audit", s.handleRunAudit)
+	s.mux.HandleFunc("GET /runs/{id}/learning-recommendation", s.handleLearningRecommendation)
 	s.mux.HandleFunc("POST /runs/{id}/learning-candidates", s.handleProposeRunLearning)
 
 	// Conversations
