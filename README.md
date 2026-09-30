@@ -184,6 +184,9 @@ The server prints an auth token at startup. `GET` endpoints are open locally; wr
 | `GET /recent` | Recent notes |
 | `GET /stale` | Stale notes |
 | `GET /git/status` | Vault Git status |
+| `GET /promotions` | List promotion records; defaults to pending (`proposed`) reviews |
+| `GET /evaluation-datasets/{id}` | Fetch an evaluation dataset with its cases |
+| `GET /experiments/{id}` | Fetch an experiment with its recorded results |
 
 For the full contract, including exact request/response shapes, auth rules, CORS policy, and rate limits, see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
 
@@ -219,6 +222,9 @@ Registered tools:
 - `agentvault.add_evaluation_case`
 - `agentvault.record_experiment`
 - `agentvault.record_experiment_result`
+- `agentvault.list_promotions`
+- `agentvault.get_evaluation_dataset`
+- `agentvault.get_experiment`
 - `agentvault.ask`
 
 ## Clients
