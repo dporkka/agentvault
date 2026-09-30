@@ -9,6 +9,11 @@ import type {
   AuthVerifyResponse,
   CaptureRequest,
   CaptureResponse,
+  CommitPromotionRequest,
+  CreateEvaluationCaseRequest,
+  CreateEvaluationDatasetRequest,
+  CreateExperimentRequest,
+  CreateExperimentResultRequest,
   CreateNoteRequest,
   CreateNoteResponse,
   UpdateNoteRequest,
@@ -17,8 +22,12 @@ import type {
   GitStatus,
   Graph,
   HealthResponse,
+  EvaluationCase,
+  EvaluationDataset,
   EvaluationDatasetDetail,
+  Experiment,
   ExperimentDetail,
+  ExperimentResult,
   IndexOptions,
   IndexResult,
   NoteLinks,
@@ -26,6 +35,8 @@ import type {
   Projects,
   Promotion,
   PromotionParams,
+  ProposePromotionRequest,
+  ReviewPromotionRequest,
   RecentParams,
   SearchResult,
   SearchParams,
@@ -67,8 +78,15 @@ export const routes: {
   readonly graph: EndpointDef<{ center: string; depth?: number }, Graph>;
   readonly graphNeighbors: EndpointDef<{ id: string }, Graph>;
   readonly promotions: EndpointDef<PromotionParams | undefined, Promotion[]>;
+  readonly proposePromotion: EndpointDef<ProposePromotionRequest, Promotion>;
+  readonly reviewPromotion: EndpointDef<ReviewPromotionRequest, Promotion>;
+  readonly commitPromotion: EndpointDef<CommitPromotionRequest, Promotion>;
   readonly evaluationDataset: EndpointDef<{ id: string }, EvaluationDatasetDetail>;
+  readonly createEvaluationDataset: EndpointDef<CreateEvaluationDatasetRequest, EvaluationDataset>;
+  readonly createEvaluationCase: EndpointDef<CreateEvaluationCaseRequest, EvaluationCase>;
   readonly experiment: EndpointDef<{ id: string }, ExperimentDetail>;
+  readonly createExperiment: EndpointDef<CreateExperimentRequest, Experiment>;
+  readonly createExperimentResult: EndpointDef<CreateExperimentResultRequest, ExperimentResult>;
 } = {
   health: {
     method: 'GET',
@@ -216,6 +234,55 @@ export const routes: {
     auth: false,
     request: undefined as unknown as { id: string },
     response: undefined as unknown as ExperimentDetail,
+  },
+  proposePromotion: {
+    method: 'POST',
+    path: '/promotions',
+    auth: true,
+    request: undefined as unknown as ProposePromotionRequest,
+    response: undefined as unknown as Promotion,
+  },
+  reviewPromotion: {
+    method: 'POST',
+    path: '/promotions/{id}/review',
+    auth: true,
+    request: undefined as unknown as ReviewPromotionRequest,
+    response: undefined as unknown as Promotion,
+  },
+  commitPromotion: {
+    method: 'POST',
+    path: '/promotions/{id}/commit',
+    auth: true,
+    request: undefined as unknown as CommitPromotionRequest,
+    response: undefined as unknown as Promotion,
+  },
+  createEvaluationDataset: {
+    method: 'POST',
+    path: '/evaluation-datasets',
+    auth: true,
+    request: undefined as unknown as CreateEvaluationDatasetRequest,
+    response: undefined as unknown as EvaluationDataset,
+  },
+  createEvaluationCase: {
+    method: 'POST',
+    path: '/evaluation-datasets/{id}/cases',
+    auth: true,
+    request: undefined as unknown as CreateEvaluationCaseRequest,
+    response: undefined as unknown as EvaluationCase,
+  },
+  createExperiment: {
+    method: 'POST',
+    path: '/experiments',
+    auth: true,
+    request: undefined as unknown as CreateExperimentRequest,
+    response: undefined as unknown as Experiment,
+  },
+  createExperimentResult: {
+    method: 'POST',
+    path: '/experiments/{id}/results',
+    auth: true,
+    request: undefined as unknown as CreateExperimentResultRequest,
+    response: undefined as unknown as ExperimentResult,
   },
 };
 
