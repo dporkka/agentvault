@@ -298,3 +298,153 @@ func TestPromoteEventRunsDeterministicExtractionWithoutPromotingRawActivity(t *t
 		t.Fatalf("raw activity was promoted into semantic candidate: %+v", raw.Candidates)
 	}
 }
+
+
+func TestAppendSemanticSessionEventPromotesEpisodeAndCandidate(t *testing.T) {
+	store, database, _ := setupStore(t)
+	defer database.Close()
+
+	session, err := store.StartSession(contract.StartAgentSessionRequest{
+		ID:        "session_semantic_event",
+		AgentID:   "architect",
+		Project:   "agentvault",
+		Objective: "Record explicit semantic events",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, err := store.AppendSessionEvent(session.ID, contract.AppendSessionEventRequest{
+		ID:        "event_semantic_decision",
+		EventType: "decision",
+		Payload: map[string]interface{}{
+			"summary": "Use deterministic extraction before model-assisted extraction.",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	episodeID := deterministicPromotionID("episode", "session-event", event.ID, event.EventType)
+	episode, err := store.GetEpisode(episodeID)
+	if err != nil {
+		t.Fatalf("semantic session event was not promoted: %v", err)
+	}
+	if episode.ScopeType != "session" || episode.ScopeID != session.ID || episode.Summary != "Use deterministic extraction before model-assisted extraction." {
+		t.Fatalf("unexpected promoted session episode: %+v", episode)
+	}
+
+	candidates, err := store.ListMemoryCandidates(contract.MemoryCandidateFilter{
+		Status:    contract.MemoryCandidatePending,
+		ScopeType: "session",
+		ScopeID:   session.ID,
+		Limit:     20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 || candidates[0].MemoryKind != "decision" || candidates[0].SourceEpisodeID != episode.ID {
+		t.Fatalf("semantic session event did not create review candidate: %+v", candidates)
+	}
+}
+
+func TestAppendRawSessionEventDoesNotPromoteSemanticMemory(t *testing.T) {
+	store, database, _ := setupStore(t)
+	defer database.Close()
+
+	session, err := store.StartSession(contract.StartAgentSessionRequest{
+		ID:        "session_raw_event",
+		AgentID:   "worker",
+		Project:   "agentvault",
+		Objective: "Record raw execution events",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, err := store.AppendSessionEvent(session.ID, contract.AppendSessionEventRequest{
+		ID:        "event_raw_verification",
+		EventType: "verification",
+		Payload: map[string]interface{}{
+			"summary": "All tests passed.",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	episodeID := deterministicPromotionID("episode", "session-event", event.ID, event.EventType)
+	if _, err := store.GetEpisode(episodeID); err == nil {
+		t.Fatal("raw session event unexpectedly became a semantic episode")
+	}
+	candidates, err := store.ListMemoryCandidates(contract.MemoryCandidateFilter{
+		Status:    contract.MemoryCandidatePending,
+		ScopeType: "session",
+		ScopeID:   session.ID,
+		Limit:     20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("raw session event created semantic candidates: %+v", candidates)
+	}
+}
+
+func TestReconcileSemanticSessionEventsBackfillsMissedPromotion(t *testing.T) {
+	store, database, _ := setupStore(t)
+	defer database.Close()
+
+	session, err := store.StartSession(contract.StartAgentSessionRequest{
+		ID:        "session_reconcile_semantic",
+		AgentID:   "architect",
+		Project:   "agentvault",
+		Objective: "Recover semantic event promotion",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Persist the canonical session event directly to simulate a crash after the
+	// event commit but before enrichment/promotion ran.
+	event := contract.SessionEvent{
+		ID:        "event_reconcile_decision",
+		SessionID: session.ID,
+		EventType: "decision.observed",
+		Payload: map[string]interface{}{
+			"summary": "Recover review candidates from durable session history.",
+		},
+		CreatedAt: "2026-09-30T15:00:00Z",
+	}
+	if err := store.persist(eventSessionEvent, event, func() error {
+		return store.projectSessionEvent(event)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.GetEpisode(deterministicPromotionID("episode", "session-event", event.ID, event.EventType)); err == nil {
+		t.Fatal("test setup unexpectedly promoted the session event")
+	}
+
+	if err := store.ReconcileSemanticSessionEvents(100); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReconcileSemanticSessionEvents(100); err != nil {
+		t.Fatalf("reconciliation retry must be idempotent: %v", err)
+	}
+
+	episode, err := store.GetEpisode(deterministicPromotionID("episode", "session-event", event.ID, event.EventType))
+	if err != nil {
+		t.Fatalf("reconciliation did not restore promoted episode: %v", err)
+	}
+	candidates, err := store.ListMemoryCandidates(contract.MemoryCandidateFilter{
+		Status:    contract.MemoryCandidatePending,
+		ScopeType: "session",
+		ScopeID:   session.ID,
+		Limit:     20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 || candidates[0].SourceEpisodeID != episode.ID {
+		t.Fatalf("reconciliation did not restore candidate exactly once: %+v", candidates)
+	}
+}
