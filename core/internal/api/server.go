@@ -189,6 +189,7 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("POST /evaluation-datasets", s.handleCreateEvaluationDataset)
 	s.mux.HandleFunc("POST /evaluation-datasets/{id}/cases", s.handleCreateEvaluationCase)
 	s.mux.HandleFunc("GET /experiments/{id}", s.handleExperiment)
+	s.mux.HandleFunc("GET /experiments/{id}/compare/{candidateId}", s.handleExperimentComparison)
 	s.mux.HandleFunc("POST /experiments", s.handleRecordExperiment)
 	s.mux.HandleFunc("POST /experiments/{id}/results", s.handleRecordExperimentResult)
 
