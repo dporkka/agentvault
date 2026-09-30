@@ -618,7 +618,6 @@ func TestComputeHashEmpty(t *testing.T) {
 	}
 }
 
-
 func TestIndexCapturePromotesProjectEpisodeOnce(t *testing.T) {
 	vaultPath, database, cleanup := setupTestVault(t)
 	defer cleanup()
