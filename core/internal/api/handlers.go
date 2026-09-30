@@ -1625,7 +1625,10 @@ func evaluationDatasetResponse(item *agentstate.EvaluationDataset) contract.Eval
 func evaluationCaseResponse(item *agentstate.EvaluationCase) contract.EvaluationCase {
 	return contract.EvaluationCase{
 		ID: item.ID, DatasetID: item.DatasetID, Name: item.Name,
-		Input: item.Input, Expected: item.Expected, Tags: item.Tags, CreatedAt: item.CreatedAt,
+		Input: item.Input, Expected: item.Expected, Tags: item.Tags,
+		SourceRunID: item.SourceRunID, SourceObservationIDs: item.SourceObservationIDs,
+		SourceEvaluationIDs: item.SourceEvaluationIDs, AgentID: item.AgentID,
+		AgentRevision: item.AgentRevision, CreatedAt: item.CreatedAt,
 	}
 }
 
@@ -2016,4 +2019,42 @@ func (s *Server) handleLearningRecommendation(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, learningRecommendationResponse(item))
+}
+
+
+func regressionCaseProposalResponse(item *agentstate.RegressionCaseProposal) contract.RegressionCaseProposal {
+	return contract.RegressionCaseProposal{
+		RunID: item.RunID, AgentID: item.AgentID, AgentRevision: item.AgentRevision,
+		Eligible: item.Eligible, SupportLevel: string(item.SupportLevel), Name: item.Name,
+		Input: item.Input, Expected: item.Expected, Tags: item.Tags,
+		ReasonCodes: item.ReasonCodes, SourceObservationIDs: item.SourceObservationIDs,
+		SourceEvaluationIDs: item.SourceEvaluationIDs,
+	}
+}
+
+func (s *Server) handleRegressionCaseProposal(w http.ResponseWriter, r *http.Request) {
+	item, err := agentstate.RecommendRunRegressionCase(s.db, r.PathValue("id"))
+	if err != nil {
+		writeAgentStateError(w, "regression case proposal lookup failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, regressionCaseProposalResponse(item))
+}
+
+func (s *Server) handleCaptureRunRegressionCase(w http.ResponseWriter, r *http.Request) {
+	var req contract.RunRegressionCaseCaptureRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.CaptureRunRegressionCase(s.db, agentstate.RunRegressionCaseCapture{
+		RunID: r.PathValue("id"), DatasetID: req.DatasetID, Name: req.Name,
+		Expected: req.Expected, Tags: req.Tags,
+	})
+	if err != nil {
+		writeAgentStateError(w, "regression case capture failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, evaluationCaseResponse(item))
 }
