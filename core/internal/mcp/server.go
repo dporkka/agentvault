@@ -131,6 +131,7 @@ func (s *Server) RegisterTools() {
 	s.registerGetExperiment()
 	s.registerCompileContext()
 	s.registerGetContextSnapshot()
+	s.registerGetRunAudit()
 	s.registerAnnotate()
 	s.registerSetStatus()
 	s.registerAsk()
