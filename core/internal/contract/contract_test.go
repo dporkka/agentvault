@@ -202,3 +202,30 @@ func TestAgentStateReadContractJSONTags(t *testing.T) {
 		t.Errorf("expected experiment detail fields in JSON, got %s", got)
 	}
 }
+
+
+func TestContextSnapshotJSONTags(t *testing.T) {
+	snapshot := ContextSnapshot{
+		Hash: "sha256:abc", AgentID: "agt_1", AgentRevision: 2, AgentTitle: "Agent",
+		KnowledgeScopes: []string{"project:test"}, ArtifactScopes: []string{},
+		ConversationScopes: []string{}, CapabilityRefs: []string{"github"},
+		Sections: []ContextSection{{Kind: "identity", SourceID: "identity_1", SourcePath: "10-notes/id.md", Title: "Identity", Content: "Be precise."}},
+		Unresolved: []ContextReferenceIssue{},
+		Text: "## identity: Identity\nBe precise.",
+	}
+	b, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"agentId":"agt_1"`,
+		`"agentRevision":2`,
+		`"sourceId":"identity_1"`,
+		`"knowledgeScopes":["project:test"]`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected context JSON to contain %s, got %s", want, got)
+		}
+	}
+}
