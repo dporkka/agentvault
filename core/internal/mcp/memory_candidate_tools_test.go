@@ -271,7 +271,6 @@ func TestScopedKnowledgeReaderCannotCrossCandidateScope(t *testing.T) {
 	}
 }
 
-
 func TestRuntimeSurfaceReconcilesMissedSemanticSessionEventPromotion(t *testing.T) {
 	server, database, vault := setupKnowledgeMCPServer(t)
 	defer database.Close()
@@ -331,7 +330,6 @@ func TestRuntimeSurfaceReconcilesMissedSemanticSessionEventPromotion(t *testing.
 		t.Fatalf("MCP runtime reconciliation did not backfill candidate: %+v", candidates)
 	}
 }
-
 
 func TestScopedRuntimeDoesNotReconcileOtherProjectsSemanticEvents(t *testing.T) {
 	_, database, vault := setupKnowledgeMCPServer(t)
