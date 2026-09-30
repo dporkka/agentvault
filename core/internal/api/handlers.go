@@ -1966,3 +1966,27 @@ func (s *Server) handleRunAudit(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, runAuditResponse(item))
 }
+
+
+func (s *Server) handleProposeRunLearning(w http.ResponseWriter, r *http.Request) {
+	var req contract.RunLearningCandidateRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.ProposeRunLearningCandidate(s.db, agentstate.RunLearningCandidate{
+		RunID:                r.PathValue("id"),
+		TargetKind:           agentstate.PromotionTargetKind(req.TargetKind),
+		Candidate:            req.Candidate,
+		Rationale:            req.Rationale,
+		SourceObservationIDs: req.SourceObservationIDs,
+		SourceEvaluationIDs:  req.SourceEvaluationIDs,
+		SupersedesNoteID:     req.SupersedesNoteID,
+	})
+	if err != nil {
+		writeAgentStateError(w, "run learning proposal failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, promotionResponse(item))
+}
