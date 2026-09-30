@@ -20,8 +20,9 @@ test: ## Run all Go tests (verbose)
 test-ci: ## Run Go tests with race detection and cache disabled (CI mode)
 	cd $(CORE) && go test -race -count=1 ./...
 
-test-core-critical: ## Validate durable recovery, context determinism, and authorization boundaries
-	cd $(CORE) && go test ./internal/knowledge -run 'TestJournalReplayRestoresRebuiltProjection|TestJournalAppendBuildsVerifiableHashChain|TestJournalVerifyRejectsTamperingBeforeReplaySideEffects|TestJournalFirstChainedEventAnchorsLegacyPrefix|TestTemporalFactSupersessionAndEpisodeReplay|TestProvenanceEvidenceSpanRoundTrip' -count=1
+test-core-critical: ## Validate durable recovery, journal integrity, context determinism, and authorization boundaries
+	cd $(CORE) && go test ./internal/knowledge -run 'TestJournalReplayRestoresRebuiltProjection|TestJournalAppendBuildsVerifiableHashChain|TestJournalVerifyRejectsTamperingBeforeReplaySideEffects|TestJournalFirstChainedEventAnchorsLegacyPrefix|TestJournalCheckpointRoundTripAndDetectsWholeJournalRewrite|TestJournalCheckpointRefusesOverwrite|TestJournalVerifyCheckpointRejectsInvalidCheckpoint|TestTemporalFactSupersessionAndEpisodeReplay|TestProvenanceEvidenceSpanRoundTrip' -count=1
+	cd $(CORE) && go test ./cmd/agentvault -run 'TestRunJournalVerifyReportsIntegrity|TestRunJournalCheckpointThenVerifyAgainstCheckpoint|TestJournalCommandRegistered' -count=1
 	cd $(CORE) && go test ./internal/contextcompiler -run 'TestContextCompilerGoldenEvaluation|TestCompileIncludesCurrentTemporalKnowledgeWithoutProjectLeak|TestCompileUnifiedIncludesVisibleMarkdownMemoryWithoutScopeLeak' -count=1
 	cd $(CORE) && go test ./internal/authz ./internal/mcp -count=1
 
