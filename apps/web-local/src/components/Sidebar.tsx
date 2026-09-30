@@ -27,6 +27,15 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    to: '/activity',
+    label: 'Activity',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h4.5l2.25-6 3 12 2.25-6h4.5" />
+      </svg>
+    ),
+  },
+  {
     to: '/new',
     label: 'New Note',
     icon: (
