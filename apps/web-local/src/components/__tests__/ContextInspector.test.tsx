@@ -57,6 +57,11 @@ describe('ContextInspector', () => {
             memoryClass: 'semantic',
             memoryKind: 'decision',
           },
+          retrieval: {
+            method: 'memory_scope',
+            scope: 'project:alpha',
+            sourceId: 'mem-1',
+          },
           ranking: {
             algorithm: 'deterministic-multisignal-v1',
             components: [
@@ -106,6 +111,8 @@ describe('ContextInspector', () => {
     expect(screen.getByText('Score 0.960')).toBeInTheDocument();
     expect(screen.getByText('human · 92% confidence')).toBeInTheDocument();
     expect(screen.getByText('Use deterministic context compilation.')).toBeInTheDocument();
+    expect(screen.getByText('How this entered context')).toBeInTheDocument();
+    expect(screen.getByText('memory_scope · project:alpha')).toBeInTheDocument();
     expect(screen.getByText('Why this ranked here')).toBeInTheDocument();
     expect(screen.getByText(/sourcePrior: 0\.90 × 0\.64 = 0\.576/)).toBeInTheDocument();
   });
