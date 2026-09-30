@@ -305,6 +305,11 @@ export interface EvaluationCase {
   input: Record<string, unknown>;
   expected: Record<string, unknown> | null;
   tags: string[];
+  sourceRunId: string;
+  sourceObservationIds: string[];
+  sourceEvaluationIds: string[];
+  agentId: string;
+  agentRevision: number;
   createdAt: string;
 }
 
@@ -553,4 +558,27 @@ export interface LearningRecommendation {
   contextMemoryRefs: string[];
   supersedesNoteIds: string[];
   signals: LearningSignal[];
+}
+
+
+export interface RegressionCaseProposal {
+  runId: string;
+  agentId: string;
+  agentRevision: number;
+  eligible: boolean;
+  supportLevel: LearningSupportLevel;
+  name: string;
+  input: Record<string, unknown>;
+  expected: Record<string, unknown> | null;
+  tags: string[];
+  reasonCodes: string[];
+  sourceObservationIds: string[];
+  sourceEvaluationIds: string[];
+}
+
+export interface RunRegressionCaseCaptureRequest {
+  datasetId: string;
+  name?: string;
+  expected?: Record<string, unknown>;
+  tags?: string[];
 }
