@@ -113,11 +113,11 @@ PR #81 changes agent-state contracts.
 	}
 
 	req := ContextCompileRequest{
-		AgentID:                "agt_context_1",
-		Task:                   "Compile context for the next run.",
-		ConversationID:         "conv_1",
-		RetrievedNoteIDs:       []string{"knowledge_1"},
-		ArtifactNoteIDs:        []string{"artifact_1"},
+		AgentID:                 "agt_context_1",
+		Task:                    "Compile context for the next run.",
+		ConversationID:          "conv_1",
+		RetrievedNoteIDs:        []string{"knowledge_1"},
+		ArtifactNoteIDs:         []string{"artifact_1"},
 		MaxConversationMessages: 10,
 	}
 	first, err := CompileContext(database, vaultPath, req)
