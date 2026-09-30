@@ -1169,7 +1169,7 @@ func (s *Server) registerCommitPromotion() {
 		Name:        "agentvault.commit_promotion",
 		Description: "Mark an approved promotion committed only after its exact candidate text exists in a canonical Markdown note.",
 		InputSchema: makeSchema(map[string]interface{}{
-			"promotion_id":  schemaString("Approved promotion ID"),
+			"promotion_id":   schemaString("Approved promotion ID"),
 			"target_note_id": schemaString("Canonical note ID containing the promoted candidate text"),
 		}, []string{"promotion_id", "target_note_id"}),
 		Handler: s.handleCommitPromotion,
