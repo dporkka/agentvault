@@ -307,10 +307,10 @@ func appendConversationSections(database *db.DB, snapshot *ContextSnapshot, limi
 			return fmt.Errorf("%w: scan conversation message: %v", ErrStorage, err)
 		}
 		snapshot.Sections = append(snapshot.Sections, ContextSection{
-			Kind: ContextConversation,
+			Kind:     ContextConversation,
 			SourceID: fmt.Sprintf("%s:%d", snapshot.ConversationID, id),
-			Title: role,
-			Content: content,
+			Title:    role,
+			Content:  content,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -356,7 +356,7 @@ func hashContextSnapshot(snapshot *ContextSnapshot) (string, error) {
 	payload := hashPayload{
 		AgentID: snapshot.AgentID, AgentRevision: snapshot.AgentRevision,
 		AgentTitle: snapshot.AgentTitle, Task: snapshot.Task,
-		ConversationID: snapshot.ConversationID,
+		ConversationID:  snapshot.ConversationID,
 		KnowledgeScopes: snapshot.KnowledgeScopes, ArtifactScopes: snapshot.ArtifactScopes,
 		ConversationScopes: snapshot.ConversationScopes, CapabilityRefs: snapshot.CapabilityRefs,
 		ContextPolicyRef: snapshot.ContextPolicyRef, Sections: snapshot.Sections,
