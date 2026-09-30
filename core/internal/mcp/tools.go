@@ -825,35 +825,6 @@ func (s *Server) registerLogAgentRun() {
 }
 
 func (s *Server) handleLogAgentRun(args map[string]interface{}) (string, error) {
-	agentName := stringArg(args, "agent_name")
-	agentID := stringArg(args, "agent_id")
-	agentRevision := intArg(args, "agent_revision", 0)
-	task := stringArg(args, "task")
-	status := stringArg(args, "status")
-	conversationID := stringArg(args, "conversation_id")
-	contextHash := stringArg(args, "context_hash")
-	startedAt := stringArg(args, "started_at")
-	endedAt := stringArg(args, "ended_at")
-	filesChanged := stringSliceArg(args, "files_changed")
-
-	if agentName == "" || task == "" {
-		return "", fmt.Errorf("agent_name and task are required")
-	}
-	if status == "" {
-		status = string(agentstate.RunSucceeded)
-	}
-	if agentID != "" && agentRevision < 1 {
-		return "", fmt.Errorf("agent_revision must be at least 1 when agent_id is supplied")
-	}
-	if agentID == "" && agentRevision > 0 {
-		return "", fmt.Errorf("agent_id is required when agent_revision is supplied")
-	}
-	switch agentstate.RunStatus(status) {
-	case agentstate.RunRunning, agentstate.RunSucceeded, agentstate.RunFailed, agentstate.RunCancelled:
-	default:
-		return "", fmt.Errorf("unknown run status %q", status)
-	}
-
 	inputJSON, err := normalizedJSONObjectArg(args, "input_json")
 	if err != nil {
 		return "", err
@@ -871,36 +842,46 @@ func (s *Server) handleLogAgentRun(args map[string]interface{}) (string, error) 
 		return "", err
 	}
 
-	id := fmt.Sprintf("run_%d", time.Now().UnixNano())
-	now := currentTimestamp()
-	filesJSON, _ := json.Marshal(filesChanged)
-	if startedAt == "" {
-		startedAt = now
+	var input, output, capabilities, runtime map[string]interface{}
+	if err := json.Unmarshal([]byte(inputJSON), &input); err != nil {
+		return "", fmt.Errorf("input_json: %w", err)
 	}
-	if status != string(agentstate.RunRunning) && endedAt == "" {
-		endedAt = now
+	if err := json.Unmarshal([]byte(outputJSON), &output); err != nil {
+		return "", fmt.Errorf("output_json: %w", err)
+	}
+	if err := json.Unmarshal([]byte(capabilityJSON), &capabilities); err != nil {
+		return "", fmt.Errorf("capability_snapshot_json: %w", err)
+	}
+	if err := json.Unmarshal([]byte(runtimeJSON), &runtime); err != nil {
+		return "", fmt.Errorf("runtime_metadata_json: %w", err)
 	}
 
-	_, err = s.db.Exec(
-		`INSERT INTO agent_runs (
-			id, agent_name, agent_id, agent_revision, task, status, conversation_id,
-			context_hash, input_json, output_json, capability_snapshot_json,
-			runtime_metadata_json, started_at, ended_at, files_changed_json, created_at
-		) VALUES (?, ?, ?, NULLIF(?, 0), ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?)`,
-		id, agentName, agentID, agentRevision, task, status, conversationID,
-		contextHash, inputJSON, outputJSON, capabilityJSON, runtimeJSON,
-		startedAt, endedAt, string(filesJSON), now,
-	)
+	record, err := agentstate.RecordRun(s.db, agentstate.RunRecord{
+		AgentName:          stringArg(args, "agent_name"),
+		AgentID:            stringArg(args, "agent_id"),
+		AgentRevision:      intArg(args, "agent_revision", 0),
+		Task:               stringArg(args, "task"),
+		Status:             agentstate.RunStatus(stringArg(args, "status")),
+		ConversationID:     stringArg(args, "conversation_id"),
+		ContextHash:        stringArg(args, "context_hash"),
+		Input:              input,
+		Output:             output,
+		CapabilitySnapshot: capabilities,
+		RuntimeMetadata:    runtime,
+		StartedAt:          stringArg(args, "started_at"),
+		EndedAt:            stringArg(args, "ended_at"),
+		FilesChanged:       stringSliceArg(args, "files_changed"),
+	})
 	if err != nil {
-		return "", fmt.Errorf("failed to log agent run: %w", err)
+		return "", err
 	}
 
-	agentLabel := agentName
-	if agentID != "" {
-		agentLabel = fmt.Sprintf("%s@%d", agentID, agentRevision)
+	agentLabel := record.AgentName
+	if record.AgentID != "" {
+		agentLabel = fmt.Sprintf("%s@%d", record.AgentID, record.AgentRevision)
 	}
 	return fmt.Sprintf("Logged agent run: %s\n- **Agent:** %s\n- **Task:** %s\n- **Status:** %s\n- **Files changed:** %d",
-		id, agentLabel, task, status, len(filesChanged)), nil
+		record.ID, agentLabel, record.Task, record.Status, len(record.FilesChanged)), nil
 }
 
 // --- Tool: agentvault.log_observation ---
