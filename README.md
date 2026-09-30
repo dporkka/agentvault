@@ -15,7 +15,7 @@ AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The sam
 
 - **Files first.** Markdown is the durable source of truth; the SQLite index can be rebuilt at any time.
 - **Local by default.** The CLI, HTTP API, and desktop app run on your machine.
-- **Durable agent state.** Canonical agent manifests, structured run evidence, evaluations, and evidence-backed promotion proposals persist across runtimes without making AgentVault an execution engine.
+- **Durable agent state.** Canonical agent manifests, structured run evidence, explicit promotion review/commit, and reproducible evaluation datasets persist across runtimes without making AgentVault an execution engine.
 - **One shared contract.** Go and TypeScript clients share a single API contract so server and clients stay in sync. See [`packages/contract/`](packages/contract/) and [`core/internal/contract/`](core/internal/contract/).
 
 ## Table of Contents
@@ -43,7 +43,7 @@ AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The sam
 | **Structured note types** | `note`, `decision`, `task`, `meeting`, `source`, `project`, and `agent` templates with consistent folder rules. |
 | **Source-grounded AI** | `agentvault ask` and `POST /ask` retrieve relevant notes first, then answer with citations. |
 | **Local HTTP API** | A loopback REST API for desktop, web, extension, and mobile clients. |
-| **MCP server** | Expose vault search, read, create, capture, ask, agent-run evidence, evaluations, and promotion proposals as Model Context Protocol tools. |
+| **MCP server** | Expose vault search, read, create, capture, ask, run evidence, promotion review, and evaluation experiment records as Model Context Protocol tools. |
 | **Multi-client support** | First-party desktop (Wails), web (Vite), browser extension (MV3), and mobile (Expo) apps. |
 | **Vault diagnostics** | `agentvault doctor` checks config, database, migrations, links, orphan chunks, embeddings, and API auth. |
 
@@ -213,6 +213,12 @@ Registered tools:
 - `agentvault.log_observation`
 - `agentvault.log_evaluation`
 - `agentvault.propose_promotion`
+- `agentvault.review_promotion`
+- `agentvault.commit_promotion`
+- `agentvault.create_evaluation_dataset`
+- `agentvault.add_evaluation_case`
+- `agentvault.record_experiment`
+- `agentvault.record_experiment_result`
 - `agentvault.ask`
 
 ## Clients
