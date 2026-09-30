@@ -398,3 +398,38 @@ func TestEvaluationCaseProvenanceJSONTags(t *testing.T) {
 		}
 	}
 }
+
+
+func TestExperimentComparisonJSONTags(t *testing.T) {
+	delta := 0.25
+	item := ExperimentComparison{
+		BaselineExperimentID: "exp_base", CandidateExperimentID: "exp_candidate",
+		DatasetID: "ds_1", AgentID: "agt_1",
+		BaselineAgentRevision: 2, CandidateAgentRevision: 3,
+		Comparable: true,
+		Summary: ExperimentComparisonSummary{TotalCases: 1, PairedResults: 1, Fixes: 1},
+		Cases: []ExperimentCaseComparison{{
+			CaseID: "case_1", CaseName: "Regression", Transition: "fixed",
+			BaselineLabel: "fail", CandidateLabel: "pass", ScoreDelta: &delta,
+		}},
+	}
+	b, err := json.Marshal(item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"baselineExperimentId":"exp_base"`,
+		`"candidateExperimentId":"exp_candidate"`,
+		`"baselineAgentRevision":2`,
+		`"candidateAgentRevision":3`,
+		`"pairedResults":1`,
+		`"fixes":1`,
+		`"transition":"fixed"`,
+		`"scoreDelta":0.25`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected comparison JSON to contain %s, got %s", want, got)
+		}
+	}
+}
