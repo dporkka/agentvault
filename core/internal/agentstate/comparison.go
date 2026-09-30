@@ -21,16 +21,16 @@ const (
 )
 
 type ExperimentCaseComparison struct {
-	CaseID          string
-	CaseName        string
-	Transition      ExperimentTransition
-	BaselineRunID   string
-	CandidateRunID  string
-	BaselineLabel   string
-	CandidateLabel  string
-	BaselineScore   *float64
-	CandidateScore  *float64
-	ScoreDelta      *float64
+	CaseID         string
+	CaseName       string
+	Transition     ExperimentTransition
+	BaselineRunID  string
+	CandidateRunID string
+	BaselineLabel  string
+	CandidateLabel string
+	BaselineScore  *float64
+	CandidateScore *float64
+	ScoreDelta     *float64
 }
 
 type ExperimentComparisonSummary struct {
@@ -46,16 +46,16 @@ type ExperimentComparisonSummary struct {
 }
 
 type ExperimentComparison struct {
-	BaselineExperimentID     string
-	CandidateExperimentID    string
-	DatasetID                string
-	AgentID                  string
-	BaselineAgentRevision    int
-	CandidateAgentRevision   int
-	Comparable               bool
-	ReasonCodes              []string
-	Summary                  ExperimentComparisonSummary
-	Cases                    []ExperimentCaseComparison
+	BaselineExperimentID   string
+	CandidateExperimentID  string
+	DatasetID              string
+	AgentID                string
+	BaselineAgentRevision  int
+	CandidateAgentRevision int
+	Comparable             bool
+	ReasonCodes            []string
+	Summary                ExperimentComparisonSummary
+	Cases                  []ExperimentCaseComparison
 }
 
 // CompareExperiments compares two persisted experiment result sets without
@@ -129,7 +129,7 @@ func CompareExperiments(database *db.DB, baselineID, candidateID string) (*Exper
 	comparison.Summary.TotalCases = len(dataset.Cases)
 	for _, evaluationCase := range dataset.Cases {
 		item := ExperimentCaseComparison{
-			CaseID: evaluationCase.ID,
+			CaseID:   evaluationCase.ID,
 			CaseName: evaluationCase.Name,
 		}
 
