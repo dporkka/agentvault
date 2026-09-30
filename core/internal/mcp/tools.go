@@ -1487,6 +1487,76 @@ func (s *Server) handleGetExperiment(args map[string]interface{}) (string, error
 	return sb.String(), nil
 }
 
+// --- Tool: agentvault.get_run_audit ---
+
+func (s *Server) registerGetRunAudit() {
+	s.tools["agentvault.get_run_audit"] = Tool{
+		Name:        "agentvault.get_run_audit",
+		Description: "Fetch a run with its exact immutable context snapshot, source provenance, observations, and evaluations.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id": schemaString("Agent run ID"),
+		}, []string{"run_id"}),
+		Handler: s.handleGetRunAudit,
+	}
+}
+
+func (s *Server) handleGetRunAudit(args map[string]interface{}) (string, error) {
+	audit, err := agentstate.GetRunAudit(s.db, stringArg(args, "run_id"))
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Run Audit\n\n")
+	sb.WriteString(fmt.Sprintf("- **Run:** %s\n", audit.Run.ID))
+	agentLabel := audit.Run.AgentName
+	if audit.Run.AgentID != "" {
+		agentLabel = fmt.Sprintf("%s@%d", audit.Run.AgentID, audit.Run.AgentRevision)
+	}
+	sb.WriteString(fmt.Sprintf("- **Agent:** %s\n", agentLabel))
+	sb.WriteString(fmt.Sprintf("- **Task:** %s\n", audit.Run.Task))
+	sb.WriteString(fmt.Sprintf("- **Status:** %s\n", audit.Run.Status))
+	if audit.Run.ContextHash != "" {
+		sb.WriteString(fmt.Sprintf("- **Context:** %s\n", audit.Run.ContextHash))
+	}
+
+	if audit.Context != nil {
+		sb.WriteString("\n## Context Provenance\n\n")
+		for _, section := range audit.Context.Sections {
+			source := section.SourceID
+			if section.SourcePath != "" {
+				source = fmt.Sprintf("%s (%s)", source, section.SourcePath)
+			}
+			sb.WriteString(fmt.Sprintf("- **%s:** %s\n", section.Kind, source))
+		}
+		for _, issue := range audit.Context.Unresolved {
+			sb.WriteString(fmt.Sprintf("- **unresolved %s:** %s - %s\n", issue.Kind, issue.SourceID, issue.Reason))
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf("\n## Observations (%d)\n\n", len(audit.Observations)))
+	for _, observation := range audit.Observations {
+		sb.WriteString(fmt.Sprintf("- %s **%s** %s", observation.ID, observation.Kind, observation.Name))
+		if observation.Status != "" {
+			sb.WriteString(fmt.Sprintf(" [%s]", observation.Status))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString(fmt.Sprintf("\n## Evaluations (%d)\n\n", len(audit.Evaluations)))
+	for _, evaluation := range audit.Evaluations {
+		sb.WriteString(fmt.Sprintf("- %s **%s** by %s", evaluation.ID, evaluation.Name, evaluation.Evaluator))
+		if evaluation.Score != nil {
+			sb.WriteString(fmt.Sprintf(" score=%g", *evaluation.Score))
+		}
+		if evaluation.Label != "" {
+			sb.WriteString(fmt.Sprintf(" label=%s", evaluation.Label))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
 // --- Tool: agentvault.compile_context ---
 
 func (s *Server) registerCompileContext() {
