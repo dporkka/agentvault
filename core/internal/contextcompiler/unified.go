@@ -269,7 +269,7 @@ func addNotesUnified(c *candidateCollector, store *memory.Store) error {
 			Content:  detail.Snippet,
 			Path:     result.Path,
 			Score:    candidate.baseScore,
-			Metadata: noteContextMetadata(result, candidate.semanticScore),
+			Metadata: noteContextMetadata(result, candidate.semanticScore, candidate.graphDistance),
 		})
 	}
 	return nil
