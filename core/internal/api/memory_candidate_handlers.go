@@ -32,6 +32,20 @@ func (s *Server) handleGetMemoryCandidate(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, candidate)
 }
 
+func (s *Server) handleExtractMemoryCandidates(w http.ResponseWriter, r *http.Request) {
+	var req contract.ExtractMemoryCandidatesRequest
+	if err := decodeKnowledgeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
+		return
+	}
+	candidates, err := s.knowledge.ExtractMemoryCandidatesFromEpisode(req.EpisodeID)
+	if err != nil {
+		writeKnowledgeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, candidates)
+}
+
 func (s *Server) handleProposeMemoryCandidate(w http.ResponseWriter, r *http.Request) {
 	var req contract.CreateMemoryCandidateRequest
 	if err := decodeKnowledgeJSON(r, &req); err != nil {
