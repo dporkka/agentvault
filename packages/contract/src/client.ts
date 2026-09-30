@@ -5,6 +5,8 @@
 // `localStorage` or `globalThis` so it works in any environment
 // (browser, content script, service worker, RN/Metro bundle, SSR).
 
+import type { CompileContextRequest, ContextBundle } from './context';
+
 import type {
   AskRequest,
   AskResponse,
@@ -88,6 +90,7 @@ export interface ApiClient {
   createNote(req: CreateNoteRequest): Promise<CreateNoteResponse>;
   capture(req: CaptureRequest): Promise<CaptureResponse>;
   ask(req: AskRequest): Promise<AskResponse>;
+  compileContext(req: CompileContextRequest): Promise<ContextBundle>;
   getProjects(): Promise<Projects>;
   getRecent(params?: RecentParams): Promise<SearchResult[]>;
   getStale(params?: StaleParams): Promise<SearchResult[]>;
@@ -221,6 +224,9 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     },
     ask(req) {
       return call<AskResponse>('POST', '/ask', req);
+    },
+    compileContext(req) {
+      return call<ContextBundle>('POST', '/context/compile', req);
     },
     getProjects() {
       return call<Projects>('GET', '/projects');

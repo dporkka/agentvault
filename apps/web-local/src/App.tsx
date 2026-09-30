@@ -12,6 +12,7 @@ import SettingsPanel from './components/SettingsPanel';
 import NoteEditor from './components/NoteEditor';
 import CaptureView from './components/CaptureView';
 import TagBrowser from './components/TagBrowser';
+import ContextInspector from './components/ContextInspector';
 
 function NoteEditorRoute() {
   const navigate = useNavigate();
@@ -69,6 +70,7 @@ const App: React.FC = () => {
             <Route path="/capture" element={<CaptureView />} />
             <Route path="/tags" element={<TagBrowser />} />
             <Route path="/ask" element={<AskPanel />} />
+            <Route path="/context" element={<ContextInspector />} />
             <Route path="/projects" element={<ProjectDashboard />} />
             <Route path="/settings" element={<SettingsPanel />} />
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -3,6 +3,8 @@
 // can do `Endpoint<'POST', '/notes'>` to get a `{ request, response }`
 // pair with the right TypeScript types.
 
+import type { CompileContextRequest, ContextBundle } from './context';
+
 import type {
   AskRequest,
   AskResponse,
@@ -56,6 +58,7 @@ export const routes: {
   readonly createNote: EndpointDef<CreateNoteRequest, CreateNoteResponse>;
   readonly capture: EndpointDef<CaptureRequest, CaptureResponse>;
   readonly ask: EndpointDef<AskRequest, AskResponse>;
+  readonly contextCompile: EndpointDef<CompileContextRequest, ContextBundle>;
   readonly projects: EndpointDef<NoRequest, Projects>;
   readonly recent: EndpointDef<RecentParams | undefined, SearchResult[]>;
   readonly stale: EndpointDef<StaleParams | undefined, SearchResult[]>;
@@ -146,6 +149,13 @@ export const routes: {
     auth: true,
     request: undefined as unknown as AskRequest,
     response: undefined as unknown as AskResponse,
+  },
+  contextCompile: {
+    method: 'POST',
+    path: '/context/compile',
+    auth: true,
+    request: undefined as unknown as CompileContextRequest,
+    response: undefined as unknown as ContextBundle,
   },
   projects: {
     method: 'GET',
