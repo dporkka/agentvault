@@ -439,3 +439,77 @@ export interface ContextSnapshot {
   unresolved: ContextReferenceIssue[];
   text: string;
 }
+
+
+export type RunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+export interface CreateRunRequest {
+  agentName: string;
+  agentId?: string;
+  agentRevision?: number;
+  task: string;
+  status?: RunStatus;
+  conversationId?: string;
+  contextHash?: string;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  capabilitySnapshot?: Record<string, unknown>;
+  runtimeMetadata?: Record<string, unknown>;
+  startedAt?: string;
+  endedAt?: string;
+  filesChanged?: string[];
+}
+
+export interface RunRecord {
+  id: string;
+  agentName: string;
+  agentId: string;
+  agentRevision: number;
+  task: string;
+  status: RunStatus;
+  conversationId: string;
+  contextHash: string;
+  input: Record<string, unknown>;
+  output: Record<string, unknown>;
+  capabilitySnapshot: Record<string, unknown>;
+  runtimeMetadata: Record<string, unknown>;
+  startedAt: string;
+  endedAt: string;
+  filesChanged: string[];
+  createdAt: string;
+}
+
+export interface RunObservation {
+  id: string;
+  runId: string;
+  parentObservationId: string;
+  kind: 'context.compile' | 'retrieval' | 'generation' | 'tool' | 'artifact.write' | 'event';
+  name: string;
+  status: string;
+  input: Record<string, unknown>;
+  output: Record<string, unknown>;
+  evidence: Record<string, unknown>;
+  startedAt: string;
+  endedAt: string;
+  createdAt: string;
+}
+
+export interface RunEvaluation {
+  id: string;
+  runId: string;
+  observationId: string;
+  evaluator: string;
+  name: string;
+  score: number | null;
+  label: string;
+  rationale: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface RunAudit {
+  run: RunRecord;
+  context: ContextSnapshot | null;
+  observations: RunObservation[];
+  evaluations: RunEvaluation[];
+}
