@@ -346,12 +346,12 @@ func TestRegressionCaseProposalJSONTags(t *testing.T) {
 	proposal := RegressionCaseProposal{
 		RunID: "run_1", AgentID: "agt_1", AgentRevision: 4,
 		Eligible: true, SupportLevel: "strong", Name: "Regression: checkout",
-		Input: map[string]interface{}{"fixture": "checkout-42"},
-		Expected: map[string]interface{}{"status": "pass"},
-		Tags: []string{"regression"},
-		ReasonCodes: []string{"negative_evaluation"},
+		Input:                map[string]interface{}{"fixture": "checkout-42"},
+		Expected:             map[string]interface{}{"status": "pass"},
+		Tags:                 []string{"regression"},
+		ReasonCodes:          []string{"negative_evaluation"},
 		SourceObservationIDs: []string{"obs_1"},
-		SourceEvaluationIDs: []string{"eval_1"},
+		SourceEvaluationIDs:  []string{"eval_1"},
 	}
 	b, err := json.Marshal(proposal)
 	if err != nil {
@@ -399,7 +399,6 @@ func TestEvaluationCaseProvenanceJSONTags(t *testing.T) {
 	}
 }
 
-
 func TestExperimentComparisonJSONTags(t *testing.T) {
 	delta := 0.25
 	item := ExperimentComparison{
@@ -407,7 +406,7 @@ func TestExperimentComparisonJSONTags(t *testing.T) {
 		DatasetID: "ds_1", AgentID: "agt_1",
 		BaselineAgentRevision: 2, CandidateAgentRevision: 3,
 		Comparable: true,
-		Summary: ExperimentComparisonSummary{TotalCases: 1, PairedResults: 1, Fixes: 1},
+		Summary:    ExperimentComparisonSummary{TotalCases: 1, PairedResults: 1, Fixes: 1},
 		Cases: []ExperimentCaseComparison{{
 			CaseID: "case_1", CaseName: "Regression", Transition: "fixed",
 			BaselineLabel: "fail", CandidateLabel: "pass", ScoreDelta: &delta,
