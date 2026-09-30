@@ -70,6 +70,20 @@ func TestListTimelineMergesAndFiltersActivity(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	mutationCreatedAt := time.Now().UTC().Add(-30 * time.Second).Format(time.RFC3339Nano)
+	mutationUpdatedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := database.Exec(
+		`INSERT INTO mutation_proposals (
+			id, mutation_kind, path, reason, agent_id, session_id, status,
+			before_exists, after_exists, diff, created_at, updated_at
+		 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"mutation_timeline", "replace", "10-notes/timeline.md",
+		"Normalize activity timeline projections", session.AgentID, session.ID, "proposed",
+		1, 1, "@@ -1 +1 @@", mutationCreatedAt, mutationUpdatedAt,
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	items, err := store.ListTimeline(contract.TimelineFilter{Project: "agentvault", Limit: 20})
 	if err != nil {
 		t.Fatalf("ListTimeline: %v", err)
@@ -85,7 +99,7 @@ func TestListTimelineMergesAndFiltersActivity(t *testing.T) {
 			t.Fatalf("timeline item missing timestamps: %+v", item)
 		}
 	}
-	for _, id := range []string{event.ID, episode.ID, memory.ID, "capture_timeline"} {
+	for _, id := range []string{event.ID, episode.ID, memory.ID, "capture_timeline", "mutation_timeline"} {
 		if _, ok := got[id]; !ok {
 			t.Fatalf("timeline missing %s: %+v", id, items)
 		}
@@ -102,6 +116,12 @@ func TestListTimelineMergesAndFiltersActivity(t *testing.T) {
 	}
 	if got[memory.ID].Kind != "memory" || got[memory.ID].Summary != memory.Content {
 		t.Fatalf("unexpected normalized memory: %+v", got[memory.ID])
+	}
+	if got["mutation_timeline"].Kind != "mutation" ||
+		got["mutation_timeline"].Project != "agentvault" ||
+		got["mutation_timeline"].SessionID != session.ID ||
+		got["mutation_timeline"].Title != "10-notes/timeline.md" {
+		t.Fatalf("unexpected normalized mutation: %+v", got["mutation_timeline"])
 	}
 
 	episodes, err := store.ListTimeline(contract.TimelineFilter{Project: "agentvault", Kind: "episode", Limit: 20})
