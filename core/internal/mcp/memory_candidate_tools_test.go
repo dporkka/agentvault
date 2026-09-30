@@ -270,3 +270,64 @@ func TestScopedKnowledgeReaderCannotCrossCandidateScope(t *testing.T) {
 		t.Fatalf("authorized candidate read failed: %v", err)
 	}
 }
+
+
+func TestRuntimeSurfaceReconcilesMissedSemanticSessionEventPromotion(t *testing.T) {
+	server, database, vault := setupKnowledgeMCPServer(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO agent_sessions (
+			id, agent_id, project, objective, status, context_json, started_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		"session_mcp_reconcile",
+		"architect",
+		"agentvault",
+		"Recover MCP semantic enrichment",
+		"active",
+		"{}",
+		"2026-09-30T15:00:00Z",
+		"2026-09-30T15:01:00Z",
+	); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(map[string]interface{}{
+		"summary": "MCP startup should repair missed semantic session-event enrichment.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO session_events (
+			id, session_id, event_type, payload_json, created_at
+		) VALUES (?, ?, ?, ?, ?)`,
+		"event_mcp_reconcile",
+		"session_mcp_reconcile",
+		"constraint",
+		string(payload),
+		"2026-09-30T15:01:00Z",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := server.RegisterRuntimeSurface(false); err != nil {
+		t.Fatal(err)
+	}
+
+	store := knowledge.New(database, vault)
+	if err := store.ReplayJournal(); err != nil {
+		t.Fatal(err)
+	}
+	candidates, err := store.ListMemoryCandidates(contract.MemoryCandidateFilter{
+		Status:    contract.MemoryCandidatePending,
+		ScopeType: "session",
+		ScopeID:   "session_mcp_reconcile",
+		Limit:     20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 || candidates[0].MemoryKind != "constraint" {
+		t.Fatalf("MCP runtime reconciliation did not backfill candidate: %+v", candidates)
+	}
+}
