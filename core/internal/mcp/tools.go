@@ -12,9 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/agents"
 	"github.com/agentvault/core/internal/ai"
-	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/config"
+	"github.com/agentvault/core/internal/events"
+	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
 	"github.com/agentvault/core/internal/rag"
@@ -691,7 +693,6 @@ func (s *Server) registerGitStatus() {
 	}
 }
 
-
 // --- Tool: agentvault.open_daily ---
 
 func (s *Server) registerOpenDaily() {
@@ -822,23 +823,63 @@ func (s *Server) handleLogAgentRun(args map[string]interface{}) (string, error) 
 		return "", fmt.Errorf("agent_name and task are required")
 	}
 
-	id := fmt.Sprintf("run_%d", time.Now().Unix())
-	now := currentTimestamp()
-	filesJSON, _ := json.Marshal(filesChanged)
-
-	_, err := s.db.Exec(
-		`INSERT INTO agent_runs (id, agent_name, task, input_json, output_json, files_changed_json, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		id, agentName, task,
-		"{}", "{}", string(filesJSON),
-		now,
-	)
+	id, err := s.recordAgentRun(agentName, task, filesChanged)
 	if err != nil {
-		return "", fmt.Errorf("failed to log agent run: %w", err)
+		return "", err
 	}
 
 	return fmt.Sprintf("Logged agent run: %s\n- **Agent:** %s\n- **Task:** %s\n- **Files changed:** %d",
 		id, agentName, task, len(filesChanged)), nil
+}
+
+func (s *Server) recordAgentRun(agentName, task string, filesChanged []string) (string, error) {
+	ctx := context.Background()
+	agent, err := agents.NewStore(s.db).EnsureByName(ctx, agentName)
+	if err != nil {
+		return "", fmt.Errorf("resolve canonical agent: %w", err)
+	}
+
+	if filesChanged == nil {
+		filesChanged = []string{}
+	}
+	filesJSON, err := json.Marshal(filesChanged)
+	if err != nil {
+		return "", fmt.Errorf("encode changed files: %w", err)
+	}
+
+	id := fmt.Sprintf("run_%d", time.Now().UnixNano())
+	now := currentTimestamp()
+	if _, err := s.db.Exec(
+		`INSERT INTO agent_runs (
+			id, agent_name, agent_id, task, input_json, output_json, files_changed_json, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, agentName, agent.ID, task, "{}", "{}", string(filesJSON), now,
+	); err != nil {
+		return "", fmt.Errorf("failed to log agent run: %w", err)
+	}
+
+	_, err = events.NewStore(s.db).Append(ctx, events.AppendInput{
+		Type:        "agent.run.logged",
+		ActorType:   "agent",
+		ActorID:     agent.ID,
+		SubjectType: "agent_run",
+		SubjectID:   id,
+		RunID:       id,
+		Payload: map[string]interface{}{
+			"task":          task,
+			"files_changed": filesChanged,
+		},
+		Metadata: map[string]interface{}{
+			"origin": "mcp",
+		},
+	})
+	if err != nil {
+		// Keep run/event provenance atomic from the caller's perspective.
+		_, _ = s.db.Exec("DELETE FROM agent_runs WHERE id = ?", id)
+		return "", fmt.Errorf("record agent run event: %w", err)
+	}
+
+	return id, nil
 }
 
 // sanitizeFilename creates a safe filename from a title.
@@ -897,13 +938,8 @@ func stripHTMLTags(s string) string {
 
 // logWrite records a write operation for audit purposes.
 func (s *Server) logWrite(operation, path string) {
-	// Best-effort logging - don't fail if this doesn't work
-	id := fmt.Sprintf("write_%d", time.Now().Unix())
-	if _, err := s.db.Exec(
-		`INSERT INTO agent_runs (id, agent_name, task, files_changed_json, created_at)
-		 VALUES (?, 'agentvault_mcp', ?, ?, ?)`,
-		id, operation, fmt.Sprintf(`["%s"]`, path), currentTimestamp(),
-	); err != nil {
+	// Best-effort logging - don't fail the user operation if audit persistence fails.
+	if _, err := s.recordAgentRun("agentvault_mcp", operation, []string{path}); err != nil {
 		log.Printf("[MCP] failed to log write: %v", err)
 	}
 }

@@ -239,15 +239,81 @@ CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
   entities
 );
 
+CREATE TABLE IF NOT EXISTS agents (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  display_name TEXT NOT NULL,
+  description TEXT,
+  instructions TEXT,
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK(status IN ('active', 'disabled', 'archived')),
+  permissions_json TEXT NOT NULL DEFAULT '[]',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS agent_runs (
   id TEXT PRIMARY KEY,
   agent_name TEXT,
+  agent_id TEXT REFERENCES agents(id),
   task TEXT,
   input_json TEXT,
   output_json TEXT,
   files_changed_json TEXT,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS conversations (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT 'Untitled',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
+  content TEXT NOT NULL,
+  sources_json TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS events (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  actor_type TEXT,
+  actor_id TEXT,
+  subject_type TEXT,
+  subject_id TEXT,
+  scope_type TEXT,
+  scope_id TEXT,
+  run_id TEXT,
+  conversation_id TEXT,
+  source_id TEXT,
+  parent_event_id TEXT,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  occurred_at TEXT NOT NULL,
+  recorded_at TEXT NOT NULL,
+  FOREIGN KEY(run_id) REFERENCES agent_runs(id),
+  FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE SET NULL,
+  FOREIGN KEY(parent_event_id) REFERENCES events(id)
+);
+
+CREATE TRIGGER IF NOT EXISTS events_prevent_update
+BEFORE UPDATE ON events
+BEGIN
+  SELECT RAISE(ABORT, 'events are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS events_prevent_delete
+BEFORE DELETE ON events
+BEGIN
+  SELECT RAISE(ABORT, 'events are append-only');
+END;
 
 CREATE TABLE IF NOT EXISTS captures (
   id TEXT PRIMARY KEY,
@@ -274,13 +340,25 @@ CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
 CREATE INDEX IF NOT EXISTS idx_links_from ON links(from_note_id);
 CREATE INDEX IF NOT EXISTS idx_links_to ON links(to_note_id);
 CREATE INDEX IF NOT EXISTS idx_captures_project ON captures(project);
+CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
+CREATE INDEX IF NOT EXISTS idx_agents_name ON agents(name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_agent ON agent_runs(agent_id);
+CREATE INDEX IF NOT EXISTS idx_conv_messages_conv ON conversation_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conv_messages_created ON conversation_messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_events_type_time ON events(event_type, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_events_actor ON events(actor_type, actor_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_events_subject ON events(subject_type, subject_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_events_scope ON events(scope_type, scope_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id);
+CREATE INDEX IF NOT EXISTS idx_events_conversation ON events(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_events_parent ON events(parent_event_id);
 `
 	_, err := d.conn.Exec(schema)
 	if err != nil {
 		return fmt.Errorf("failed to run inline migrations: %w", err)
 	}
 	_, err = d.conn.Exec(
-		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, datetime('now'))`,
+		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, datetime('now'))`,
 	)
 	return err
 }
