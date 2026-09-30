@@ -1755,7 +1755,7 @@ func TestHandleCompareExperiments(t *testing.T) {
 	}
 	for _, want := range []string{
 		"exp_compare_mcp_base", "exp_compare_mcp_candidate",
-		"agt_compare_mcp", "Regressions: 1", "Search regression", "regressed",
+		"agt_compare_mcp", "**Regressions:** 1", "Search regression", "regressed",
 	} {
 		if !strings.Contains(result, want) {
 			t.Fatalf("expected %q in comparison output:\n%s", want, result)
