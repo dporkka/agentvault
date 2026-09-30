@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/agentvault/core/internal/fileversion"
 	"github.com/agentvault/core/internal/search"
 	"gopkg.in/yaml.v3"
 )
@@ -23,12 +24,13 @@ type Query struct {
 }
 
 type View struct {
-	ID      string   `yaml:"-" json:"id"`
-	Version int      `yaml:"version" json:"version"`
-	Name    string   `yaml:"name" json:"name"`
-	Query   Query    `yaml:"query,omitempty" json:"query,omitempty"`
-	Columns []string `yaml:"columns,omitempty" json:"columns,omitempty"`
-	Limit   int      `yaml:"limit,omitempty" json:"limit,omitempty"`
+	ID          string   `yaml:"-" json:"id"`
+	ContentHash string   `yaml:"-" json:"contentHash"`
+	Version     int      `yaml:"version" json:"version"`
+	Name        string   `yaml:"name" json:"name"`
+	Query       Query    `yaml:"query,omitempty" json:"query,omitempty"`
+	Columns     []string `yaml:"columns,omitempty" json:"columns,omitempty"`
+	Limit       int      `yaml:"limit,omitempty" json:"limit,omitempty"`
 }
 
 func (v View) SearchQuery() search.Query {
@@ -93,6 +95,7 @@ func Load(vaultPath, id string) (View, error) {
 		v.Name = id
 	}
 	v.ID = id
+	v.ContentHash = fileversion.Hash(data)
 	return v, nil
 }
 

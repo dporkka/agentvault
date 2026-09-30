@@ -2,6 +2,7 @@ package contextcompiler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -11,10 +12,14 @@ import (
 	"github.com/agentvault/core/internal/views"
 )
 
+var ErrViewContentHashMismatch = errors.New("saved view content hash mismatch")
+
 type savedViewScope struct {
-	id      string
-	results []search.Result
-	allowed map[string]struct{}
+	id          string
+	version     int
+	contentHash string
+	results     []search.Result
+	allowed     map[string]struct{}
 }
 
 func (s *savedViewScope) allows(noteID string) bool {
@@ -27,7 +32,11 @@ func (s *savedViewScope) allows(noteID string) bool {
 
 func (c *Compiler) resolveSavedViewScope(req contract.CompileContextRequest) (*savedViewScope, error) {
 	id := strings.TrimSpace(req.ViewID)
+	expectedHash := strings.TrimSpace(req.ExpectedViewContentHash)
 	if id == "" {
+		if expectedHash != "" {
+			return nil, fmt.Errorf("expectedViewContentHash requires viewId")
+		}
 		return nil, nil
 	}
 	if strings.TrimSpace(c.vaultPath) == "" {
@@ -38,6 +47,9 @@ func (c *Compiler) resolveSavedViewScope(req contract.CompileContextRequest) (*s
 	if err != nil {
 		return nil, fmt.Errorf("load saved view %q: %w", id, err)
 	}
+	if expectedHash != "" && !strings.EqualFold(expectedHash, view.ContentHash) {
+		return nil, fmt.Errorf("%w: view %q expected %s but loaded %s", ErrViewContentHashMismatch, id, expectedHash, view.ContentHash)
+	}
 	query := view.SearchQuery()
 
 	project := strings.TrimSpace(req.Project)
@@ -46,9 +58,11 @@ func (c *Compiler) resolveSavedViewScope(req contract.CompileContextRequest) (*s
 			query.Project = project
 		} else if !csvContains(query.Project, project) {
 			return &savedViewScope{
-				id:      id,
-				results: []search.Result{},
-				allowed: map[string]struct{}{},
+				id:          id,
+				version:     view.Version,
+				contentHash: view.ContentHash,
+				results:     []search.Result{},
+				allowed:     map[string]struct{}{},
 			}, nil
 		} else {
 			// Explicit context project is an intersection, never an expansion of
@@ -65,7 +79,13 @@ func (c *Compiler) resolveSavedViewScope(req contract.CompileContextRequest) (*s
 	for _, result := range results {
 		allowed[result.ID] = struct{}{}
 	}
-	return &savedViewScope{id: id, results: results, allowed: allowed}, nil
+	return &savedViewScope{
+		id:          id,
+		version:     view.Version,
+		contentHash: view.ContentHash,
+		results:     results,
+		allowed:     allowed,
+	}, nil
 }
 
 func csvContains(csv, target string) bool {

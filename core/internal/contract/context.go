@@ -3,16 +3,17 @@ package contract
 // CompileContextRequest asks AgentVault to assemble a deterministic, evidence-
 // backed context bundle for one agent task.
 type CompileContextRequest struct {
-	Task        string   `json:"task"`
-	WorkspaceID string   `json:"workspaceId,omitempty"`
-	Project     string   `json:"project,omitempty"`
-	ViewID      string   `json:"viewId,omitempty"`
-	AgentID     string   `json:"agentId,omitempty"`
-	SessionID   string   `json:"sessionId,omitempty"`
-	ObjectIDs   []string `json:"objectIds,omitempty"`
-	TokenBudget int      `json:"tokenBudget,omitempty"`
-	MaxItems    int      `json:"maxItems,omitempty"`
-	AsOf        string   `json:"asOf,omitempty"`
+	Task                    string   `json:"task"`
+	WorkspaceID             string   `json:"workspaceId,omitempty"`
+	Project                 string   `json:"project,omitempty"`
+	ViewID                  string   `json:"viewId,omitempty"`
+	ExpectedViewContentHash string   `json:"expectedViewContentHash,omitempty"`
+	AgentID                 string   `json:"agentId,omitempty"`
+	SessionID               string   `json:"sessionId,omitempty"`
+	ObjectIDs               []string `json:"objectIds,omitempty"`
+	TokenBudget             int      `json:"tokenBudget,omitempty"`
+	MaxItems                int      `json:"maxItems,omitempty"`
+	AsOf                    string   `json:"asOf,omitempty"`
 }
 
 // ContextBundle is the compiled, model-agnostic context payload. estimatedTokens
@@ -23,6 +24,8 @@ type ContextBundle struct {
 	WorkspaceID     string             `json:"workspaceId,omitempty"`
 	Project         string             `json:"project,omitempty"`
 	ViewID          string             `json:"viewId,omitempty"`
+	ViewVersion     int                `json:"viewVersion,omitempty"`
+	ViewContentHash string             `json:"viewContentHash,omitempty"`
 	AgentID         string             `json:"agentId,omitempty"`
 	SessionID       string             `json:"sessionId,omitempty"`
 	AsOf            string             `json:"asOf"`

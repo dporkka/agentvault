@@ -2,6 +2,8 @@ package api
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -171,5 +173,43 @@ func TestCompileContextEndpointRejectsMissingSavedView(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), "missing-view") {
 		t.Fatalf("expected missing view detail, got %s", recorder.Body.String())
+	}
+}
+
+func TestCompileContextEndpointReturnsConflictForChangedPinnedView(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	viewDir := filepath.Join(vaultPath, ".agentvault", "views")
+	if err := os.MkdirAll(viewDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte("version: 1\nname: Pinned\nquery:\n  projects: [test-project]\n")
+	viewPath := filepath.Join(viewDir, "pinned.yaml")
+	if err := os.WriteFile(viewPath, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(original)
+	expectedHash := hex.EncodeToString(sum[:])
+	if err := os.WriteFile(viewPath, append(original, []byte("# changed\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServer(vaultPath, database)
+	server.RegisterRoutes()
+	body, err := json.Marshal(contract.CompileContextRequest{
+		Task:                    "test",
+		Project:                 "test-project",
+		ViewID:                  "pinned",
+		ExpectedViewContentHash: expectedHash,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/context/compile", bytes.NewReader(body))
+	recorder := httptest.NewRecorder()
+	server.mux.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", recorder.Code, recorder.Body.String())
 	}
 }

@@ -10,6 +10,10 @@ They are declarative filters over the canonical Markdown index. A saved view doe
 not introduce another source of truth: it compiles into the existing
 `search.Query` path used by HTTP, MCP, and other clients.
 
+Every loaded view also exposes a lowercase SHA-256 `contentHash` over the
+exact raw YAML bytes. This is a definition revision, not the schema
+`version`: comments, formatting, or query edits all change the hash.
+
 ## Version 1
 
 ```yaml
@@ -81,6 +85,12 @@ deterministic context compilation:
 
 The MCP equivalent is `view_id` on `agentvault.compile_context`.
 
+Compiled bundles record the resolved `viewVersion` and `viewContentHash`.
+A caller that needs a reproducible scope may also send
+`expectedViewContentHash` (HTTP/TypeScript) or
+`expected_view_content_hash` (MCP). Compilation fails closed before candidate
+collection when the loaded view hash differs from the pin.
+
 When `viewId` is present:
 
 - ordinary Markdown notes must match the saved view;
@@ -90,7 +100,8 @@ When `viewId` is present:
   can never be broadened by it;
 - structured journal memories, objects, relations, facts, episodes, and
   sessions keep their existing project/session scope and authorization rules;
-- missing, invalid, or unsupported saved views fail closed.
+- missing, invalid, or unsupported saved views fail closed;
+- a supplied definition hash must match the exact current YAML bytes.
 
 The view is a selector, not a second ranking engine. Once file-backed candidates
 are selected, Context Compiler still applies its normal deterministic

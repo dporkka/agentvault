@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/agentvault/core/internal/contextcompiler"
@@ -20,6 +21,10 @@ func (s *Server) handleCompileContext(w http.ResponseWriter, r *http.Request) {
 		req,
 	)
 	if err != nil {
+		if errors.Is(err, contextcompiler.ErrViewContentHashMismatch) {
+			writeJSON(w, http.StatusConflict, map[string]interface{}{"error": err.Error()})
+			return
+		}
 		writeKnowledgeError(w, err)
 		return
 	}

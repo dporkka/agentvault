@@ -119,6 +119,12 @@ func (c *Compiler) Compile(req contract.CompileContextRequest) (contract.Context
 	})
 
 	items, used, dropped, truncated := fitItems(collector.items, budget, maxItems)
+	viewVersion := 0
+	viewContentHash := ""
+	if viewScope != nil {
+		viewVersion = viewScope.version
+		viewContentHash = viewScope.contentHash
+	}
 	byKind := make(map[string]int)
 	for _, item := range items {
 		byKind[item.Kind]++
@@ -129,6 +135,8 @@ func (c *Compiler) Compile(req contract.CompileContextRequest) (contract.Context
 		Task:            req.Task,
 		Project:         req.Project,
 		ViewID:          strings.TrimSpace(req.ViewID),
+		ViewVersion:     viewVersion,
+		ViewContentHash: viewContentHash,
 		AgentID:         req.AgentID,
 		SessionID:       req.SessionID,
 		AsOf:            asOf.Format(time.RFC3339Nano),

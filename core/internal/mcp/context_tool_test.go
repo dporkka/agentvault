@@ -1,11 +1,15 @@
 package mcp
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/agentvault/core/internal/contextcompiler"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/knowledge"
 )
@@ -101,5 +105,37 @@ query:
 	}
 	if bundle.ViewID != "agentvault-only" {
 		t.Fatalf("viewId = %q, want agentvault-only", bundle.ViewID)
+	}
+}
+
+func TestCompileContextToolRejectsChangedPinnedView(t *testing.T) {
+	server, database, vault := setupKnowledgeMCPServer(t)
+	defer database.Close()
+
+	viewDir := filepath.Join(vault, ".agentvault", "views")
+	if err := os.MkdirAll(viewDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte("version: 1\nname: Pinned\nquery:\n  projects: [agentvault]\n")
+	viewPath := filepath.Join(viewDir, "pinned.yaml")
+	if err := os.WriteFile(viewPath, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(original)
+	expectedHash := hex.EncodeToString(sum[:])
+	if err := os.WriteFile(viewPath, append(original, []byte("# changed\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server.RegisterContextTool()
+	tool := server.tools["agentvault.compile_context"]
+	_, err := tool.Handler(map[string]interface{}{
+		"task":                       "context compiler",
+		"project":                    "agentvault",
+		"view_id":                    "pinned",
+		"expected_view_content_hash": expectedHash,
+	})
+	if !errors.Is(err, contextcompiler.ErrViewContentHashMismatch) {
+		t.Fatalf("expected ErrViewContentHashMismatch, got %v", err)
 	}
 }

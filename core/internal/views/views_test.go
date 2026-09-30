@@ -1,6 +1,8 @@
 package views
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -82,5 +84,40 @@ func TestListReturnsYamlViewsOnly(t *testing.T) {
 	}
 	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "b" {
 		t.Fatalf("unexpected list: %#v", got)
+	}
+}
+
+func TestLoadIncludesRawDefinitionContentHash(t *testing.T) {
+	vault := t.TempDir()
+	dir := filepath.Join(vault, ".agentvault", "views")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("version: 1\nname: Hash test\nquery:\n  projects: [alpha]\n")
+	path := filepath.Join(dir, "hash-test.yaml")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	view, err := Load(vault, "hash-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(data)
+	want := hex.EncodeToString(sum[:])
+	if view.ContentHash != want {
+		t.Fatalf("contentHash = %q, want %q", view.ContentHash, want)
+	}
+
+	updated := append(append([]byte{}, data...), []byte("# changed\n")...)
+	if err := os.WriteFile(path, updated, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := Load(vault, "hash-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed.ContentHash == view.ContentHash {
+		t.Fatal("expected raw definition hash to change after file edit")
 	}
 }
