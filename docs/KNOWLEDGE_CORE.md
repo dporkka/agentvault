@@ -346,7 +346,38 @@ supersession rules, prevents late-observed episodes/facts from leaking into
 historical `asOf` context, deduplicates classified memories from generic note
 search, and fits results into a deterministic token budget.
 
-## 8. Integration boundaries
+## 8. Automatic event promotion
+
+AgentVault promotes only **low-ambiguity source events** automatically. Promotion
+means creating a provenance record plus an immutable episode; it does not mean
+inferring semantic facts, preferences, decisions, or procedures.
+
+The current automatic producers are:
+
+- indexed Markdown captures with a project/session/agent scope;
+- successfully committed transactional mutations associated with an agent or
+  durable session.
+
+Promotion is intentionally conservative:
+
+- deterministic IDs are derived from source identity, so retries and forced
+  reindexing do not duplicate episodes;
+- session scope takes precedence over project scope, then agent scope;
+- unscoped events are not promoted into a fabricated global scope;
+- capture promotion runs through the indexer, so HTTP, MCP, mobile/browser
+  sync, and manually-created capture Markdown converge on the same producer;
+- mutation promotion runs only after commit finalization; enrichment failures
+  surface as warnings and cannot make an already-committed filesystem change
+  appear to have failed;
+- startup mutation recovery reconciles committed mutations idempotently, so a
+  crash after commit finalization but before promotion can be repaired later.
+
+This layer is deliberately distinct from **knowledge extraction**. Turning raw
+activity into semantic memory or temporal facts requires stronger evidence,
+deduplication/supersession logic, and review policy. AgentVault should not turn
+every action into permanent semantic truth automatically.
+
+## 9. Integration boundaries
 
 Other products should integrate with AgentVault through stable contracts, not
 by reading or mutating the SQLite schema directly.
