@@ -610,7 +610,7 @@ func TestHandleProposePromotion(t *testing.T) {
 	`, "agt_1").Scan(&status, &targetKind, &sourceIDs); err != nil {
 		t.Fatalf("query promotion: %v", err)
 	}
-	if status != "proposed" || targetKind != "memory" || sourceIDs != "["obs_1","obs_2"]" {
+	if status != "proposed" || targetKind != "memory" || sourceIDs != `["obs_1","obs_2"]` {
 		t.Fatalf("unexpected promotion: status=%s kind=%s sources=%s", status, targetKind, sourceIDs)
 	}
 }
