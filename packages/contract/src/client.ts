@@ -12,6 +12,8 @@ import type {
   CaptureRequest,
   CaptureResponse,
   CommitPromotionRequest,
+  ContextCompileRequest,
+  ContextSnapshot,
   CreateEvaluationCaseRequest,
   CreateEvaluationDatasetRequest,
   CreateExperimentRequest,
@@ -118,6 +120,8 @@ export interface ApiClient {
   getExperiment(id: string): Promise<ExperimentDetail>;
   createExperiment(req: CreateExperimentRequest): Promise<Experiment>;
   createExperimentResult(experimentId: string, req: CreateExperimentResultRequest): Promise<ExperimentResult>;
+  compileContext(agentId: string, req: ContextCompileRequest): Promise<ContextSnapshot>;
+  getContextSnapshot(hash: string): Promise<ContextSnapshot>;
   pinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
   unpinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
 }
@@ -298,6 +302,12 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     },
     createExperimentResult(experimentId, req) {
       return call<ExperimentResult>('POST', `/experiments/${encodeURIComponent(experimentId)}/results`, req);
+    },
+    compileContext(agentId, req) {
+      return call<ContextSnapshot>('POST', `/agents/${encodeURIComponent(agentId)}/context`, req);
+    },
+    getContextSnapshot(hash) {
+      return call<ContextSnapshot>('GET', `/contexts/${encodeURIComponent(hash)}`, undefined, false);
     },
     pinNote(id) {
       return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/pin`, undefined, true);
