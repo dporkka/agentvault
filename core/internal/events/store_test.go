@@ -48,19 +48,19 @@ func TestAppendPersistsEventWithProvenance(t *testing.T) {
 
 	occurred := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
 	event, err := store.Append(context.Background(), AppendInput{
-		Type:         "agent.run.logged",
-		ActorType:    "agent",
-		ActorID:      "agt_123",
-		SubjectType:  "agent_run",
-		SubjectID:    "run_123",
-		ScopeType:    "project",
-		ScopeID:      "agentvault",
-		RunID:        "run_123",
+		Type:           "agent.run.logged",
+		ActorType:      "agent",
+		ActorID:        "agt_123",
+		SubjectType:    "agent_run",
+		SubjectID:      "run_123",
+		ScopeType:      "project",
+		ScopeID:        "agentvault",
+		RunID:          "run_123",
 		ConversationID: "conv_123",
-		SourceID:     "src_123",
-		OccurredAt:   occurred,
-		Payload:      map[string]interface{}{"task": "review code"},
-		Metadata:     map[string]interface{}{"origin": "mcp"},
+		SourceID:       "src_123",
+		OccurredAt:     occurred,
+		Payload:        map[string]interface{}{"task": "review code"},
+		Metadata:       map[string]interface{}{"origin": "mcp"},
 	})
 	if err != nil {
 		t.Fatalf("append event: %v", err)
