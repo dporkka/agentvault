@@ -326,3 +326,73 @@ func TestMutationPathProtections(t *testing.T) {
 		t.Fatalf("expected symlink traversal rejection, got %v", err)
 	}
 }
+
+
+func TestCommitPromotesMutationIntoSessionEpisode(t *testing.T) {
+	vaultPath, store, engine := setupMutationEngine(t)
+	session, err := store.StartSession(contract.StartAgentSessionRequest{
+		ID:        "session_mutation_promotion",
+		AgentID:   "backend-engineer",
+		Project:   "agentvault",
+		Objective: "Ship automatic knowledge promotion",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(vaultPath, "10-notes", "promotion.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("before\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	after := "after\n"
+	proposal, err := engine.Propose(contract.CreateMutationProposalRequest{
+		Kind:      contract.MutationReplace,
+		Path:      "10-notes/promotion.md",
+		Content:   ptr(after),
+		Reason:    "Record committed work in durable context",
+		AgentID:   "backend-engineer",
+		SessionID: session.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.Approve(proposal.ID, "reviewer"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := engine.Commit(proposal.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("unexpected commit warnings: %+v", result.Warnings)
+	}
+
+	episodes, err := store.ListEpisodes("session", session.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(episodes) != 1 {
+		t.Fatalf("expected one mutation episode, got %+v", episodes)
+	}
+	episode := episodes[0]
+	if episode.EventType != "mutation.committed" {
+		t.Fatalf("unexpected mutation event type: %+v", episode)
+	}
+	if !strings.Contains(episode.Summary, "10-notes/promotion.md") ||
+		!strings.Contains(episode.Summary, "Record committed work in durable context") {
+		t.Fatalf("mutation summary lacks durable context: %+v", episode)
+	}
+	provenance, err := store.GetProvenance(episode.ProvenanceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if provenance.SourceType != "mutation" || provenance.SourceID != proposal.ID {
+		t.Fatalf("unexpected mutation provenance: %+v", provenance)
+	}
+	if provenance.AgentID != "backend-engineer" || provenance.SessionID != session.ID {
+		t.Fatalf("mutation provenance lost actor/session: %+v", provenance)
+	}
+}
