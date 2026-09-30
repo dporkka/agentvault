@@ -12,6 +12,7 @@ import SettingsPanel from './components/SettingsPanel';
 import NoteEditor from './components/NoteEditor';
 import CaptureView from './components/CaptureView';
 import TagBrowser from './components/TagBrowser';
+import ActivityView from './components/ActivityView';
 
 function NoteEditorRoute() {
   const navigate = useNavigate();
@@ -63,6 +64,7 @@ const App: React.FC = () => {
           <Route element={<Layout />}>
             <Route path="/" element={<DashboardView />} />
             <Route path="/search" element={<SearchView />} />
+            <Route path="/activity" element={<ActivityView />} />
             <Route path="/note/:id" element={<NotePage />} />
             <Route path="/note/:id/edit" element={<NoteEditRoute />} />
             <Route path="/new" element={<NoteEditorRoute />} />

@@ -5,8 +5,12 @@
 import {
   ApiError,
   createClient,
+  createKnowledgeClient,
   getDefaultClient,
+  localStorageBaseUrlStore,
+  localStorageTokenStore,
   type ApiClient,
+  type KnowledgeClient,
   type CaptureRequest,
   type CaptureResponse,
   type CreateNoteRequest,
@@ -26,6 +30,18 @@ export const api: ApiClient = (() => {
     return createClient();
   }
   return getDefaultClient();
+})();
+
+export const knowledgeApi: KnowledgeClient = (() => {
+  if (typeof window === 'undefined') {
+    return createKnowledgeClient();
+  }
+  const baseStore = localStorageBaseUrlStore(localStorage);
+  const tokenStore = localStorageTokenStore(localStorage);
+  return createKnowledgeClient({
+    baseUrl: baseStore.get(),
+    tokenStore,
+  });
 })();
 
 export { ApiError };
