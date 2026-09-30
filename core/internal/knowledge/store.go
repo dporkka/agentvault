@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -540,6 +541,12 @@ func (s *Store) AppendSessionEvent(sessionID string, req contract.AppendSessionE
 		return s.projectSessionEvent(event)
 	}); err != nil {
 		return contract.SessionEvent{}, err
+	}
+	if _, eligible, err := s.promoteSemanticSessionEvent(session, event); eligible && err != nil {
+		// Session history is already canonical at this point. Semantic promotion
+		// is enrichment and must never make the committed event appear failed;
+		// ReconcileSemanticSessionEvents can repair it later.
+		log.Printf("[knowledge] semantic session-event promotion will be retried: %v", err)
 	}
 	return event, nil
 }
