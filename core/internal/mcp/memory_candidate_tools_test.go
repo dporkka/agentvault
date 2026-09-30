@@ -50,6 +50,7 @@ func TestTrustedMemoryCandidateToolsRequireReviewBeforeMemory(t *testing.T) {
 	server.RegisterMemoryCandidateTools()
 	for _, name := range []string{
 		"agentvault.propose_memory_candidate",
+		"agentvault.extract_memory_candidates",
 		"agentvault.list_memory_candidates",
 		"agentvault.get_memory_candidate",
 		"agentvault.accept_memory_candidate",
@@ -60,6 +61,20 @@ func TestTrustedMemoryCandidateToolsRequireReviewBeforeMemory(t *testing.T) {
 		if _, ok := server.tools[name]; !ok {
 			t.Fatalf("missing candidate tool %s", name)
 		}
+	}
+
+	extractedText, err := server.tools["agentvault.extract_memory_candidates"].Handler(map[string]interface{}{
+		"episode_id": episode.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var extracted []contract.MemoryCandidate
+	if err := json.Unmarshal([]byte(extractedText), &extracted); err != nil {
+		t.Fatal(err)
+	}
+	if len(extracted) != 1 || extracted[0].MemoryKind != "decision" {
+		t.Fatalf("unexpected trusted deterministic extraction: %+v", extracted)
 	}
 
 	text, err := server.tools["agentvault.propose_memory_candidate"].Handler(map[string]interface{}{
@@ -148,6 +163,9 @@ func TestScopedMemoryWriterCanProposeButCannotReviewCandidates(t *testing.T) {
 	if _, ok := server.tools["agentvault.propose_memory_candidate"]; !ok {
 		t.Fatal("memory:write did not register candidate proposal")
 	}
+	if _, ok := server.tools["agentvault.extract_memory_candidates"]; !ok {
+		t.Fatal("memory:write did not register deterministic extraction")
+	}
 	for _, name := range []string{
 		"agentvault.accept_memory_candidate",
 		"agentvault.reject_memory_candidate",
@@ -157,6 +175,25 @@ func TestScopedMemoryWriterCanProposeButCannotReviewCandidates(t *testing.T) {
 		if _, ok := server.tools[name]; ok {
 			t.Fatalf("scoped memory writer unexpectedly received review tool %s", name)
 		}
+	}
+
+	extractedText, err := server.tools["agentvault.extract_memory_candidates"].Handler(map[string]interface{}{
+		"episode_id": alphaEpisode.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var extracted []contract.MemoryCandidate
+	if err := json.Unmarshal([]byte(extractedText), &extracted); err != nil {
+		t.Fatal(err)
+	}
+	if len(extracted) != 1 || extracted[0].ScopeType != "session" || extracted[0].ScopeID != alphaSession.ID {
+		t.Fatalf("unexpected scoped deterministic extraction: %+v", extracted)
+	}
+	if _, err := server.tools["agentvault.extract_memory_candidates"].Handler(map[string]interface{}{
+		"episode_id": betaEpisode.ID,
+	}); !errors.Is(err, authz.ErrForbidden) {
+		t.Fatalf("cross-scope deterministic extraction should fail, got %v", err)
 	}
 
 	text, err := server.tools["agentvault.propose_memory_candidate"].Handler(map[string]interface{}{
