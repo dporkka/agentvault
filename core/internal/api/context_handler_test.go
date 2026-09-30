@@ -213,3 +213,35 @@ func TestCompileContextEndpointReturnsConflictForChangedPinnedView(t *testing.T)
 		t.Fatalf("expected 409, got %d: %s", recorder.Code, recorder.Body.String())
 	}
 }
+
+
+func TestCompileContextEndpointReturnsConflictForChangedInputManifest(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	viewDir := filepath.Join(vaultPath, ".agentvault", "views")
+	if err := os.MkdirAll(viewDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(viewDir, "manifest-pin.yaml"), []byte("version: 1\nname: Manifest pin\nquery:\n  projects: [test-project]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServer(vaultPath, database)
+	server.RegisterRoutes()
+	body, err := json.Marshal(contract.CompileContextRequest{
+		Task:                      "test",
+		Project:                   "test-project",
+		ViewID:                    "manifest-pin",
+		ExpectedInputManifestHash: strings.Repeat("a", 64),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/context/compile", bytes.NewReader(body))
+	recorder := httptest.NewRecorder()
+	server.mux.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+}

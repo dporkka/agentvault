@@ -89,6 +89,11 @@ func CompileUnified(c *Compiler, fileMemories *memory.Store, req contract.Compil
 		return contract.ContextBundle{}, err
 	}
 
+	inputManifest, err := c.buildInputManifest(req, collector.items, viewScope)
+	if err != nil {
+		return contract.ContextBundle{}, err
+	}
+
 	sort.SliceStable(collector.items, func(i, j int) bool {
 		if collector.items[i].Score != collector.items[j].Score {
 			return collector.items[i].Score > collector.items[j].Score
@@ -124,6 +129,7 @@ func CompileUnified(c *Compiler, fileMemories *memory.Store, req contract.Compil
 		ViewID:          strings.TrimSpace(req.ViewID),
 		ViewVersion:     viewVersion,
 		ViewContentHash: viewContentHash,
+		InputManifest:   inputManifest,
 		AgentID:         req.AgentID,
 		SessionID:       req.SessionID,
 		AsOf:            asOf.Format(time.RFC3339Nano),

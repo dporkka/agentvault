@@ -6,6 +6,7 @@ export interface CompileContextRequest {
   project?: string;
   viewId?: string;
   expectedViewContentHash?: string;
+  expectedInputManifestHash?: string;
   agentId?: string;
   sessionId?: string;
   objectIds?: string[];
@@ -39,6 +40,21 @@ export interface ContextItem {
   metadata?: Record<string, unknown>;
 }
 
+export interface ContextInputSource {
+  kind: 'note' | 'memory' | string;
+  id: string;
+  path: string;
+  contentHash: string;
+}
+
+export interface ContextInputManifest {
+  version: string;
+  viewId: string;
+  viewContentHash: string;
+  sources: ContextInputSource[];
+  manifestHash: string;
+}
+
 export interface ContextBundleStats {
   candidates: number;
   included: number;
@@ -54,6 +70,7 @@ export interface ContextBundle {
   viewId?: string;
   viewVersion?: number;
   viewContentHash?: string;
+  inputManifest?: ContextInputManifest;
   agentId?: string;
   sessionId?: string;
   asOf: string;
