@@ -1273,3 +1273,144 @@ Compile only explicit retrieved evidence.
 		}
 	})
 }
+
+
+func TestRunAuditEndpoints(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	snapshotJSON, err := json.Marshal(map[string]interface{}{
+		"hash": "sha256:http-run-context", "agentId": "agt_http_run", "agentRevision": 5,
+		"agentTitle": "HTTP Run Agent", "task": "run task", "conversationId": "",
+		"knowledgeScopes": []string{"project:test"}, "artifactScopes": []string{},
+		"conversationScopes": []string{}, "capabilityRefs": []string{"github"},
+		"contextPolicyRef": "", "sections": []map[string]interface{}{
+			{"kind": "identity", "sourceId": "identity_http", "sourcePath": "10-notes/identity-http.md", "title": "Identity", "content": "Be precise."},
+		},
+		"unresolved": []interface{}{}, "text": "compiled HTTP context",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO context_snapshots (
+			hash, agent_id, agent_revision, task, context_json, created_at
+		) VALUES (?, ?, ?, ?, ?, datetime('now'))
+	`, "sha256:http-run-context", "agt_http_run", 5, "run task", string(snapshotJSON)); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServer(vaultPath, database)
+	srv.RegisterRoutes()
+	var handler http.Handler = srv.mux
+	handler = srv.authMiddleware(handler)
+	handler = srv.corsMiddleware(handler)
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	postRun := func(body map[string]interface{}, withAuth bool) (*http.Response, map[string]interface{}) {
+		payload, _ := json.Marshal(body)
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/runs", bytes.NewReader(payload))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if withAuth {
+			req.Header.Set("X-AgentVault-Token", srv.AuthToken())
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode run response: %v", err)
+		}
+		return resp, out
+	}
+
+	body := map[string]interface{}{
+		"agentName": "http-agent", "agentId": "agt_http_run", "agentRevision": 5,
+		"task": "run task", "status": "succeeded", "contextHash": "sha256:http-run-context",
+		"input": map[string]interface{}{"issue": 81},
+		"output": map[string]interface{}{"result": "ok"},
+		"capabilitySnapshot": map[string]interface{}{"github": "read"},
+		"runtimeMetadata": map[string]interface{}{"runtime": "test"},
+		"filesChanged": []string{"README.md"},
+	}
+
+	t.Run("run creation requires auth", func(t *testing.T) {
+		resp, _ := postRun(body, false)
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.StatusCode)
+		}
+	})
+
+	var runID string
+	t.Run("records context-bound run", func(t *testing.T) {
+		resp, out := postRun(body, true)
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("expected 201, got %d body=%#v", resp.StatusCode, out)
+		}
+		runID, _ = out["id"].(string)
+		if runID == "" || out["contextHash"] != "sha256:http-run-context" || out["agentRevision"] != float64(5) {
+			t.Fatalf("unexpected run response: %#v", out)
+		}
+	})
+
+	t.Run("rejects mismatched context revision", func(t *testing.T) {
+		bad := map[string]interface{}{}
+		for k, v := range body {
+			bad[k] = v
+		}
+		bad["agentRevision"] = 6
+		resp, out := postRun(bad, true)
+		if resp.StatusCode != http.StatusConflict {
+			t.Fatalf("expected 409, got %d body=%#v", resp.StatusCode, out)
+		}
+	})
+
+	t.Run("audit returns context provenance and evidence", func(t *testing.T) {
+		if _, err := database.Exec(`
+			INSERT INTO run_observations (
+				id, run_id, kind, name, status, input_json, output_json, evidence_json, created_at
+			) VALUES ('obs_http_audit', ?, 'retrieval', 'search', 'succeeded', '{}', '{}',
+				'{"noteIds":["identity_http"]}', datetime('now'))
+		`, runID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := database.Exec(`
+			INSERT INTO evaluations (
+				id, run_id, observation_id, evaluator, name, label, metadata_json, created_at
+			) VALUES ('eval_http_audit', ?, 'obs_http_audit', 'human:test', 'correctness',
+				'pass', '{}', datetime('now'))
+		`, runID); err != nil {
+			t.Fatal(err)
+		}
+
+		resp, err := http.Get(ts.URL + "/runs/" + runID + "/audit")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		var out map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		run, _ := out["run"].(map[string]interface{})
+		context, _ := out["context"].(map[string]interface{})
+		sections, _ := context["sections"].([]interface{})
+		observations, _ := out["observations"].([]interface{})
+		evaluations, _ := out["evaluations"].([]interface{})
+		if run["id"] != runID || context["hash"] != "sha256:http-run-context" {
+			t.Fatalf("unexpected audit linkage: %#v", out)
+		}
+		if len(sections) != 1 || len(observations) != 1 || len(evaluations) != 1 {
+			t.Fatalf("expected context provenance + evidence, got %#v", out)
+		}
+	})
+}
