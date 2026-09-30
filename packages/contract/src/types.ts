@@ -523,3 +523,34 @@ export interface RunLearningCandidateRequest {
   sourceEvaluationIds?: string[];
   supersedesNoteId?: string;
 }
+
+
+export type LearningSupportLevel = 'none' | 'weak' | 'moderate' | 'strong';
+export type LearningSignalKind = 'observation' | 'evaluation';
+
+export interface LearningSignal {
+  kind: LearningSignalKind;
+  id: string;
+  observationId: string;
+  name: string;
+  status: string;
+  label: string;
+  score: number | null;
+  rationale: string;
+}
+
+export interface LearningRecommendation {
+  runId: string;
+  agentId: string;
+  agentRevision: number;
+  eligible: boolean;
+  supportLevel: LearningSupportLevel;
+  evidenceCount: number;
+  suggestedTargetKind: '' | 'memory' | 'knowledge';
+  reasonCodes: string[];
+  sourceObservationIds: string[];
+  sourceEvaluationIds: string[];
+  contextMemoryRefs: string[];
+  supersedesNoteIds: string[];
+  signals: LearningSignal[];
+}
