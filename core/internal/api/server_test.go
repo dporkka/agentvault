@@ -1144,7 +1144,6 @@ func TestAgentStateWriteEndpoints(t *testing.T) {
 	})
 }
 
-
 func TestContextCompilerEndpoints(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
 	defer database.Close()
@@ -1274,7 +1273,6 @@ Compile only explicit retrieved evidence.
 	})
 }
 
-
 func TestRunAuditEndpoints(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
 	defer database.Close()
@@ -1333,11 +1331,11 @@ func TestRunAuditEndpoints(t *testing.T) {
 	body := map[string]interface{}{
 		"agentName": "http-agent", "agentId": "agt_http_run", "agentRevision": 5,
 		"task": "run task", "status": "succeeded", "contextHash": "sha256:http-run-context",
-		"input": map[string]interface{}{"issue": 81},
-		"output": map[string]interface{}{"result": "ok"},
+		"input":              map[string]interface{}{"issue": 81},
+		"output":             map[string]interface{}{"result": "ok"},
 		"capabilitySnapshot": map[string]interface{}{"github": "read"},
-		"runtimeMetadata": map[string]interface{}{"runtime": "test"},
-		"filesChanged": []string{"README.md"},
+		"runtimeMetadata":    map[string]interface{}{"runtime": "test"},
+		"filesChanged":       []string{"README.md"},
 	}
 
 	t.Run("run creation requires auth", func(t *testing.T) {
