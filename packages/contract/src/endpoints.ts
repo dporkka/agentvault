@@ -17,11 +17,15 @@ import type {
   GitStatus,
   Graph,
   HealthResponse,
+  EvaluationDatasetDetail,
+  ExperimentDetail,
   IndexOptions,
   IndexResult,
   NoteLinks,
   NoteDetail,
   Projects,
+  Promotion,
+  PromotionParams,
   RecentParams,
   SearchResult,
   SearchParams,
@@ -62,6 +66,9 @@ export const routes: {
   readonly gitStatus: EndpointDef<NoRequest, GitStatus>;
   readonly graph: EndpointDef<{ center: string; depth?: number }, Graph>;
   readonly graphNeighbors: EndpointDef<{ id: string }, Graph>;
+  readonly promotions: EndpointDef<PromotionParams | undefined, Promotion[]>;
+  readonly evaluationDataset: EndpointDef<{ id: string }, EvaluationDatasetDetail>;
+  readonly experiment: EndpointDef<{ id: string }, ExperimentDetail>;
 } = {
   health: {
     method: 'GET',
@@ -188,6 +195,27 @@ export const routes: {
     auth: false,
     request: undefined as unknown as { id: string },
     response: undefined as unknown as Graph,
+  },
+  promotions: {
+    method: 'GET',
+    path: '/promotions',
+    auth: false,
+    request: undefined as unknown as PromotionParams | undefined,
+    response: undefined as unknown as Promotion[],
+  },
+  evaluationDataset: {
+    method: 'GET',
+    path: '/evaluation-datasets/{id}',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as EvaluationDatasetDetail,
+  },
+  experiment: {
+    method: 'GET',
+    path: '/experiments/{id}',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as ExperimentDetail,
   },
 };
 
