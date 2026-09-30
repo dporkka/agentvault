@@ -12,6 +12,7 @@ import type {
   CommitPromotionRequest,
   ContextCompileRequest,
   ContextSnapshot,
+  CreateRunRequest,
   CreateEvaluationCaseRequest,
   CreateEvaluationDatasetRequest,
   CreateExperimentRequest,
@@ -39,6 +40,8 @@ import type {
   PromotionParams,
   ProposePromotionRequest,
   ReviewPromotionRequest,
+  RunAudit,
+  RunRecord,
   RecentParams,
   SearchResult,
   SearchParams,
@@ -91,6 +94,8 @@ export const routes: {
   readonly createExperimentResult: EndpointDef<CreateExperimentResultRequest, ExperimentResult>;
   readonly compileContext: EndpointDef<ContextCompileRequest, ContextSnapshot>;
   readonly contextSnapshot: EndpointDef<{ hash: string }, ContextSnapshot>;
+  readonly createRun: EndpointDef<CreateRunRequest, RunRecord>;
+  readonly runAudit: EndpointDef<{ id: string }, RunAudit>;
 } = {
   health: {
     method: 'GET',
@@ -301,6 +306,20 @@ export const routes: {
     auth: false,
     request: undefined as unknown as { hash: string },
     response: undefined as unknown as ContextSnapshot,
+  },
+  createRun: {
+    method: 'POST',
+    path: '/runs',
+    auth: true,
+    request: undefined as unknown as CreateRunRequest,
+    response: undefined as unknown as RunRecord,
+  },
+  runAudit: {
+    method: 'GET',
+    path: '/runs/{id}/audit',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as RunAudit,
   },
 };
 
