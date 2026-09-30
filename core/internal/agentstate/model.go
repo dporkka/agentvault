@@ -361,3 +361,98 @@ func (r ExperimentResult) Validate() error {
 	}
 	return nil
 }
+
+
+// ActionIntent is the pre-dispatch evidence for one externally executed logical
+// action. AgentVault records the intent and authority binding but does not
+// execute the action itself.
+type ActionIntent struct {
+	ID                  string
+	RunID               string
+	ObservationID       string
+	OperationID         string
+	Action              string
+	CapabilityRef       string
+	AuthorityHash       string
+	InputHash           string
+	Metadata            map[string]any
+	CreatedAt           time.Time
+}
+
+func (i ActionIntent) Validate() error {
+	if i.ID == "" {
+		return fmt.Errorf("action intent id is required")
+	}
+	if i.RunID == "" {
+		return fmt.Errorf("action intent run id is required")
+	}
+	if i.OperationID == "" {
+		return fmt.Errorf("action intent operation id is required")
+	}
+	if i.Action == "" {
+		return fmt.Errorf("action intent action is required")
+	}
+	if i.CapabilityRef == "" {
+		return fmt.Errorf("action intent capability ref is required")
+	}
+	if i.AuthorityHash == "" {
+		return fmt.Errorf("action intent authority hash is required")
+	}
+	if i.InputHash == "" {
+		return fmt.Errorf("action intent input hash is required")
+	}
+	return nil
+}
+
+type ActionReceiptStatus string
+
+const (
+	ActionCompleted     ActionReceiptStatus = "completed"
+	ActionFailed        ActionReceiptStatus = "failed"
+	ActionIndeterminate ActionReceiptStatus = "indeterminate"
+)
+
+func (s ActionReceiptStatus) valid() bool {
+	switch s {
+	case ActionCompleted, ActionFailed, ActionIndeterminate:
+		return true
+	default:
+		return false
+	}
+}
+
+// ActionReceipt is the immutable terminal evidence for one ActionIntent.
+type ActionReceipt struct {
+	ID                string
+	IntentID          string
+	Status            ActionReceiptStatus
+	ResultHash        string
+	ExternalReceiptID string
+	ErrorCode         string
+	ErrorMessage      string
+	Metadata          map[string]any
+	CompletedAt       time.Time
+}
+
+func (r ActionReceipt) Validate() error {
+	if r.ID == "" {
+		return fmt.Errorf("action receipt id is required")
+	}
+	if r.IntentID == "" {
+		return fmt.Errorf("action receipt intent id is required")
+	}
+	if !r.Status.valid() {
+		return fmt.Errorf("unknown action receipt status %q", r.Status)
+	}
+	switch r.Status {
+	case ActionCompleted:
+		if r.ResultHash == "" {
+			return fmt.Errorf("completed action receipt requires result hash")
+		}
+	case ActionFailed, ActionIndeterminate:
+		if r.ErrorCode == "" && r.ErrorMessage == "" {
+			return fmt.Errorf("%s action receipt requires an error code or message", r.Status)
+		}
+	}
+	return nil
+}
