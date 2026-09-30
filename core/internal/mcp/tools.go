@@ -1506,6 +1506,78 @@ func (s *Server) handleGetExperiment(args map[string]interface{}) (string, error
 	return sb.String(), nil
 }
 
+// --- Tool: agentvault.compile_context ---
+
+func (s *Server) registerCompileContext() {
+	s.tools["agentvault.compile_context"] = Tool{
+		Name:        "agentvault.compile_context",
+		Description: "Compile deterministic, provenance-carrying context for an agent and persist the immutable snapshot by SHA-256 hash.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"agent_id":                  schemaString("Canonical agent manifest ID"),
+			"task":                      schemaString("Current task text"),
+			"conversation_id":           schemaString("Optional conversation/session ID"),
+			"retrieved_note_ids":        schemaStringArray("Explicit knowledge note IDs selected by external retrieval"),
+			"artifact_note_ids":         schemaStringArray("Explicit artifact note IDs relevant to the run"),
+			"max_conversation_messages": schemaInt("Maximum recent conversation messages to include", 20),
+		}, []string{"agent_id"}),
+		Handler: s.handleCompileContext,
+	}
+}
+
+func (s *Server) handleCompileContext(args map[string]interface{}) (string, error) {
+	snapshot, err := agentstate.CompileContext(s.db, s.vaultPath, agentstate.ContextCompileRequest{
+		AgentID:                 stringArg(args, "agent_id"),
+		Task:                    stringArg(args, "task"),
+		ConversationID:          stringArg(args, "conversation_id"),
+		RetrievedNoteIDs:        stringSliceArg(args, "retrieved_note_ids"),
+		ArtifactNoteIDs:         stringSliceArg(args, "artifact_note_ids"),
+		MaxConversationMessages: intArg(args, "max_conversation_messages", 20),
+	})
+	if err != nil {
+		return "", err
+	}
+	return formatContextSnapshot(snapshot), nil
+}
+
+// --- Tool: agentvault.get_context_snapshot ---
+
+func (s *Server) registerGetContextSnapshot() {
+	s.tools["agentvault.get_context_snapshot"] = Tool{
+		Name:        "agentvault.get_context_snapshot",
+		Description: "Fetch an immutable compiled context snapshot by its SHA-256 hash for audit or replay.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"hash": schemaString("Compiled context hash"),
+		}, []string{"hash"}),
+		Handler: s.handleGetContextSnapshot,
+	}
+}
+
+func (s *Server) handleGetContextSnapshot(args map[string]interface{}) (string, error) {
+	snapshot, err := agentstate.GetContextSnapshot(s.db, stringArg(args, "hash"))
+	if err != nil {
+		return "", err
+	}
+	return formatContextSnapshot(snapshot), nil
+}
+
+func formatContextSnapshot(snapshot *agentstate.ContextSnapshot) string {
+	var sb strings.Builder
+	sb.WriteString("# Compiled Context\n\n")
+	sb.WriteString(fmt.Sprintf("- **Hash:** %s\n", snapshot.Hash))
+	sb.WriteString(fmt.Sprintf("- **Agent:** %s@%d\n", snapshot.AgentID, snapshot.AgentRevision))
+	sb.WriteString(fmt.Sprintf("- **Sections:** %d\n", len(snapshot.Sections)))
+	sb.WriteString(fmt.Sprintf("- **Unresolved references:** %d\n", len(snapshot.Unresolved)))
+	if len(snapshot.Unresolved) > 0 {
+		sb.WriteString("\n## Unresolved\n")
+		for _, issue := range snapshot.Unresolved {
+			sb.WriteString(fmt.Sprintf("- %s %s: %s\n", issue.Kind, issue.SourceID, issue.Reason))
+		}
+	}
+	sb.WriteString("\n## Context\n\n")
+	sb.WriteString(snapshot.Text)
+	return sb.String()
+}
+
 func normalizedJSONObjectArg(args map[string]interface{}, key string) (string, error) {
 	raw := stringArg(args, key)
 	if raw == "" {
