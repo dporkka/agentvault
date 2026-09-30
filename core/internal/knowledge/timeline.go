@@ -437,6 +437,11 @@ func (s *Store) listMutationTimeline(filter contract.TimelineFilter) ([]contract
 		); err != nil {
 			return nil, err
 		}
+		scopeType, scopeID := "", ""
+		if sessionID != "" {
+			scopeType = "session"
+			scopeID = sessionID
+		}
 		items = append(items, contract.TimelineItem{
 			Kind:       "mutation",
 			ID:         id,
@@ -445,8 +450,8 @@ func (s *Store) listMutationTimeline(filter contract.TimelineFilter) ([]contract
 			Project:    project,
 			AgentID:    agentID,
 			SessionID:  sessionID,
-			ScopeType:  "session",
-			ScopeID:    sessionID,
+			ScopeType:  scopeType,
+			ScopeID:    scopeID,
 			EventType:  mutationKind,
 			OccurredAt: updatedAt,
 			CreatedAt:  createdAt,
