@@ -56,10 +56,21 @@ func (s *Store) ListTimeline(filter contract.TimelineFilter) ([]contract.Timelin
 	}
 
 	sort.Slice(items, func(i, j int) bool {
-		if items[i].OccurredAt != items[j].OccurredAt {
+		leftOccurred, leftErr := time.Parse(time.RFC3339Nano, items[i].OccurredAt)
+		rightOccurred, rightErr := time.Parse(time.RFC3339Nano, items[j].OccurredAt)
+		if leftErr == nil && rightErr == nil && !leftOccurred.Equal(rightOccurred) {
+			return leftOccurred.After(rightOccurred)
+		}
+		if items[i].OccurredAt != items[j].OccurredAt && (leftErr != nil || rightErr != nil) {
 			return items[i].OccurredAt > items[j].OccurredAt
 		}
-		if items[i].CreatedAt != items[j].CreatedAt {
+
+		leftCreated, leftCreatedErr := time.Parse(time.RFC3339Nano, items[i].CreatedAt)
+		rightCreated, rightCreatedErr := time.Parse(time.RFC3339Nano, items[j].CreatedAt)
+		if leftCreatedErr == nil && rightCreatedErr == nil && !leftCreated.Equal(rightCreated) {
+			return leftCreated.After(rightCreated)
+		}
+		if items[i].CreatedAt != items[j].CreatedAt && (leftCreatedErr != nil || rightCreatedErr != nil) {
 			return items[i].CreatedAt > items[j].CreatedAt
 		}
 		if items[i].Kind != items[j].Kind {
@@ -384,11 +395,11 @@ func (s *Store) listMemoryTimeline(filter contract.TimelineFilter) ([]contract.T
 
 func addTimelineWindow(query string, args []interface{}, column string, filter contract.TimelineFilter) (string, []interface{}) {
 	if filter.Since != "" {
-		query += " AND " + column + " >= ?"
+		query += " AND julianday(" + column + ") >= julianday(?)"
 		args = append(args, filter.Since)
 	}
 	if filter.Until != "" {
-		query += " AND " + column + " <= ?"
+		query += " AND julianday(" + column + ") <= julianday(?)"
 		args = append(args, filter.Until)
 	}
 	return query, args
