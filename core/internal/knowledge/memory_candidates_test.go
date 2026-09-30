@@ -1,9 +1,12 @@
 package knowledge
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/agentvault/core/internal/contract"
+	"github.com/agentvault/core/internal/db"
 )
 
 func createCandidateEpisode(t *testing.T, store *Store, scopeType, scopeID string) contract.EpisodeRecord {
@@ -276,5 +279,69 @@ func TestMemoryCandidateRejectsUnprovenancedEpisodeAndConflictingReview(t *testi
 	}
 	if _, err := store.AcceptMemoryCandidate(candidate.ID, contract.ReviewMemoryCandidateRequest{ReviewedBy: "reviewer"}); err == nil {
 		t.Fatal("expected conflicting terminal review to fail")
+	}
+}
+
+
+func TestMemoryCandidateReplayRestoresReviewAndResultMemory(t *testing.T) {
+	store, database, vault := setupStore(t)
+	episode := createCandidateEpisode(t, store, "project", "replay-project")
+	candidate, err := store.ProposeMemoryCandidate(contract.CreateMemoryCandidateRequest{
+		ID:         "candidate_replay",
+		EpisodeID:  episode.ID,
+		MemoryKind: "decision",
+		Content:    "Reviewed candidate state is canonical journal history.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	accepted, err := store.AcceptMemoryCandidate(candidate.ID, contract.ReviewMemoryCandidateRequest{
+		ReviewedBy: "reviewer",
+		Reason:     "Verified from source evidence.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		path := filepath.Join(vault, ".agentvault", "agentvault.db") + suffix
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+	}
+
+	rebuiltDB, err := db.Open(vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rebuiltDB.Close()
+	if err := rebuiltDB.RunMigrations(); err != nil {
+		t.Fatal(err)
+	}
+	rebuilt := New(rebuiltDB, vault)
+	if err := rebuilt.ReplayJournal(); err != nil {
+		t.Fatal(err)
+	}
+	if err := rebuilt.ReplayJournal(); err != nil {
+		t.Fatalf("second replay must be idempotent: %v", err)
+	}
+
+	restored, err := rebuilt.GetMemoryCandidate(candidate.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Status != contract.MemoryCandidateAccepted ||
+		restored.ResultMemoryID != accepted.ResultMemoryID ||
+		restored.ReviewedBy != "reviewer" {
+		t.Fatalf("candidate review did not replay exactly: %+v", restored)
+	}
+	memory, err := rebuilt.GetMemory(restored.ResultMemoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if memory.Content != candidate.Content || memory.Metadata["candidateId"] != candidate.ID {
+		t.Fatalf("candidate result memory did not replay exactly: %+v", memory)
 	}
 }
