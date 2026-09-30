@@ -273,3 +273,34 @@ func TestRunAuditJSONTags(t *testing.T) {
 		}
 	}
 }
+
+
+func TestRunLearningCandidateRequestJSONTags(t *testing.T) {
+	req := RunLearningCandidateRequest{
+		TargetKind: "memory",
+		Candidate: "Run focused tests before broad verification.",
+		Rationale: "Regression evidence",
+		SourceObservationIDs: []string{"obs_1"},
+		SourceEvaluationIDs: []string{"eval_1"},
+		SupersedesNoteID: "note_old",
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"targetKind":"memory"`,
+		`"candidate":"Run focused tests before broad verification."`,
+		`"sourceObservationIds":["obs_1"]`,
+		`"sourceEvaluationIds":["eval_1"]`,
+		`"supersedesNoteId":"note_old"`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected learning candidate JSON to contain %s, got %s", want, got)
+		}
+	}
+	if contains(got, "agentId") {
+		t.Fatalf("run learning request must not allow caller-supplied agentId: %s", got)
+	}
+}
