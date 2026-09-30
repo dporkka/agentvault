@@ -7,7 +7,10 @@ import (
 	"github.com/agentvault/core/internal/contract"
 )
 
-const rankingAlgorithm = "deterministic-multisignal-v1"
+const (
+	rankingAlgorithm         = "deterministic-multisignal-v1"
+	semanticRankingAlgorithm = "deterministic-multisignal-v2-semantic"
+)
 
 type scoreSignal struct {
 	name   string
@@ -16,12 +19,24 @@ type scoreSignal struct {
 }
 
 func (c *candidateCollector) rank(item contract.ContextItem) contract.ContextItem {
+	algorithm := rankingAlgorithm
 	signals := []scoreSignal{
 		{name: "sourcePrior", value: clampScore(item.Score), weight: 0.64},
 		{name: "lexicalRelevance", value: lexicalRelevance(taskTerms(c.req.Task), item.Title+" "+item.Content), weight: 0.16},
 		{name: "provenanceConfidence", value: provenanceConfidence(item.Provenance), weight: 0.07},
 		{name: "recency", value: contextRecency(item, c.asOf), weight: 0.05},
 		{name: "explicitObject", value: explicitObjectSignal(item, c.req.ObjectIDs), weight: 0.08},
+	}
+	if semantic, ok := semanticSimilarity(item); ok {
+		algorithm = semanticRankingAlgorithm
+		signals = []scoreSignal{
+			{name: "sourcePrior", value: clampScore(item.Score), weight: 0.56},
+			{name: "lexicalRelevance", value: lexicalRelevance(taskTerms(c.req.Task), item.Title+" "+item.Content), weight: 0.14},
+			{name: "semanticSimilarity", value: semantic, weight: 0.12},
+			{name: "provenanceConfidence", value: provenanceConfidence(item.Provenance), weight: 0.07},
+			{name: "recency", value: contextRecency(item, c.asOf), weight: 0.04},
+			{name: "explicitObject", value: explicitObjectSignal(item, c.req.ObjectIDs), weight: 0.07},
+		}
 	}
 
 	score := 0.0
@@ -42,7 +57,7 @@ func (c *candidateCollector) rank(item contract.ContextItem) contract.ContextIte
 	item.Score = clampScore(score)
 	if c.req.Explain {
 		item.Ranking = &contract.ContextRankingExplanation{
-			Algorithm:  rankingAlgorithm,
+			Algorithm:  algorithm,
 			Components: components,
 		}
 	}
@@ -108,4 +123,24 @@ func contextTimestamp(item contract.ContextItem) time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+func semanticSimilarity(item contract.ContextItem) (float64, bool) {
+	if item.Metadata == nil {
+		return 0, false
+	}
+	raw, ok := item.Metadata["semanticSimilarity"]
+	if !ok {
+		return 0, false
+	}
+	switch value := raw.(type) {
+	case float64:
+		return clampScore(value), true
+	case float32:
+		return clampScore(float64(value)), true
+	case int:
+		return clampScore(float64(value)), true
+	default:
+		return 0, false
+	}
 }
