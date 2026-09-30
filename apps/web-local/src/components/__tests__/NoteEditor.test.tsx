@@ -84,4 +84,36 @@ describe('NoteEditor', () => {
 
     expect(onCancel).toHaveBeenCalled();
   });
+
+  it('sends the loaded content hash when editing an existing note', async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    mockUpdateNote.mockResolvedValueOnce({
+      id: 'note-1',
+      path: 'notes/note-1.md',
+      contentHash: 'hash-after-save',
+    });
+
+    render(
+      <NoteEditor
+        onCreated={onCreated}
+        editNoteId="note-1"
+        editNoteTitle="Existing Note"
+        editNoteType="note"
+        editNoteContent="Original content"
+        editNoteContentHash="hash-at-load"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /save note/i }));
+
+    expect(mockUpdateNote).toHaveBeenCalledWith('note-1', {
+      title: 'Existing Note',
+      content: 'Original content',
+      tags: undefined,
+      expectedContentHash: 'hash-at-load',
+    });
+    expect(onCreated).toHaveBeenCalledWith('note-1', 'notes/note-1.md');
+  });
+
 });

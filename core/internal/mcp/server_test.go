@@ -196,6 +196,8 @@ func TestHandleToolsList(t *testing.T) {
 		"agentvault.summarize",
 		"agentvault.list_projects",
 		"agentvault.list_recent",
+		"agentvault.list_views",
+		"agentvault.run_view",
 		"agentvault.git_status",
 		"agentvault.log_agent_run",
 		"agentvault.get_links",
@@ -206,8 +208,8 @@ func TestHandleToolsList(t *testing.T) {
 		"agentvault.toggle_pin",
 	}
 
-	if len(tools) != 18 {
-		t.Errorf("expected 18 tools, got %d", len(tools))
+	if len(tools) != 20 {
+		t.Errorf("expected 20 tools, got %d", len(tools))
 	}
 
 	toolNames := make(map[string]bool)
@@ -512,8 +514,8 @@ func TestNewServer(t *testing.T) {
 	}
 
 	srv.RegisterTools()
-	if len(srv.tools) != 18 {
-		t.Errorf("expected 18 tools after RegisterTools, got %d", len(srv.tools))
+	if len(srv.tools) != 20 {
+		t.Errorf("expected 20 tools after RegisterTools, got %d", len(srv.tools))
 	}
 }
 

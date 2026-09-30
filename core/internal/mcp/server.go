@@ -119,6 +119,8 @@ func (s *Server) RegisterTools() {
 	s.registerSummarize()
 	s.registerListProjects()
 	s.registerListRecent()
+	s.registerListViews()
+	s.registerRunView()
 	s.registerGitStatus()
 	s.registerOpenDaily()
 	s.registerLogAgentRun()

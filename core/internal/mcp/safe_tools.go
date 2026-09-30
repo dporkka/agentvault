@@ -9,6 +9,8 @@ func (s *Server) RegisterVaultReadTools() {
 	s.registerGetLinks()
 	s.registerListProjects()
 	s.registerListRecent()
+	s.registerListViews()
+	s.registerRunView()
 	s.registerGitStatus()
 }
 

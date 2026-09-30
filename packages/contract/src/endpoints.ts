@@ -25,6 +25,7 @@ import type {
   RecentParams,
   SearchResult,
   SearchParams,
+  SavedView,
   StaleParams,
   VaultStatus,
 } from './types';
@@ -59,6 +60,9 @@ export const routes: {
   readonly projects: EndpointDef<NoRequest, Projects>;
   readonly recent: EndpointDef<RecentParams | undefined, SearchResult[]>;
   readonly stale: EndpointDef<StaleParams | undefined, SearchResult[]>;
+  readonly views: EndpointDef<NoRequest, SavedView[]>;
+  readonly viewById: EndpointDef<{ id: string }, SavedView>;
+  readonly runView: EndpointDef<{ id: string }, SearchResult[]>;
   readonly gitStatus: EndpointDef<NoRequest, GitStatus>;
   readonly graph: EndpointDef<{ center: string; depth?: number }, Graph>;
   readonly graphNeighbors: EndpointDef<{ id: string }, Graph>;
@@ -166,6 +170,27 @@ export const routes: {
     path: '/stale',
     auth: false,
     request: undefined as unknown as StaleParams | undefined,
+    response: undefined as unknown as SearchResult[],
+  },
+  views: {
+    method: 'GET',
+    path: '/views',
+    auth: true,
+    request: undefined as never,
+    response: undefined as unknown as SavedView[],
+  },
+  viewById: {
+    method: 'GET',
+    path: '/views/{id}',
+    auth: true,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as SavedView,
+  },
+  runView: {
+    method: 'POST',
+    path: '/views/{id}/run',
+    auth: true,
+    request: undefined as unknown as { id: string },
     response: undefined as unknown as SearchResult[],
   },
   gitStatus: {

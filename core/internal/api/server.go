@@ -242,6 +242,11 @@ func (s *Server) RegisterRoutes() {
 	// universal objects, indexed notes, and durable session history.
 	s.mux.HandleFunc("POST /context/compile", s.withKnowledgeReady(s.handleCompileContext))
 
+	// Saved views
+	s.mux.HandleFunc("GET /views", s.handleListViews)
+	s.mux.HandleFunc("GET /views/{id}", s.handleGetView)
+	s.mux.HandleFunc("POST /views/{id}/run", s.handleRunView)
+
 	// Lists
 	s.mux.HandleFunc("GET /projects", s.handleProjects)
 	s.mux.HandleFunc("GET /recent", s.handleRecent)
