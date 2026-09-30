@@ -55,12 +55,12 @@ func TestRunMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 3 {
-		t.Errorf("Expected migration version 3, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected migration version 4, got %d", version)
 	}
 
 	// Verify tables exist
-	tables := []string{"files", "notes", "tags", "entities", "links", "agents", "agent_runs", "events", "conversations", "conversation_messages", "schema_migrations"}
+	tables := []string{"files", "notes", "tags", "entities", "links", "agents", "agent_runs", "events", "memories", "conversations", "conversation_messages", "schema_migrations"}
 	for _, table := range tables {
 		var name string
 		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
@@ -153,8 +153,8 @@ func TestRunMigrationsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 3 {
-		t.Errorf("Expected migration version 3, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected migration version 4, got %d", version)
 	}
 }
 
@@ -167,6 +167,7 @@ func TestEmbeddedMigrationsPresent(t *testing.T) {
 		"001_init.sql":          false,
 		"002_conversations.sql": false,
 		"003_agent_state.sql":   false,
+		"004_memories.sql":      false,
 	}
 	for _, e := range entries {
 		if _, ok := expected[e.Name()]; ok {
@@ -235,8 +236,8 @@ func TestRunInlineMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 3 {
-		t.Errorf("Expected migration version 3, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected migration version 4, got %d", version)
 	}
 }
 
@@ -265,8 +266,8 @@ func TestRunMigrationsInlineFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to query schema_migrations: %v", err)
 	}
-	if version != 3 {
-		t.Errorf("Expected inline migration version 3, got %d", version)
+	if version != 4 {
+		t.Errorf("Expected inline migration version 4, got %d", version)
 	}
 }
 
