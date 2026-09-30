@@ -212,6 +212,7 @@ func TestHandleToolsList(t *testing.T) {
 		"agentvault.record_experiment_result",
 		"agentvault.list_promotions",
 		"agentvault.get_evaluation_dataset",
+		"agentvault.compare_experiments",
 		"agentvault.get_experiment",
 		"agentvault.compile_context",
 		"agentvault.get_context_snapshot",
@@ -224,8 +225,8 @@ func TestHandleToolsList(t *testing.T) {
 		"agentvault.toggle_pin",
 	}
 
-	if len(tools) != 36 {
-		t.Errorf("expected 36 tools, got %d", len(tools))
+	if len(tools) != 37 {
+		t.Errorf("expected 37 tools, got %d", len(tools))
 	}
 
 	toolNames := make(map[string]bool)
@@ -530,8 +531,8 @@ func TestNewServer(t *testing.T) {
 	}
 
 	srv.RegisterTools()
-	if len(srv.tools) != 36 {
-		t.Errorf("expected 36 tools after RegisterTools, got %d", len(srv.tools))
+	if len(srv.tools) != 37 {
+		t.Errorf("expected 37 tools after RegisterTools, got %d", len(srv.tools))
 	}
 }
 
