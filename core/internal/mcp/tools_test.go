@@ -420,7 +420,6 @@ func TestHandleLogAgentRun_MissingFields(t *testing.T) {
 	}
 }
 
-
 func TestHandleLogAgentRun_StructuredEvidence(t *testing.T) {
 	s, db := setupTestServer(t)
 	defer db.Close()
@@ -433,10 +432,10 @@ func TestHandleLogAgentRun_StructuredEvidence(t *testing.T) {
 		"status":                   "succeeded",
 		"conversation_id":          "conv_1",
 		"context_hash":             "sha256:abc",
-		"input_json":               "{"issue":123}",
-		"output_json":              "{"result":"ok"}",
-		"capability_snapshot_json": "{"github.read":true}",
-		"runtime_metadata_json":    "{"runtime":"test"}",
+		"input_json":               `{"issue":123}`,
+		"output_json":              `{"result":"ok"}`,
+		"capability_snapshot_json": `{"github.read":true}`,
+		"runtime_metadata_json":    `{"runtime":"test"}`,
 	})
 	if err != nil {
 		t.Fatalf("handleLogAgentRun structured error: %v", err)
@@ -460,7 +459,7 @@ func TestHandleLogAgentRun_StructuredEvidence(t *testing.T) {
 	if conversationID != "conv_1" || contextHash != "sha256:abc" {
 		t.Fatalf("unexpected run linkage: conversation=%s context=%s", conversationID, contextHash)
 	}
-	if inputJSON != "{"issue":123}" {
+	if inputJSON != `{"issue":123}` {
 		t.Fatalf("unexpected normalized input JSON: %s", inputJSON)
 	}
 }
@@ -514,8 +513,8 @@ func TestHandleLogObservation(t *testing.T) {
 		"kind":          "tool",
 		"name":          "github.search",
 		"status":        "succeeded",
-		"input_json":    "{"query":"agent"}",
-		"evidence_json": "{"result_count":4}",
+		"input_json":    `{"query":"agent"}`,
+		"evidence_json": `{"result_count":4}`,
 	})
 	if err != nil {
 		t.Fatalf("handleLogObservation error: %v", err)
@@ -530,7 +529,7 @@ func TestHandleLogObservation(t *testing.T) {
 	`, "run_obs_1").Scan(&kind, &name, &evidence); err != nil {
 		t.Fatalf("query observation: %v", err)
 	}
-	if kind != "tool" || name != "github.search" || evidence != "{"result_count":4}" {
+	if kind != "tool" || name != "github.search" || evidence != `{"result_count":4}` {
 		t.Fatalf("unexpected observation: kind=%s name=%s evidence=%s", kind, name, evidence)
 	}
 }
