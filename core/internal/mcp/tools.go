@@ -1107,6 +1107,363 @@ func (s *Server) handleProposePromotion(args map[string]interface{}) (string, er
 		record.ID, record.AgentID, record.TargetKind, record.Status), nil
 }
 
+// --- Tool: agentvault.review_promotion ---
+
+func (s *Server) registerReviewPromotion() {
+	s.tools["agentvault.review_promotion"] = Tool{
+		Name:        "agentvault.review_promotion",
+		Description: "Approve or reject an evidence-backed promotion proposal. Review is explicit and does not mutate canonical notes.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"promotion_id": schemaString("Promotion proposal ID"),
+			"decision":     schemaStringEnum("Review decision", []string{"approve", "reject"}),
+			"reviewer":     schemaString("Reviewer identity"),
+			"note":         schemaString("Optional review rationale"),
+		}, []string{"promotion_id", "decision", "reviewer"}),
+		Handler: s.handleReviewPromotion,
+	}
+}
+
+func (s *Server) handleReviewPromotion(args map[string]interface{}) (string, error) {
+	promotionID := stringArg(args, "promotion_id")
+	decision := stringArg(args, "decision")
+	reviewer := stringArg(args, "reviewer")
+	reviewNote := stringArg(args, "note")
+	if promotionID == "" || reviewer == "" {
+		return "", fmt.Errorf("promotion_id and reviewer are required")
+	}
+
+	var current string
+	if err := s.db.QueryRow(`SELECT status FROM promotion_records WHERE id = ?`, promotionID).Scan(&current); err != nil {
+		return "", fmt.Errorf("promotion not found: %s", promotionID)
+	}
+
+	var next agentstate.PromotionStatus
+	switch decision {
+	case "approve":
+		next = agentstate.PromotionApproved
+	case "reject":
+		next = agentstate.PromotionRejected
+	default:
+		return "", fmt.Errorf("decision must be approve or reject")
+	}
+	if err := agentstate.ValidatePromotionTransition(agentstate.PromotionStatus(current), next); err != nil {
+		return "", err
+	}
+
+	if _, err := s.db.Exec(
+		`UPDATE promotion_records
+		 SET status = ?, reviewed_at = ?, reviewed_by = ?, review_note = NULLIF(?, '')
+		 WHERE id = ?`,
+		string(next), currentTimestamp(), reviewer, reviewNote, promotionID,
+	); err != nil {
+		return "", fmt.Errorf("failed to review promotion: %w", err)
+	}
+
+	return fmt.Sprintf("Promotion %s: %s\n- **Reviewer:** %s", next, promotionID, reviewer), nil
+}
+
+// --- Tool: agentvault.commit_promotion ---
+
+func (s *Server) registerCommitPromotion() {
+	s.tools["agentvault.commit_promotion"] = Tool{
+		Name:        "agentvault.commit_promotion",
+		Description: "Mark an approved promotion committed only after its exact candidate text exists in a canonical Markdown note.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"promotion_id":  schemaString("Approved promotion ID"),
+			"target_note_id": schemaString("Canonical note ID containing the promoted candidate text"),
+		}, []string{"promotion_id", "target_note_id"}),
+		Handler: s.handleCommitPromotion,
+	}
+}
+
+func (s *Server) handleCommitPromotion(args map[string]interface{}) (string, error) {
+	promotionID := stringArg(args, "promotion_id")
+	targetNoteID := stringArg(args, "target_note_id")
+	if promotionID == "" || targetNoteID == "" {
+		return "", fmt.Errorf("promotion_id and target_note_id are required")
+	}
+
+	var current, candidate string
+	if err := s.db.QueryRow(
+		`SELECT status, candidate FROM promotion_records WHERE id = ?`,
+		promotionID,
+	).Scan(&current, &candidate); err != nil {
+		return "", fmt.Errorf("promotion not found: %s", promotionID)
+	}
+	if err := agentstate.ValidatePromotionTransition(agentstate.PromotionStatus(current), agentstate.PromotionCommitted); err != nil {
+		return "", err
+	}
+
+	note, err := s.searcher.GetByID(targetNoteID)
+	if err != nil {
+		return "", fmt.Errorf("target note not found: %s", targetNoteID)
+	}
+	doc, err := markdown.ParseFile(filepath.Join(s.vaultPath, note.Path))
+	if err != nil {
+		return "", fmt.Errorf("target note is not readable canonical Markdown: %w", err)
+	}
+	if !strings.Contains(doc.Body, candidate) {
+		return "", fmt.Errorf("target note does not contain promotion candidate text")
+	}
+
+	if _, err := s.db.Exec(
+		`UPDATE promotion_records
+		 SET status = ?, target_note_id = ?, committed_at = ?
+		 WHERE id = ?`,
+		string(agentstate.PromotionCommitted), targetNoteID, currentTimestamp(), promotionID,
+	); err != nil {
+		return "", fmt.Errorf("failed to commit promotion: %w", err)
+	}
+
+	return fmt.Sprintf("Promotion committed: %s\n- **Target note:** %s", promotionID, targetNoteID), nil
+}
+
+// --- Tool: agentvault.create_evaluation_dataset ---
+
+func (s *Server) registerCreateEvaluationDataset() {
+	s.tools["agentvault.create_evaluation_dataset"] = Tool{
+		Name:        "agentvault.create_evaluation_dataset",
+		Description: "Create a reusable evaluation dataset. AgentVault stores cases but does not execute evaluations.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"name":        schemaString("Dataset name"),
+			"description": schemaString("Dataset purpose"),
+			"agent_id":    schemaString("Optional agent manifest ID this dataset targets"),
+		}, []string{"name"}),
+		Handler: s.handleCreateEvaluationDataset,
+	}
+}
+
+func (s *Server) handleCreateEvaluationDataset(args map[string]interface{}) (string, error) {
+	id := fmt.Sprintf("ds_%d", time.Now().UnixNano())
+	record := agentstate.EvaluationDataset{
+		ID: id, Name: stringArg(args, "name"),
+		Description: stringArg(args, "description"), AgentID: stringArg(args, "agent_id"),
+	}
+	if err := record.Validate(); err != nil {
+		return "", err
+	}
+
+	if _, err := s.db.Exec(
+		`INSERT INTO evaluation_datasets (id, name, description, agent_id, created_at)
+		 VALUES (?, ?, NULLIF(?, ''), NULLIF(?, ''), ?)`,
+		record.ID, record.Name, record.Description, record.AgentID, currentTimestamp(),
+	); err != nil {
+		return "", fmt.Errorf("failed to create evaluation dataset: %w", err)
+	}
+	return fmt.Sprintf("Created evaluation dataset: %s\n- **ID:** %s", record.Name, record.ID), nil
+}
+
+// --- Tool: agentvault.add_evaluation_case ---
+
+func (s *Server) registerAddEvaluationCase() {
+	s.tools["agentvault.add_evaluation_case"] = Tool{
+		Name:        "agentvault.add_evaluation_case",
+		Description: "Add one reproducible input and optional expected output to an evaluation dataset.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"dataset_id":    schemaString("Evaluation dataset ID"),
+			"name":          schemaString("Case name"),
+			"input_json":    schemaString("Required JSON object containing the evaluation input"),
+			"expected_json": schemaString("Optional JSON object describing the expected outcome"),
+			"tags":          schemaStringArray("Optional case tags"),
+		}, []string{"dataset_id", "name", "input_json"}),
+		Handler: s.handleAddEvaluationCase,
+	}
+}
+
+func (s *Server) handleAddEvaluationCase(args map[string]interface{}) (string, error) {
+	datasetID := stringArg(args, "dataset_id")
+	name := stringArg(args, "name")
+	if datasetID == "" || name == "" || stringArg(args, "input_json") == "" {
+		return "", fmt.Errorf("dataset_id, name, and input_json are required")
+	}
+
+	var one int
+	if err := s.db.QueryRow(`SELECT 1 FROM evaluation_datasets WHERE id = ?`, datasetID).Scan(&one); err != nil {
+		return "", fmt.Errorf("evaluation dataset not found: %s", datasetID)
+	}
+
+	inputJSON, err := normalizedJSONObjectArg(args, "input_json")
+	if err != nil {
+		return "", err
+	}
+	var input map[string]interface{}
+	if err := json.Unmarshal([]byte(inputJSON), &input); err != nil {
+		return "", err
+	}
+
+	expectedJSON := ""
+	var expected map[string]interface{}
+	if stringArg(args, "expected_json") != "" {
+		expectedJSON, err = normalizedJSONObjectArg(args, "expected_json")
+		if err != nil {
+			return "", err
+		}
+		if err := json.Unmarshal([]byte(expectedJSON), &expected); err != nil {
+			return "", err
+		}
+	}
+
+	id := fmt.Sprintf("case_%d", time.Now().UnixNano())
+	tags := stringSliceArg(args, "tags")
+	record := agentstate.EvaluationCase{
+		ID: id, DatasetID: datasetID, Name: name,
+		Input: input, Expected: expected, Tags: tags,
+	}
+	if err := record.Validate(); err != nil {
+		return "", err
+	}
+	tagsJSON, _ := json.Marshal(tags)
+
+	if _, err := s.db.Exec(
+		`INSERT INTO evaluation_cases (
+			id, dataset_id, name, input_json, expected_json, tags_json, created_at
+		) VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?)`,
+		record.ID, record.DatasetID, record.Name, inputJSON, expectedJSON, string(tagsJSON), currentTimestamp(),
+	); err != nil {
+		return "", fmt.Errorf("failed to add evaluation case: %w", err)
+	}
+	return fmt.Sprintf("Added evaluation case: %s\n- **ID:** %s\n- **Dataset:** %s", record.Name, record.ID, record.DatasetID), nil
+}
+
+// --- Tool: agentvault.record_experiment ---
+
+func (s *Server) registerRecordExperiment() {
+	s.tools["agentvault.record_experiment"] = Tool{
+		Name:        "agentvault.record_experiment",
+		Description: "Record metadata for an evaluation experiment executed by an external runtime.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"dataset_id":     schemaString("Evaluation dataset ID"),
+			"name":           schemaString("Experiment name"),
+			"agent_id":       schemaString("Agent manifest ID"),
+			"agent_revision": schemaInt("Immutable agent revision evaluated", 1),
+			"status":         schemaStringEnum("Experiment status", []string{"planned", "running", "completed", "failed", "cancelled"}),
+			"config_json":    schemaString("JSON object describing model/runtime/context configuration"),
+		}, []string{"dataset_id", "name", "agent_id", "agent_revision"}),
+		Handler: s.handleRecordExperiment,
+	}
+}
+
+func (s *Server) handleRecordExperiment(args map[string]interface{}) (string, error) {
+	datasetID := stringArg(args, "dataset_id")
+	var one int
+	if err := s.db.QueryRow(`SELECT 1 FROM evaluation_datasets WHERE id = ?`, datasetID).Scan(&one); err != nil {
+		return "", fmt.Errorf("evaluation dataset not found: %s", datasetID)
+	}
+
+	status := stringArg(args, "status")
+	if status == "" {
+		status = string(agentstate.ExperimentCompleted)
+	}
+	configJSON, err := normalizedJSONObjectArg(args, "config_json")
+	if err != nil {
+		return "", err
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
+		return "", err
+	}
+
+	id := fmt.Sprintf("exp_%d", time.Now().UnixNano())
+	record := agentstate.Experiment{
+		ID: id, DatasetID: datasetID, Name: stringArg(args, "name"),
+		AgentID: stringArg(args, "agent_id"), AgentRevision: intArg(args, "agent_revision", 0),
+		Status: agentstate.ExperimentStatus(status), Config: config,
+	}
+	if err := record.Validate(); err != nil {
+		return "", err
+	}
+
+	completedAt := ""
+	if record.Status == agentstate.ExperimentCompleted || record.Status == agentstate.ExperimentFailed || record.Status == agentstate.ExperimentCancelled {
+		completedAt = currentTimestamp()
+	}
+	if _, err := s.db.Exec(
+		`INSERT INTO experiments (
+			id, dataset_id, name, agent_id, agent_revision, status, config_json, created_at, completed_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''))`,
+		record.ID, record.DatasetID, record.Name, record.AgentID, record.AgentRevision,
+		string(record.Status), configJSON, currentTimestamp(), completedAt,
+	); err != nil {
+		return "", fmt.Errorf("failed to record experiment: %w", err)
+	}
+	return fmt.Sprintf("Recorded experiment: %s\n- **ID:** %s\n- **Status:** %s", record.Name, record.ID, record.Status), nil
+}
+
+// --- Tool: agentvault.record_experiment_result ---
+
+func (s *Server) registerRecordExperimentResult() {
+	s.tools["agentvault.record_experiment_result"] = Tool{
+		Name:        "agentvault.record_experiment_result",
+		Description: "Record one externally produced evaluation result for a dataset case.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"experiment_id": schemaString("Experiment ID"),
+			"case_id":       schemaString("Evaluation case ID"),
+			"run_id":        schemaString("Optional agent run providing execution evidence"),
+			"score":         map[string]interface{}{"type": "number", "description": "Optional numeric score"},
+			"label":         schemaString("Optional categorical label"),
+			"metadata_json": schemaString("Optional JSON object with metrics such as latency or token usage"),
+		}, []string{"experiment_id", "case_id"}),
+		Handler: s.handleRecordExperimentResult,
+	}
+}
+
+func (s *Server) handleRecordExperimentResult(args map[string]interface{}) (string, error) {
+	experimentID := stringArg(args, "experiment_id")
+	caseID := stringArg(args, "case_id")
+	runID := stringArg(args, "run_id")
+	label := stringArg(args, "label")
+
+	var score *float64
+	if raw, ok := args["score"]; ok {
+		switch v := raw.(type) {
+		case float64:
+			score = &v
+		case int:
+			value := float64(v)
+			score = &value
+		default:
+			return "", fmt.Errorf("score must be numeric")
+		}
+	}
+
+	record := agentstate.ExperimentResult{
+		ExperimentID: experimentID, CaseID: caseID, RunID: runID, Score: score, Label: label,
+	}
+	if err := record.Validate(); err != nil {
+		return "", err
+	}
+
+	var experimentDataset, caseDataset string
+	if err := s.db.QueryRow(`SELECT dataset_id FROM experiments WHERE id = ?`, experimentID).Scan(&experimentDataset); err != nil {
+		return "", fmt.Errorf("experiment not found: %s", experimentID)
+	}
+	if err := s.db.QueryRow(`SELECT dataset_id FROM evaluation_cases WHERE id = ?`, caseID).Scan(&caseDataset); err != nil {
+		return "", fmt.Errorf("evaluation case not found: %s", caseID)
+	}
+	if experimentDataset != caseDataset {
+		return "", fmt.Errorf("evaluation case dataset does not match experiment dataset")
+	}
+
+	metadataJSON, err := normalizedJSONObjectArg(args, "metadata_json")
+	if err != nil {
+		return "", err
+	}
+	var scoreValue interface{}
+	if score != nil {
+		scoreValue = *score
+	}
+
+	if _, err := s.db.Exec(
+		`INSERT INTO experiment_results (
+			experiment_id, case_id, run_id, score, label, metadata_json, created_at
+		) VALUES (?, ?, NULLIF(?, ''), ?, NULLIF(?, ''), ?, ?)`,
+		record.ExperimentID, record.CaseID, record.RunID, scoreValue, record.Label, metadataJSON, currentTimestamp(),
+	); err != nil {
+		return "", fmt.Errorf("failed to record experiment result: %w", err)
+	}
+	return fmt.Sprintf("Recorded experiment result\n- **Experiment:** %s\n- **Case:** %s", record.ExperimentID, record.CaseID), nil
+}
+
 func normalizedJSONObjectArg(args map[string]interface{}, key string) (string, error) {
 	raw := stringArg(args, key)
 	if raw == "" {
