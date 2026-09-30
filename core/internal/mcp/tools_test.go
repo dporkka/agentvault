@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/agentvault/core/internal/agentstate"
 	"github.com/agentvault/core/internal/db"
 )
 
@@ -423,6 +424,14 @@ func TestHandleLogAgentRun_MissingFields(t *testing.T) {
 func TestHandleLogAgentRun_StructuredEvidence(t *testing.T) {
 	s, db := setupTestServer(t)
 	defer db.Close()
+
+	snapshot := `{"hash":"sha256:abc","agentId":"agt_1","agentRevision":3,"agentTitle":"Coding Agent","task":"review change","conversationId":"conv_1","knowledgeScopes":[],"artifactScopes":[],"conversationScopes":[],"capabilityRefs":[],"contextPolicyRef":"","sections":[],"unresolved":[],"text":"compiled"}`
+	if _, err := db.Exec(`
+		INSERT INTO context_snapshots (hash, agent_id, agent_revision, task, conversation_id, context_json, created_at)
+		VALUES ('sha256:abc', 'agt_1', 3, 'review change', 'conv_1', ?, datetime('now'))
+	`, snapshot); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := s.handleLogAgentRun(map[string]interface{}{
 		"agent_name":               "coding-agent",
