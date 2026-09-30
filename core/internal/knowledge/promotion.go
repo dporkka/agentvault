@@ -29,6 +29,7 @@ type PromotionInput struct {
 	ProvenanceID string
 	Confidence   *float64
 	Metadata     map[string]interface{}
+	ObjectIDs    []string
 }
 
 // PromotionResult contains the durable provenance and episode representing one
@@ -113,6 +114,7 @@ func (s *Store) PromoteEvent(input PromotionInput) (PromotionResult, error) {
 		ScopeID:      scopeID,
 		EventType:    input.EventType,
 		Summary:      input.Summary,
+		ObjectIDs:    normalizeIDs(input.ObjectIDs),
 		ProvenanceID: provenance.ID,
 		OccurredAt:   occurredAt,
 		Metadata:     promotionMetadata(input.Metadata, input),
