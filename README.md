@@ -240,6 +240,7 @@ Registered tools:
 - `agentvault.list_promotions`
 - `agentvault.get_evaluation_dataset`
 - `agentvault.get_experiment`
+- `agentvault.compare_experiments`
 - `agentvault.compile_context`
 - `agentvault.get_context_snapshot`
 - `agentvault.get_run_audit`
