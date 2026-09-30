@@ -18,6 +18,7 @@ var validTimelineKinds = map[string]struct{}{
 	"session_event": {},
 	"episode":       {},
 	"memory":        {},
+	"mutation":      {},
 }
 
 // ListTimeline returns one deterministic, newest-first activity stream derived
@@ -52,6 +53,9 @@ func (s *Store) ListTimeline(filter contract.TimelineFilter) ([]contract.Timelin
 		return nil, err
 	}
 	if err := appendKind("memory", s.listMemoryTimeline); err != nil {
+		return nil, err
+	}
+	if err := appendKind("mutation", s.listMutationTimeline); err != nil {
 		return nil, err
 	}
 
@@ -392,6 +396,69 @@ func (s *Store) listMemoryTimeline(filter contract.TimelineFilter) ([]contract.T
 	}
 	return items, rows.Err()
 }
+
+func (s *Store) listMutationTimeline(filter contract.TimelineFilter) ([]contract.TimelineItem, error) {
+	query := `
+		SELECT m.id, m.mutation_kind, m.path, m.reason,
+		       COALESCE(m.agent_id, ''), COALESCE(m.session_id, ''), m.status,
+		       m.created_at, m.updated_at, COALESCE(session.project, '')
+		FROM mutation_proposals m
+		LEFT JOIN agent_sessions session ON session.id = m.session_id
+		WHERE 1=1`
+	args := make([]interface{}, 0, 7)
+	if filter.Project != "" {
+		query += " AND session.project = ?"
+		args = append(args, filter.Project)
+	}
+	if filter.AgentID != "" {
+		query += " AND m.agent_id = ?"
+		args = append(args, filter.AgentID)
+	}
+	if filter.SessionID != "" {
+		query += " AND m.session_id = ?"
+		args = append(args, filter.SessionID)
+	}
+	query, args = addTimelineWindow(query, args, "m.updated_at", filter)
+	query += " ORDER BY m.updated_at DESC, m.id LIMIT ?"
+	args = append(args, filter.Limit)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list mutation timeline: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]contract.TimelineItem, 0)
+	for rows.Next() {
+		var id, mutationKind, path, reason, agentID, sessionID, status, createdAt, updatedAt, project string
+		if err := rows.Scan(
+			&id, &mutationKind, &path, &reason, &agentID, &sessionID, &status,
+			&createdAt, &updatedAt, &project,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, contract.TimelineItem{
+			Kind:       "mutation",
+			ID:         id,
+			Title:      path,
+			Summary:    reason,
+			Project:    project,
+			AgentID:    agentID,
+			SessionID:  sessionID,
+			ScopeType:  "session",
+			ScopeID:    sessionID,
+			EventType:  mutationKind,
+			OccurredAt: updatedAt,
+			CreatedAt:  createdAt,
+			Metadata: map[string]interface{}{
+				"status": status,
+				"path":   path,
+			},
+		})
+	}
+	return items, rows.Err()
+}
+
 
 func addTimelineWindow(query string, args []interface{}, column string, filter contract.TimelineFilter) (string, []interface{}) {
 	if filter.Since != "" {
