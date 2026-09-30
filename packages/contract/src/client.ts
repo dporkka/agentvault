@@ -11,11 +11,20 @@ import type {
   AuthVerifyResponse,
   CaptureRequest,
   CaptureResponse,
+  CommitPromotionRequest,
+  CreateEvaluationCaseRequest,
+  CreateEvaluationDatasetRequest,
+  CreateExperimentRequest,
+  CreateExperimentResultRequest,
   CreateNoteRequest,
   CreateNoteResponse,
   DeleteNoteResponse,
+  EvaluationCase,
+  EvaluationDataset,
   EvaluationDatasetDetail,
+  Experiment,
   ExperimentDetail,
+  ExperimentResult,
   Graph,
   GitStatus,
   HealthResponse,
@@ -26,6 +35,8 @@ import type {
   Projects,
   Promotion,
   PromotionParams,
+  ProposePromotionRequest,
+  ReviewPromotionRequest,
   RecentParams,
   SearchParams,
   SearchResult,
@@ -98,8 +109,15 @@ export interface ApiClient {
   getGraph(center: string, depth?: number): Promise<Graph>;
   getGraphNeighbors(id: string): Promise<Graph>;
   listPromotions(params?: PromotionParams): Promise<Promotion[]>;
+  proposePromotion(req: ProposePromotionRequest): Promise<Promotion>;
+  reviewPromotion(id: string, req: ReviewPromotionRequest): Promise<Promotion>;
+  commitPromotion(id: string, req: CommitPromotionRequest): Promise<Promotion>;
   getEvaluationDataset(id: string): Promise<EvaluationDatasetDetail>;
+  createEvaluationDataset(req: CreateEvaluationDatasetRequest): Promise<EvaluationDataset>;
+  createEvaluationCase(datasetId: string, req: CreateEvaluationCaseRequest): Promise<EvaluationCase>;
   getExperiment(id: string): Promise<ExperimentDetail>;
+  createExperiment(req: CreateExperimentRequest): Promise<Experiment>;
+  createExperimentResult(experimentId: string, req: CreateExperimentResultRequest): Promise<ExperimentResult>;
   pinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
   unpinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
 }
@@ -254,11 +272,32 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
       const qs = buildSearch(params);
       return call<Promotion[]>('GET', qs ? `/promotions?${qs}` : '/promotions', undefined, false);
     },
+    proposePromotion(req) {
+      return call<Promotion>('POST', '/promotions', req);
+    },
+    reviewPromotion(id, req) {
+      return call<Promotion>('POST', `/promotions/${encodeURIComponent(id)}/review`, req);
+    },
+    commitPromotion(id, req) {
+      return call<Promotion>('POST', `/promotions/${encodeURIComponent(id)}/commit`, req);
+    },
     getEvaluationDataset(id) {
       return call<EvaluationDatasetDetail>('GET', `/evaluation-datasets/${encodeURIComponent(id)}`, undefined, false);
     },
+    createEvaluationDataset(req) {
+      return call<EvaluationDataset>('POST', '/evaluation-datasets', req);
+    },
+    createEvaluationCase(datasetId, req) {
+      return call<EvaluationCase>('POST', `/evaluation-datasets/${encodeURIComponent(datasetId)}/cases`, req);
+    },
     getExperiment(id) {
       return call<ExperimentDetail>('GET', `/experiments/${encodeURIComponent(id)}`, undefined, false);
+    },
+    createExperiment(req) {
+      return call<Experiment>('POST', '/experiments', req);
+    },
+    createExperimentResult(experimentId, req) {
+      return call<ExperimentResult>('POST', `/experiments/${encodeURIComponent(experimentId)}/results`, req);
     },
     pinNote(id) {
       return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/pin`, undefined, true);
