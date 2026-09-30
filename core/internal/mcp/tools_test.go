@@ -1615,7 +1615,6 @@ func TestHandleProposeRunLearning(t *testing.T) {
 	}
 }
 
-
 func TestHandleGetLearningRecommendation(t *testing.T) {
 	s, database := setupTestServer(t)
 	defer database.Close()
