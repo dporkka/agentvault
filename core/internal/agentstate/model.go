@@ -229,3 +229,136 @@ func (p PromotionRecord) Validate() error {
 	}
 	return nil
 }
+
+
+func ValidatePromotionTransition(from, to PromotionStatus) error {
+	switch {
+	case from == PromotionProposed && (to == PromotionApproved || to == PromotionRejected):
+		return nil
+	case from == PromotionApproved && to == PromotionCommitted:
+		return nil
+	case from == PromotionCommitted && to == PromotionSuperseded:
+		return nil
+	default:
+		return fmt.Errorf("invalid promotion transition %s -> %s", from, to)
+	}
+}
+
+// EvaluationDataset groups stable cases used to compare agent revisions or runtime configurations.
+type EvaluationDataset struct {
+	ID          string
+	Name        string
+	Description string
+	AgentID     string
+}
+
+func (d EvaluationDataset) Validate() error {
+	if d.ID == "" {
+		return fmt.Errorf("dataset id is required")
+	}
+	if d.Name == "" {
+		return fmt.Errorf("dataset name is required")
+	}
+	return nil
+}
+
+// EvaluationCase is a single reproducible input and optional expected outcome.
+type EvaluationCase struct {
+	ID        string
+	DatasetID string
+	Name      string
+	Input     map[string]any
+	Expected  map[string]any
+	Tags      []string
+}
+
+func (c EvaluationCase) Validate() error {
+	if c.ID == "" {
+		return fmt.Errorf("evaluation case id is required")
+	}
+	if c.DatasetID == "" {
+		return fmt.Errorf("dataset id is required")
+	}
+	if c.Name == "" {
+		return fmt.Errorf("evaluation case name is required")
+	}
+	if c.Input == nil {
+		return fmt.Errorf("evaluation case input is required")
+	}
+	return nil
+}
+
+type ExperimentStatus string
+
+const (
+	ExperimentPlanned   ExperimentStatus = "planned"
+	ExperimentRunning   ExperimentStatus = "running"
+	ExperimentCompleted ExperimentStatus = "completed"
+	ExperimentFailed    ExperimentStatus = "failed"
+	ExperimentCancelled ExperimentStatus = "cancelled"
+)
+
+func (s ExperimentStatus) valid() bool {
+	switch s {
+	case ExperimentPlanned, ExperimentRunning, ExperimentCompleted, ExperimentFailed, ExperimentCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Experiment records an externally executed evaluation against one immutable agent revision.
+type Experiment struct {
+	ID            string
+	DatasetID     string
+	Name          string
+	AgentID       string
+	AgentRevision int
+	Status        ExperimentStatus
+	Config        map[string]any
+}
+
+func (e Experiment) Validate() error {
+	if e.ID == "" {
+		return fmt.Errorf("experiment id is required")
+	}
+	if e.DatasetID == "" {
+		return fmt.Errorf("dataset id is required")
+	}
+	if e.Name == "" {
+		return fmt.Errorf("experiment name is required")
+	}
+	if e.AgentID == "" {
+		return fmt.Errorf("agent id is required")
+	}
+	if e.AgentRevision < 1 {
+		return fmt.Errorf("agent revision must be at least 1")
+	}
+	if !e.Status.valid() {
+		return fmt.Errorf("unknown experiment status %q", e.Status)
+	}
+	return nil
+}
+
+// ExperimentResult links one dataset case to the evidence produced by an external run.
+type ExperimentResult struct {
+	ExperimentID string
+	CaseID       string
+	RunID        string
+	Score        *float64
+	Label        string
+	Metadata     map[string]any
+}
+
+func (r ExperimentResult) Validate() error {
+	if r.ExperimentID == "" {
+		return fmt.Errorf("experiment id is required")
+	}
+	if r.CaseID == "" {
+		return fmt.Errorf("case id is required")
+	}
+	if r.Score == nil && r.Label == "" {
+		return fmt.Errorf("experiment result requires a score or label")
+	}
+	return nil
+}
