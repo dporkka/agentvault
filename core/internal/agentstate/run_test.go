@@ -59,8 +59,8 @@ func TestRecordRunValidatesContextBinding(t *testing.T) {
 		Task: "implement audit linkage", Status: RunSucceeded, ContextHash: snapshot.Hash,
 		Input: map[string]any{"issue": 81}, Output: map[string]any{"result": "ok"},
 		CapabilitySnapshot: map[string]any{"github.read": true},
-		RuntimeMetadata: map[string]any{"runtime": "test"},
-		FilesChanged: []string{"core/internal/agentstate/run.go"},
+		RuntimeMetadata:    map[string]any{"runtime": "test"},
+		FilesChanged:       []string{"core/internal/agentstate/run.go"},
 	})
 	if err != nil {
 		t.Fatalf("RecordRun matching context: %v", err)
