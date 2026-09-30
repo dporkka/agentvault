@@ -1467,7 +1467,6 @@ func TestLogWrite(t *testing.T) {
 	}
 }
 
-
 func TestHandleCompileAndGetContext(t *testing.T) {
 	s, database := setupTestServer(t)
 	defer database.Close()
@@ -1545,7 +1544,6 @@ Keep runtime execution outside AgentVault.
 		t.Fatalf("unexpected stored context output:\n%s", stored)
 	}
 }
-
 
 func TestHandleGetRunAudit(t *testing.T) {
 	s, database := setupTestServer(t)
