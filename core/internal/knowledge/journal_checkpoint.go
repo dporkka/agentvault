@@ -18,18 +18,18 @@ const journalCheckpointVersion = 1
 // later VerifyCheckpoint detect a complete journal rewrite that could otherwise
 // produce a fresh, internally valid unsigned hash chain.
 type JournalCheckpoint struct {
-	Version        int    `json:"version"`
-	CreatedAt      string `json:"createdAt"`
-	Events         int    `json:"events"`
-	LegacyEvents   int    `json:"legacyEvents"`
-	ChainedEvents  int    `json:"chainedEvents"`
-	LegacyAnchor   string `json:"legacyAnchor,omitempty"`
-	HeadHash       string `json:"headHash,omitempty"`
-	JournalSHA256  string `json:"journalSha256"`
+	Version       int    `json:"version"`
+	CreatedAt     string `json:"createdAt"`
+	Events        int    `json:"events"`
+	LegacyEvents  int    `json:"legacyEvents"`
+	ChainedEvents int    `json:"chainedEvents"`
+	LegacyAnchor  string `json:"legacyAnchor,omitempty"`
+	HeadHash      string `json:"headHash,omitempty"`
+	JournalSHA256 string `json:"journalSha256"`
 }
 
-// WriteCheckpoint verifies the journal and atomically captures its current
-// integrity state into a new checkpoint file. Existing checkpoint files are
+// WriteCheckpoint verifies the journal and atomically publishes its current
+// integrity state as a new checkpoint file. Existing checkpoint files are
 // never overwritten.
 func (j *Journal) WriteCheckpoint(path string) (JournalCheckpoint, error) {
 	if j == nil {
@@ -67,20 +67,48 @@ func (j *Journal) WriteCheckpoint(path string) (JournalCheckpoint, error) {
 	}
 	encoded = append(encoded, '\n')
 
-	if err := os.MkdirAll(filepath.Dir(filepath.Clean(path)), 0o755); err != nil {
+	cleanPath := filepath.Clean(path)
+	dir := filepath.Dir(cleanPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return JournalCheckpoint{}, fmt.Errorf("create checkpoint directory: %w", err)
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+
+	temp, err := os.CreateTemp(dir, "."+filepath.Base(cleanPath)+".tmp-*")
 	if err != nil {
-		return JournalCheckpoint{}, fmt.Errorf("create journal checkpoint: %w", err)
+		return JournalCheckpoint{}, fmt.Errorf("create temporary journal checkpoint: %w", err)
 	}
-	defer file.Close()
-	if _, err := file.Write(encoded); err != nil {
-		return JournalCheckpoint{}, fmt.Errorf("write journal checkpoint: %w", err)
+	tempPath := temp.Name()
+	published := false
+	defer func() {
+		_ = temp.Close()
+		if !published {
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	if err := temp.Chmod(0o600); err != nil {
+		return JournalCheckpoint{}, fmt.Errorf("chmod temporary journal checkpoint: %w", err)
 	}
-	if err := file.Sync(); err != nil {
-		return JournalCheckpoint{}, fmt.Errorf("sync journal checkpoint: %w", err)
+	if _, err := temp.Write(encoded); err != nil {
+		return JournalCheckpoint{}, fmt.Errorf("write temporary journal checkpoint: %w", err)
 	}
+	if err := temp.Sync(); err != nil {
+		return JournalCheckpoint{}, fmt.Errorf("sync temporary journal checkpoint: %w", err)
+	}
+	if err := temp.Close(); err != nil {
+		return JournalCheckpoint{}, fmt.Errorf("close temporary journal checkpoint: %w", err)
+	}
+
+	// Hard-linking a fully synced same-directory temp file atomically publishes
+	// the checkpoint while preserving no-overwrite semantics. If the final path
+	// already exists, Link fails rather than replacing the trusted witness.
+	if err := os.Link(tempPath, cleanPath); err != nil {
+		return JournalCheckpoint{}, fmt.Errorf("publish journal checkpoint: %w", err)
+	}
+	published = true
+	// The final checkpoint is already durably published. A leftover temp file is
+	// cleanup noise, not checkpoint failure.
+	_ = os.Remove(tempPath)
 	return checkpoint, nil
 }
 
