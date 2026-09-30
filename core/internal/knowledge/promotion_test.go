@@ -95,7 +95,6 @@ func TestPromoteEventUsesSessionAsMostSpecificScope(t *testing.T) {
 	}
 }
 
-
 func TestPromoteEventSerializesConcurrentRetries(t *testing.T) {
 	store, database, _ := setupStore(t)
 	defer database.Close()
