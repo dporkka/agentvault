@@ -214,8 +214,8 @@ func TestHandleToolsList(t *testing.T) {
 		"agentvault.toggle_pin",
 	}
 
-	if len(tools) != 26 {
-		t.Errorf("expected 26 tools, got %d", len(tools))
+	if len(tools) != 28 {
+		t.Errorf("expected 28 tools, got %d", len(tools))
 	}
 
 	toolNames := make(map[string]bool)
@@ -521,7 +521,7 @@ func TestNewServer(t *testing.T) {
 
 	srv.RegisterTools()
 	if len(srv.tools) != 26 {
-		t.Errorf("expected 26 tools after RegisterTools, got %d", len(srv.tools))
+		t.Errorf("expected 28 tools after RegisterTools, got %d", len(srv.tools))
 	}
 }
 
