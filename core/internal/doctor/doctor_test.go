@@ -814,8 +814,8 @@ func TestCheckMigrations_ExtraCases(t *testing.T) {
 	t.Run("incomplete migration version", func(t *testing.T) {
 		tmpDir, database, cleanup := setupTestVaultFixed(t)
 		defer cleanup()
-		database.Exec("DELETE FROM schema_migrations WHERE version IN (1, 2)")
-		if _, err := database.Exec("UPDATE schema_migrations SET version = 0 WHERE version = 3"); err != nil {
+		database.Exec("DELETE FROM schema_migrations WHERE version IN (1, 2, 3)")
+		if _, err := database.Exec("UPDATE schema_migrations SET version = 0 WHERE version = 4"); err != nil {
 			t.Fatalf("failed to update migration version: %v", err)
 		}
 		d := New(database, tmpDir)

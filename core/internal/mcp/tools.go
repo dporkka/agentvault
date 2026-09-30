@@ -19,6 +19,7 @@ import (
 	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
+	"github.com/agentvault/core/internal/memories"
 	"github.com/agentvault/core/internal/rag"
 	"github.com/agentvault/core/internal/search"
 	"github.com/agentvault/core/internal/templates"
@@ -37,6 +38,10 @@ func schemaStringEnum(desc string, enum []string) map[string]interface{} {
 
 func schemaInt(desc string, defaultVal int) map[string]interface{} {
 	return map[string]interface{}{"type": "integer", "description": desc, "default": defaultVal}
+}
+
+func schemaNumber(desc string) map[string]interface{} {
+	return map[string]interface{}{"type": "number", "description": desc}
 }
 
 func schemaStringArray(desc string) map[string]interface{} {
@@ -880,6 +885,93 @@ func (s *Server) recordAgentRun(agentName, task string, filesChanged []string) (
 	}
 
 	return id, nil
+}
+
+// --- Tool: agentvault.create_memory_candidate ---
+
+func (s *Server) registerCreateMemoryCandidate() {
+	s.tools["agentvault.create_memory_candidate"] = Tool{
+		Name:        "agentvault.create_memory_candidate",
+		Description: "Create a typed candidate memory from an existing provenance event. Candidate memories are not durable until explicitly promoted.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"agent_name":      schemaString("Canonical agent name"),
+			"kind":            schemaStringEnum("Memory kind", []string{memories.KindEpisodic, memories.KindSemantic, memories.KindProcedural}),
+			"content":         schemaString("Memory content"),
+			"confidence":      schemaNumber("Confidence score from 0 to 1"),
+			"salience":        schemaNumber("Salience score from 0 to 1"),
+			"scope_type":      schemaString("Optional scope type such as project, workspace, or session"),
+			"scope_id":        schemaString("Optional scope identifier"),
+			"source_event_id": schemaString("Immutable source event that supports this memory"),
+		}, []string{"agent_name", "kind", "content", "confidence", "salience", "source_event_id"}),
+		Handler: s.handleCreateMemoryCandidate,
+	}
+}
+
+func (s *Server) handleCreateMemoryCandidate(args map[string]interface{}) (string, error) {
+	agentName := stringArg(args, "agent_name")
+	if agentName == "" {
+		return "", fmt.Errorf("agent_name is required")
+	}
+	agent, err := agents.NewStore(s.db).EnsureByName(context.Background(), agentName)
+	if err != nil {
+		return "", fmt.Errorf("resolve canonical agent: %w", err)
+	}
+
+	memory, err := memories.NewStore(s.db).CreateCandidate(context.Background(), memories.CreateCandidateInput{
+		AgentID:       agent.ID,
+		Kind:          stringArg(args, "kind"),
+		Content:       stringArg(args, "content"),
+		Confidence:    floatArg(args, "confidence"),
+		Salience:      floatArg(args, "salience"),
+		ScopeType:     stringArg(args, "scope_type"),
+		ScopeID:       stringArg(args, "scope_id"),
+		SourceEventID: stringArg(args, "source_event_id"),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("Created memory candidate: %s\n- **Kind:** %s\n- **Confidence:** %.2f\n- **Salience:** %.2f",
+		memory.ID, memory.Kind, memory.Confidence, memory.Salience), nil
+}
+
+// --- Tool: agentvault.promote_memory ---
+
+func (s *Server) registerPromoteMemory() {
+	s.tools["agentvault.promote_memory"] = Tool{
+		Name:        "agentvault.promote_memory",
+		Description: "Promote a candidate memory to durable long-term memory with an auditable reason.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"memory_id":  schemaString("Candidate memory ID"),
+			"actor_name": schemaString("Optional canonical agent name performing the promotion"),
+			"reason":     schemaString("Reason the candidate is trusted enough to promote"),
+		}, []string{"memory_id"}),
+		Handler: s.handlePromoteMemory,
+	}
+}
+
+func (s *Server) handlePromoteMemory(args map[string]interface{}) (string, error) {
+	var actorID string
+	actorName := stringArg(args, "actor_name")
+	if actorName != "" {
+		agent, err := agents.NewStore(s.db).EnsureByName(context.Background(), actorName)
+		if err != nil {
+			return "", fmt.Errorf("resolve promotion actor: %w", err)
+		}
+		actorID = agent.ID
+	}
+
+	memory, err := memories.NewStore(s.db).Promote(context.Background(), stringArg(args, "memory_id"), memories.PromoteInput{
+		ActorType: "agent",
+		ActorID:   actorID,
+		Reason:    stringArg(args, "reason"),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("Promoted memory: %s\n- **Kind:** %s\n- **Status:** %s",
+		memory.ID, memory.Kind, memory.Status), nil
 }
 
 // sanitizeFilename creates a safe filename from a title.

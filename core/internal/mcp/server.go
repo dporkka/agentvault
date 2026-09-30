@@ -121,6 +121,8 @@ func (s *Server) RegisterTools() {
 	s.registerSetStatus()
 	s.registerAsk()
 	s.registerTogglePin()
+	s.registerCreateMemoryCandidate()
+	s.registerPromoteMemory()
 }
 
 // SetAuthToken sets the auth token for HTTP requests.
@@ -244,7 +246,6 @@ func (s *Server) handleToolsCall(req JSONRPCRequest) JSONRPCResponse {
 		Result:  result,
 	}
 }
-
 
 // resourceDescription is the JSON representation of a resource for
 // the resources/list response.
@@ -381,6 +382,7 @@ func matchResourceTemplate(tmpl, uri string) bool {
 	}
 	return true
 }
+
 // ServeStdio runs the MCP server over stdin/stdout.
 func (s *Server) ServeStdio() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -509,6 +511,16 @@ func intArg(args map[string]interface{}, key string, defaultVal int) int {
 		return v
 	}
 	return defaultVal
+}
+
+func floatArg(args map[string]interface{}, key string) float64 {
+	if v, ok := args[key].(float64); ok {
+		return v
+	}
+	if v, ok := args[key].(int); ok {
+		return float64(v)
+	}
+	return 0
 }
 
 // stringSliceArg extracts a string slice argument from args map.
