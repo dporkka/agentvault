@@ -79,7 +79,6 @@ func TestPromotionRecordValidate(t *testing.T) {
 	}
 }
 
-
 func TestPromotionTransitionValidate(t *testing.T) {
 	if err := ValidatePromotionTransition(PromotionProposed, PromotionApproved); err != nil {
 		t.Fatalf("proposed -> approved rejected: %v", err)
