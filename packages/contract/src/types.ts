@@ -389,3 +389,53 @@ export interface CreateExperimentResultRequest {
   label?: string;
   metadata?: Record<string, unknown>;
 }
+
+
+export interface ContextCompileRequest {
+  task?: string;
+  conversationId?: string;
+  retrievedNoteIds?: string[];
+  artifactNoteIds?: string[];
+  maxConversationMessages?: number;
+}
+
+export type ContextSectionKind =
+  | 'agent'
+  | 'identity'
+  | 'context_policy'
+  | 'memory'
+  | 'task'
+  | 'knowledge'
+  | 'conversation'
+  | 'artifact';
+
+export interface ContextSection {
+  kind: ContextSectionKind;
+  sourceId: string;
+  sourcePath: string;
+  title: string;
+  content: string;
+}
+
+export interface ContextReferenceIssue {
+  kind: ContextSectionKind;
+  sourceId: string;
+  reason: string;
+}
+
+export interface ContextSnapshot {
+  hash: string;
+  agentId: string;
+  agentRevision: number;
+  agentTitle: string;
+  task: string;
+  conversationId: string;
+  knowledgeScopes: string[];
+  artifactScopes: string[];
+  conversationScopes: string[];
+  capabilityRefs: string[];
+  contextPolicyRef: string;
+  sections: ContextSection[];
+  unresolved: ContextReferenceIssue[];
+  text: string;
+}
