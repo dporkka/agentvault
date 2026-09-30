@@ -877,3 +877,119 @@ func TestAuthVerifyEndpoint(t *testing.T) {
 		t.Errorf("expected tokenValid=false with wrong token, got %v", body["tokenValid"])
 	}
 }
+
+
+func TestAgentStateReadEndpoints(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO promotion_records (
+			id, agent_id, target_kind, status, candidate, rationale,
+			source_run_ids_json, source_observation_ids_json, source_evaluation_ids_json,
+			created_at
+		) VALUES
+		('promo_api_pending', 'agt_1', 'memory', 'proposed', 'Pending memory', 'review me', '["run_1"]', '["obs_1"]', '[]', '2026-09-30T10:00:00Z'),
+		('promo_api_done', 'agt_1', 'memory', 'committed', 'Done memory', '', '[]', '["obs_2"]', '[]', '2026-09-30T09:00:00Z')
+	`); err != nil {
+		t.Fatalf("seed promotions: %v", err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO evaluation_datasets (id, name, description, agent_id, created_at)
+		VALUES ('ds_api_1', 'Golden path', 'Core behavior', 'agt_1', '2026-09-30T10:00:00Z')
+	`); err != nil {
+		t.Fatalf("seed dataset: %v", err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO evaluation_cases (id, dataset_id, name, input_json, expected_json, tags_json, created_at)
+		VALUES ('case_api_1', 'ds_api_1', 'Create note', '{"prompt":"create"}', '{"type":"note"}', '["golden"]', '2026-09-30T10:01:00Z')
+	`); err != nil {
+		t.Fatalf("seed case: %v", err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO experiments (
+			id, dataset_id, name, agent_id, agent_revision, status, config_json, created_at, completed_at
+		) VALUES (
+			'exp_api_1', 'ds_api_1', 'baseline', 'agt_1', 3, 'completed',
+			'{"model":"test"}', '2026-09-30T10:02:00Z', '2026-09-30T10:03:00Z'
+		)
+	`); err != nil {
+		t.Fatalf("seed experiment: %v", err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO experiment_results (
+			experiment_id, case_id, score, label, metadata_json, created_at
+		) VALUES ('exp_api_1', 'case_api_1', 0.95, 'pass', '{"latency_ms":42}', '2026-09-30T10:03:00Z')
+	`); err != nil {
+		t.Fatalf("seed result: %v", err)
+	}
+
+	ts := newTestServer(t, vaultPath, database)
+	defer ts.Close()
+
+	t.Run("promotions defaults to proposed", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/promotions")
+		if err != nil {
+			t.Fatalf("GET promotions: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		var body []map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode promotions: %v", err)
+		}
+		if len(body) != 1 || body[0]["id"] != "promo_api_pending" {
+			t.Fatalf("unexpected promotions: %#v", body)
+		}
+		sources, ok := body[0]["sourceObservationIds"].([]interface{})
+		if !ok || len(sources) != 1 || sources[0] != "obs_1" {
+			t.Fatalf("unexpected source observation ids: %#v", body[0]["sourceObservationIds"])
+		}
+	})
+
+	t.Run("dataset includes cases", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/evaluation-datasets/ds_api_1")
+		if err != nil {
+			t.Fatalf("GET dataset: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		var body map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode dataset: %v", err)
+		}
+		if body["name"] != "Golden path" {
+			t.Fatalf("unexpected dataset: %#v", body)
+		}
+		cases, ok := body["cases"].([]interface{})
+		if !ok || len(cases) != 1 {
+			t.Fatalf("unexpected cases: %#v", body["cases"])
+		}
+	})
+
+	t.Run("experiment includes results", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/experiments/exp_api_1")
+		if err != nil {
+			t.Fatalf("GET experiment: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		var body map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode experiment: %v", err)
+		}
+		if body["name"] != "baseline" {
+			t.Fatalf("unexpected experiment: %#v", body)
+		}
+		results, ok := body["results"].([]interface{})
+		if !ok || len(results) != 1 {
+			t.Fatalf("unexpected results: %#v", body["results"])
+		}
+	})
+}
