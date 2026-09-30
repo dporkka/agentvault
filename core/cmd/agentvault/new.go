@@ -44,7 +44,7 @@ Examples:
   agentvault new decision --project myproject --title "Use Postgres"
   agentvault new task --project myproject --title "Build API"
   agentvault new meeting --project myproject --title "Sprint Planning"
-  agentvault new source --title "Article" --url "https://example.com"`,
+  agentvault new source --title "Article" --url "https://example.com"\n  agentvault new agent --title "Coding Agent"`,
 	Args: cobra.ExactArgs(1),
 	RunE: runNew,
 }
