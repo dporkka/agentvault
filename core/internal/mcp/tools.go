@@ -14,9 +14,9 @@ import (
 
 	"github.com/agentvault/core/internal/agents"
 	"github.com/agentvault/core/internal/ai"
-	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/events"
+	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
 	"github.com/agentvault/core/internal/rag"
@@ -692,7 +692,6 @@ func (s *Server) registerGitStatus() {
 		Handler:     s.handleGitStatus,
 	}
 }
-
 
 // --- Tool: agentvault.open_daily ---
 
