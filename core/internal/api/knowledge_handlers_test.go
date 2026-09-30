@@ -159,7 +159,6 @@ func TestKnowledgeHTTPAPIRejectsUnknownFields(t *testing.T) {
 	}
 }
 
-
 func TestMemoryCandidateHTTPReviewLifecycle(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
 	defer database.Close()
