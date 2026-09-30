@@ -933,6 +933,113 @@ func TestHandleRecordExperimentResultRejectsCaseFromOtherDataset(t *testing.T) {
 	}
 }
 
+
+func TestHandleListPromotionsDefaultsToPending(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO promotion_records (
+			id, agent_id, target_kind, status, candidate, rationale,
+			source_run_ids_json, source_observation_ids_json, source_evaluation_ids_json,
+			created_at
+		) VALUES
+		('promo_pending', 'agt_1', 'memory', 'proposed', 'Pending memory', 'needs review', '["run_1"]', '["obs_1"]', '[]', '2026-09-30T10:00:00Z'),
+		('promo_done', 'agt_1', 'knowledge', 'committed', 'Committed fact', '', '["run_2"]', '[]', '[]', '2026-09-30T09:00:00Z')
+	`); err != nil {
+		t.Fatalf("seed promotions: %v", err)
+	}
+
+	result, err := s.handleListPromotions(map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("handleListPromotions error: %v", err)
+	}
+	if !strings.Contains(result, "promo_pending") || !strings.Contains(result, "Pending memory") {
+		t.Fatalf("expected pending promotion, got:\n%s", result)
+	}
+	if strings.Contains(result, "promo_done") {
+		t.Fatalf("did not expect committed promotion by default, got:\n%s", result)
+	}
+}
+
+func TestHandleGetEvaluationDatasetIncludesCases(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO evaluation_datasets (id, name, description, agent_id, created_at)
+		VALUES ('ds_read_1', 'Golden path', 'Core behavior', 'agt_1', '2026-09-30T10:00:00Z')
+	`); err != nil {
+		t.Fatalf("seed dataset: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO evaluation_cases (id, dataset_id, name, input_json, expected_json, tags_json, created_at)
+		VALUES
+		('case_read_1', 'ds_read_1', 'Create note', '{"prompt":"create"}', '{"type":"note"}', '["golden"]', '2026-09-30T10:01:00Z'),
+		('case_read_2', 'ds_read_1', 'Search note', '{"query":"pricing"}', NULL, '[]', '2026-09-30T10:02:00Z')
+	`); err != nil {
+		t.Fatalf("seed cases: %v", err)
+	}
+
+	result, err := s.handleGetEvaluationDataset(map[string]interface{}{"dataset_id": "ds_read_1"})
+	if err != nil {
+		t.Fatalf("handleGetEvaluationDataset error: %v", err)
+	}
+	for _, want := range []string{"Golden path", "Create note", "Search note", "golden"} {
+		if !strings.Contains(result, want) {
+			t.Fatalf("expected %q in dataset output, got:\n%s", want, result)
+		}
+	}
+}
+
+func TestHandleGetExperimentIncludesResults(t *testing.T) {
+	s, db := setupTestServer(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO evaluation_datasets (id, name, created_at)
+		VALUES ('ds_exp_read', 'Golden path', '2026-09-30T10:00:00Z')
+	`); err != nil {
+		t.Fatalf("seed dataset: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO evaluation_cases (id, dataset_id, name, input_json, created_at)
+		VALUES ('case_exp_read', 'ds_exp_read', 'Create note', '{"prompt":"create"}', '2026-09-30T10:01:00Z')
+	`); err != nil {
+		t.Fatalf("seed case: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO experiments (
+			id, dataset_id, name, agent_id, agent_revision, status, config_json, created_at, completed_at
+		) VALUES (
+			'exp_read_1', 'ds_exp_read', 'baseline', 'agt_1', 3, 'completed',
+			'{"model":"test"}', '2026-09-30T10:02:00Z', '2026-09-30T10:03:00Z'
+		)
+	`); err != nil {
+		t.Fatalf("seed experiment: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO experiment_results (
+			experiment_id, case_id, run_id, score, label, metadata_json, created_at
+		) VALUES (
+			'exp_read_1', 'case_exp_read', NULL, 0.95, 'pass',
+			'{"latency_ms":42}', '2026-09-30T10:03:00Z'
+		)
+	`); err != nil {
+		t.Fatalf("seed result: %v", err)
+	}
+
+	result, err := s.handleGetExperiment(map[string]interface{}{"experiment_id": "exp_read_1"})
+	if err != nil {
+		t.Fatalf("handleGetExperiment error: %v", err)
+	}
+	for _, want := range []string{"baseline", "case_exp_read", "0.95", "pass", "latency_ms"} {
+		if !strings.Contains(result, want) {
+			t.Fatalf("expected %q in experiment output, got:\n%s", want, result)
+		}
+	}
+}
+
 func TestSanitizeFilename(t *testing.T) {
 	cases := []struct {
 		input    string
