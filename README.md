@@ -185,8 +185,15 @@ The server prints an auth token at startup. `GET` endpoints are open locally; wr
 | `GET /stale` | Stale notes |
 | `GET /git/status` | Vault Git status |
 | `GET /promotions` | List promotion records; defaults to pending (`proposed`) reviews |
+| `POST /promotions` | Propose evidence-backed memory or knowledge |
+| `POST /promotions/{id}/review` | Approve or reject a proposed promotion |
+| `POST /promotions/{id}/commit` | Commit an approved promotion to canonical Markdown |
 | `GET /evaluation-datasets/{id}` | Fetch an evaluation dataset with its cases |
+| `POST /evaluation-datasets` | Create an evaluation dataset |
+| `POST /evaluation-datasets/{id}/cases` | Add a reproducible evaluation case |
 | `GET /experiments/{id}` | Fetch an experiment with its recorded results |
+| `POST /experiments` | Record an externally executed experiment |
+| `POST /experiments/{id}/results` | Record a case-level experiment result |
 
 For the full contract, including exact request/response shapes, auth rules, CORS policy, and rate limits, see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
 
