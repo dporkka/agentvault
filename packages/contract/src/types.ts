@@ -256,3 +256,84 @@ export interface CreateConversationRequest {
 export interface ConversationAskRequest {
   question: string;
 }
+
+
+export type PromotionStatus =
+  | 'proposed'
+  | 'approved'
+  | 'rejected'
+  | 'committed'
+  | 'superseded';
+
+export interface Promotion {
+  id: string;
+  agentId: string;
+  targetKind: 'memory' | 'knowledge';
+  status: PromotionStatus;
+  candidate: string;
+  rationale: string;
+  sourceRunIds: string[];
+  sourceObservationIds: string[];
+  sourceEvaluationIds: string[];
+  targetNoteId: string;
+  supersedesNoteId: string;
+  createdAt: string;
+  reviewedAt: string;
+  reviewedBy: string;
+  reviewNote: string;
+  committedAt: string;
+}
+
+export interface PromotionParams {
+  status?: PromotionStatus | 'all';
+  agentId?: string;
+  limit?: number;
+}
+
+export interface EvaluationDataset {
+  id: string;
+  name: string;
+  description: string;
+  agentId: string;
+  createdAt: string;
+}
+
+export interface EvaluationCase {
+  id: string;
+  datasetId: string;
+  name: string;
+  input: Record<string, unknown>;
+  expected: Record<string, unknown> | null;
+  tags: string[];
+  createdAt: string;
+}
+
+export interface EvaluationDatasetDetail extends EvaluationDataset {
+  cases: EvaluationCase[];
+}
+
+export interface Experiment {
+  id: string;
+  datasetId: string;
+  name: string;
+  agentId: string;
+  agentRevision: number;
+  status: 'planned' | 'running' | 'completed' | 'failed' | 'cancelled';
+  config: Record<string, unknown>;
+  createdAt: string;
+  completedAt: string;
+}
+
+export interface ExperimentResult {
+  experimentId: string;
+  caseId: string;
+  runId: string;
+  score: number | null;
+  label: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ExperimentDetail extends Experiment {
+  results: ExperimentResult[];
+}
