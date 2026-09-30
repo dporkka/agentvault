@@ -192,7 +192,7 @@ func TestAgentStateReadContractJSONTags(t *testing.T) {
 
 	e := ExperimentDetail{
 		Experiment: Experiment{ID: "exp_1", DatasetID: "ds_1", Name: "baseline", AgentID: "agt_1", AgentRevision: 1, Status: "completed", Config: map[string]interface{}{}, CreatedAt: "now"},
-		Results: []ExperimentResult{{ExperimentID: "exp_1", CaseID: "case_1", Label: strptr("pass"), Metadata: map[string]interface{}{}, CreatedAt: "now"}},
+		Results: []ExperimentResult{{ExperimentID: "exp_1", CaseID: "case_1", Label: "pass", Metadata: map[string]interface{}{}, CreatedAt: "now"}},
 	}
 	b, err = json.Marshal(e)
 	if err != nil {
@@ -204,4 +204,3 @@ func TestAgentStateReadContractJSONTags(t *testing.T) {
 	}
 }
 
-func strptr(v string) *string { return &v }
