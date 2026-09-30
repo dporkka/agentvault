@@ -66,11 +66,11 @@ func runJournalVerify(vaultPath, checkpointPath string, asJSON bool, out io.Writ
 	if asJSON {
 		result := struct {
 			Integrity          knowledge.JournalIntegrityReport `json:"integrity"`
-			Checkpoint        string                           `json:"checkpoint,omitempty"`
+			Checkpoint         string                           `json:"checkpoint,omitempty"`
 			CheckpointVerified bool                             `json:"checkpointVerified"`
 		}{
 			Integrity:          report,
-			Checkpoint:        checkpointPath,
+			Checkpoint:         checkpointPath,
 			CheckpointVerified: checkpointVerified,
 		}
 		if err := json.NewEncoder(out).Encode(result); err != nil {
