@@ -568,6 +568,9 @@ func TestIndexFileReadError(t *testing.T) {
 		t.Fatalf("failed to chmod file: %v", err)
 	}
 	defer os.Chmod(fullPath, 0644)
+	if _, err := os.ReadFile(fullPath); err == nil {
+		t.Skip("environment can read mode-000 files; cannot exercise index read error")
+	}
 
 	result, err := idx.Index(IndexOptions{})
 	if err != nil {
