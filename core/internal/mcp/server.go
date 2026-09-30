@@ -119,6 +119,7 @@ func (s *Server) RegisterTools() {
 	s.registerLogAgentRun()
 	s.registerLogObservation()
 	s.registerLogEvaluation()
+	s.registerProposeRunLearning()
 	s.registerProposePromotion()
 	s.registerReviewPromotion()
 	s.registerCommitPromotion()
