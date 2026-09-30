@@ -459,7 +459,6 @@ func (s *Store) listMutationTimeline(filter contract.TimelineFilter) ([]contract
 	return items, rows.Err()
 }
 
-
 func addTimelineWindow(query string, args []interface{}, column string, filter contract.TimelineFilter) (string, []interface{}) {
 	if filter.Since != "" {
 		query += " AND julianday(" + column + ") >= julianday(?)"
