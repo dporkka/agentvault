@@ -327,7 +327,6 @@ func TestMutationPathProtections(t *testing.T) {
 	}
 }
 
-
 func TestCommitPromotesMutationIntoSessionEpisode(t *testing.T) {
 	vaultPath, store, engine := setupMutationEngine(t)
 	session, err := store.StartSession(contract.StartAgentSessionRequest{
@@ -396,7 +395,6 @@ func TestCommitPromotesMutationIntoSessionEpisode(t *testing.T) {
 		t.Fatalf("mutation provenance lost actor/session: %+v", provenance)
 	}
 }
-
 
 func TestRecoverBackfillsPromotionForAlreadyCommittedMutation(t *testing.T) {
 	vaultPath, store, engine := setupMutationEngine(t)
