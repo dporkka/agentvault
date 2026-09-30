@@ -582,3 +582,51 @@ export interface RunRegressionCaseCaptureRequest {
   expected?: Record<string, unknown>;
   tags?: string[];
 }
+
+
+export type ExperimentTransition =
+  | 'fixed'
+  | 'regressed'
+  | 'stable_pass'
+  | 'stable_fail'
+  | 'unclassified'
+  | 'missing_baseline'
+  | 'missing_candidate';
+
+export interface ExperimentCaseComparison {
+  caseId: string;
+  caseName: string;
+  transition: ExperimentTransition;
+  baselineRunId: string;
+  candidateRunId: string;
+  baselineLabel: string;
+  candidateLabel: string;
+  baselineScore: number | null;
+  candidateScore: number | null;
+  scoreDelta: number | null;
+}
+
+export interface ExperimentComparisonSummary {
+  totalCases: number;
+  pairedResults: number;
+  fixes: number;
+  regressions: number;
+  stablePass: number;
+  stableFail: number;
+  unclassified: number;
+  missingBaseline: number;
+  missingCandidate: number;
+}
+
+export interface ExperimentComparison {
+  baselineExperimentId: string;
+  candidateExperimentId: string;
+  datasetId: string;
+  agentId: string;
+  baselineAgentRevision: number;
+  candidateAgentRevision: number;
+  comparable: boolean;
+  reasonCodes: string[];
+  summary: ExperimentComparisonSummary;
+  cases: ExperimentCaseComparison[];
+}
