@@ -159,6 +159,90 @@ type CreateMemoryRequest struct {
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// MemoryCandidateStatus is the explicit review lifecycle for proposed
+// semantic memory. Candidates are not durable MemoryRecords until a terminal
+// review action materializes one.
+type MemoryCandidateStatus string
+
+const (
+	MemoryCandidatePending    MemoryCandidateStatus = "pending"
+	MemoryCandidateAccepted   MemoryCandidateStatus = "accepted"
+	MemoryCandidateRejected   MemoryCandidateStatus = "rejected"
+	MemoryCandidateMerged     MemoryCandidateStatus = "merged"
+	MemoryCandidateSuperseded MemoryCandidateStatus = "superseded"
+)
+
+// MemoryCandidate is a reviewable semantic-memory proposal derived from one
+// provenance-backed episode. Scope and provenance are inherited from the source
+// episode so an extractor cannot silently widen visibility or replace evidence.
+type MemoryCandidate struct {
+	ID               string                `json:"id"`
+	SourceEpisodeID  string                `json:"sourceEpisodeId"`
+	MemoryKind       string                `json:"memoryKind"`
+	ScopeType        string                `json:"scopeType"`
+	ScopeID          string                `json:"scopeId"`
+	Content          string                `json:"content"`
+	ObjectID         string                `json:"objectId,omitempty"`
+	ProvenanceID     string                `json:"provenanceId"`
+	Confidence       float64               `json:"confidence"`
+	Status           MemoryCandidateStatus `json:"status"`
+	ProposedBy       string                `json:"proposedBy,omitempty"`
+	ReviewedBy       string                `json:"reviewedBy,omitempty"`
+	ReviewReason     string                `json:"reviewReason,omitempty"`
+	ResultMemoryID   string                `json:"resultMemoryId,omitempty"`
+	TargetMemoryID   string                `json:"targetMemoryId,omitempty"`
+	Metadata         map[string]interface{} `json:"metadata,omitempty"`
+	CreatedAt        string                `json:"createdAt"`
+	UpdatedAt        string                `json:"updatedAt"`
+	ReviewedAt       string                `json:"reviewedAt,omitempty"`
+}
+
+// CreateMemoryCandidateRequest proposes semantic memory from one
+// provenance-backed episode. The candidate inherits scope/provenance from that
+// episode and never materializes durable memory by itself.
+type CreateMemoryCandidateRequest struct {
+	ID          string                 `json:"id,omitempty"`
+	EpisodeID   string                 `json:"episodeId"`
+	MemoryKind  string                 `json:"memoryKind"`
+	Content     string                 `json:"content"`
+	ObjectID    string                 `json:"objectId,omitempty"`
+	Confidence  *float64               `json:"confidence,omitempty"`
+	ProposedBy  string                 `json:"proposedBy,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// MemoryCandidateFilter scopes candidate review queues.
+type MemoryCandidateFilter struct {
+	Status     MemoryCandidateStatus `json:"status,omitempty"`
+	ScopeType  string                `json:"scopeType,omitempty"`
+	ScopeID    string                `json:"scopeId,omitempty"`
+	MemoryKind string                `json:"memoryKind,omitempty"`
+	Limit      int                   `json:"limit,omitempty"`
+}
+
+// ReviewMemoryCandidateRequest accepts or rejects a candidate.
+type ReviewMemoryCandidateRequest struct {
+	ReviewedBy string `json:"reviewedBy"`
+	Reason     string `json:"reason,omitempty"`
+}
+
+// SupersedeMemoryCandidateRequest materializes the candidate as a replacement
+// for one existing memory in the same scope/kind.
+type SupersedeMemoryCandidateRequest struct {
+	ReviewedBy     string `json:"reviewedBy"`
+	TargetMemoryID string `json:"targetMemoryId"`
+	Reason         string `json:"reason,omitempty"`
+}
+
+// MergeMemoryCandidateRequest lets the reviewer supply the explicit merged
+// content that will replace an existing memory in the same scope/kind.
+type MergeMemoryCandidateRequest struct {
+	ReviewedBy     string `json:"reviewedBy"`
+	TargetMemoryID string `json:"targetMemoryId"`
+	MergedContent  string `json:"mergedContent"`
+	Reason         string `json:"reason,omitempty"`
+}
+
 // AgentSession is a durable workspace for one agent objective.
 type AgentSession struct {
 	ID        string                 `json:"id"`
