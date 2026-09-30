@@ -40,6 +40,7 @@ import type {
   PromotionParams,
   ProposePromotionRequest,
   ReviewPromotionRequest,
+  LearningRecommendation,
   RunAudit,
   RunLearningCandidateRequest,
   RunRecord,
@@ -128,6 +129,7 @@ export interface ApiClient {
   getContextSnapshot(hash: string): Promise<ContextSnapshot>;
   createRun(req: CreateRunRequest): Promise<RunRecord>;
   getRunAudit(id: string): Promise<RunAudit>;
+  getLearningRecommendation(id: string): Promise<LearningRecommendation>;
   proposeRunLearning(id: string, req: RunLearningCandidateRequest): Promise<Promotion>;
   pinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
   unpinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
@@ -321,6 +323,9 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     },
     getRunAudit(id) {
       return call<RunAudit>('GET', `/runs/${encodeURIComponent(id)}/audit`, undefined, false);
+    },
+    getLearningRecommendation(id) {
+      return call<LearningRecommendation>('GET', `/runs/${encodeURIComponent(id)}/learning-recommendation`, undefined, false);
     },
     proposeRunLearning(id, req) {
       return call<Promotion>('POST', `/runs/${encodeURIComponent(id)}/learning-candidates`, req);
