@@ -334,7 +334,6 @@ type CreateExperimentResultRequest struct {
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
-
 // ContextCompileRequest is the body for POST /agents/{id}/context.
 type ContextCompileRequest struct {
 	Task                    string   `json:"task,omitempty"`
@@ -377,7 +376,6 @@ type ContextSnapshot struct {
 	Unresolved         []ContextReferenceIssue `json:"unresolved"`
 	Text               string                  `json:"text"`
 }
-
 
 // CreateRunRequest is the body for POST /runs.
 type CreateRunRequest struct {
