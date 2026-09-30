@@ -251,6 +251,10 @@ func addNotesUnified(c *candidateCollector, store *memory.Store) error {
 	if err != nil {
 		return fmt.Errorf("search notes for context: %w", err)
 	}
+	semanticScores, err := c.semanticScoresForNotes(results)
+	if err != nil {
+		return fmt.Errorf("score semantic note candidates: %w", err)
+	}
 
 	for i, result := range results {
 		if c.seen["note:"+result.ID] {
@@ -271,19 +275,13 @@ func addNotesUnified(c *candidateCollector, store *memory.Store) error {
 			return fmt.Errorf("load note %s: %w", result.ID, err)
 		}
 		c.add(contract.ContextItem{
-			Kind:    "note",
-			ID:      result.ID,
-			Title:   result.Title,
-			Content: detail.Snippet,
-			Path:    result.Path,
-			Score:   0.84 - float64(i)*0.012,
-			Metadata: map[string]interface{}{
-				"type":      result.Type,
-				"project":   result.Project,
-				"status":    result.Status,
-				"tags":      result.Tags,
-				"updatedAt": result.UpdatedAt,
-			},
+			Kind:     "note",
+			ID:       result.ID,
+			Title:    result.Title,
+			Content:  detail.Snippet,
+			Path:     result.Path,
+			Score:    0.84 - float64(i)*0.012,
+			Metadata: noteContextMetadata(result, semanticScores[result.ID]),
 		})
 	}
 	return nil
