@@ -154,3 +154,54 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+
+func TestAgentStateReadContractJSONTags(t *testing.T) {
+	p := Promotion{
+		ID: "promo_1", AgentID: "agt_1", TargetKind: "memory", Status: "proposed",
+		Candidate: "Remember", SourceObservationIDs: []string{"obs_1"}, CreatedAt: "2026-09-30T10:00:00Z",
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal promotion: %v", err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"agentId":"agt_1"`,
+		`"targetKind":"memory"`,
+		`"sourceObservationIds":["obs_1"]`,
+		`"createdAt":"2026-09-30T10:00:00Z"`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected promotion JSON to contain %s, got %s", want, got)
+		}
+	}
+
+	d := EvaluationDatasetDetail{
+		EvaluationDataset: EvaluationDataset{ID: "ds_1", Name: "Golden", CreatedAt: "now"},
+		Cases: []EvaluationCase{{ID: "case_1", DatasetID: "ds_1", Name: "Case", Input: map[string]interface{}{"x": true}, Tags: []string{}}},
+	}
+	b, err = json.Marshal(d)
+	if err != nil {
+		t.Fatalf("marshal dataset: %v", err)
+	}
+	got = string(b)
+	if !contains(got, `"cases":[{"id":"case_1"`) {
+		t.Errorf("expected dataset cases in JSON, got %s", got)
+	}
+
+	e := ExperimentDetail{
+		Experiment: Experiment{ID: "exp_1", DatasetID: "ds_1", Name: "baseline", AgentID: "agt_1", AgentRevision: 1, Status: "completed", Config: map[string]interface{}{}, CreatedAt: "now"},
+		Results: []ExperimentResult{{ExperimentID: "exp_1", CaseID: "case_1", Label: strptr("pass"), Metadata: map[string]interface{}{}, CreatedAt: "now"}},
+	}
+	b, err = json.Marshal(e)
+	if err != nil {
+		t.Fatalf("marshal experiment: %v", err)
+	}
+	got = string(b)
+	if !contains(got, `"agentRevision":1`) || !contains(got, `"results":[`) {
+		t.Errorf("expected experiment detail fields in JSON, got %s", got)
+	}
+}
+
+func strptr(v string) *string { return &v }
