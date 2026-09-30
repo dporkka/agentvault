@@ -513,3 +513,13 @@ export interface RunAudit {
   observations: RunObservation[];
   evaluations: RunEvaluation[];
 }
+
+
+export interface RunLearningCandidateRequest {
+  targetKind: 'memory' | 'knowledge';
+  candidate: string;
+  rationale?: string;
+  sourceObservationIds?: string[];
+  sourceEvaluationIds?: string[];
+  supersedesNoteId?: string;
+}
