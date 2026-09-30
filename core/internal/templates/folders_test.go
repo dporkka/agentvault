@@ -26,6 +26,7 @@ func TestFolderPathForType(t *testing.T) {
 		{"source", "research", "40-research"},
 		{"capture", "", "00-inbox"},
 		{"project", "", "20-projects"},
+		{"agent", "", "75-agents"},
 		{"unknown", "", "10-notes"},
 	}
 
