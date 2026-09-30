@@ -196,6 +196,8 @@ The server prints an auth token at startup. `GET` endpoints are open locally; wr
 | `POST /experiments/{id}/results` | Record a case-level experiment result |
 | `POST /agents/{id}/context` | Compile and persist deterministic context for an agent |
 | `GET /contexts/{hash}` | Retrieve an immutable compiled context snapshot |
+| `POST /runs` | Record a runtime execution bound to an optional immutable context snapshot |
+| `GET /runs/{id}/audit` | Retrieve a run with context provenance, observations, and evaluations |
 
 For the full contract, including exact request/response shapes, auth rules, CORS policy, and rate limits, see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
 
@@ -236,6 +238,7 @@ Registered tools:
 - `agentvault.get_experiment`
 - `agentvault.compile_context`
 - `agentvault.get_context_snapshot`
+- `agentvault.get_run_audit`
 - `agentvault.ask`
 
 ## Clients
