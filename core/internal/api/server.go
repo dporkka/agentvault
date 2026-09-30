@@ -200,6 +200,8 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("POST /runs", s.handleCreateRun)
 	s.mux.HandleFunc("GET /runs/{id}/audit", s.handleRunAudit)
 	s.mux.HandleFunc("GET /runs/{id}/learning-recommendation", s.handleLearningRecommendation)
+	s.mux.HandleFunc("GET /runs/{id}/regression-case-proposal", s.handleRegressionCaseProposal)
+	s.mux.HandleFunc("POST /runs/{id}/regression-cases", s.handleCaptureRunRegressionCase)
 	s.mux.HandleFunc("POST /runs/{id}/learning-candidates", s.handleProposeRunLearning)
 
 	// Conversations
