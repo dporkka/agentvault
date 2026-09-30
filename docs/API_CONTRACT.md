@@ -108,6 +108,13 @@ A missing or incorrect token on a protected endpoint returns `401` with:
 | GET | `/recent` | yes | 200 | camelCase (`[]search.Result`) |
 | GET | `/stale` | yes | 200 | camelCase (`[]search.Result`) |
 | GET | `/git/status` | yes | 200 | camelCase |
+| GET | `/memory-candidates` | yes | 200 | camelCase (`MemoryCandidate[]`) |
+| POST | `/memory-candidates` | yes | 201 | camelCase (`MemoryCandidate`) |
+| GET | `/memory-candidates/{id}` | yes | 200 / 404 | camelCase |
+| POST | `/memory-candidates/{id}/accept` | yes | 200 | camelCase |
+| POST | `/memory-candidates/{id}/reject` | yes | 200 | camelCase |
+| POST | `/memory-candidates/{id}/merge` | yes | 200 | camelCase |
+| POST | `/memory-candidates/{id}/supersede` | yes | 200 | camelCase |
 
 ---
 
@@ -434,3 +441,87 @@ Each item has a stable normalized envelope:
 `occurredAt` is the event/activity ordering clock. For episodes it is the
 domain occurrence time; for captures, memories, and session events it is their
 creation time. Ties are deterministic.
+
+
+## Memory candidate governance
+
+Semantic-memory extraction uses a review queue rather than writing durable
+semantic memory directly.
+
+### `POST /memory-candidates`
+
+Proposes a candidate from an existing provenance-backed episode.
+
+```json
+{
+  "episodeId": "episode_...",
+  "memoryKind": "decision",
+  "content": "Keep automatic extraction separate from durable semantic memory.",
+  "objectId": "obj_optional",
+  "confidence": 0.87,
+  "proposedBy": "extractor-agent",
+  "metadata": {}
+}
+```
+
+The candidate inherits `scopeType`, `scopeId`, and `provenanceId` from the
+source episode. Supported candidate kinds are `observation`, `fact`,
+`preference`, `decision`, `constraint`, and `summary`.
+
+Proposal alone never creates a `MemoryRecord`.
+
+### `GET /memory-candidates`
+
+Optional query parameters: `status`, `scopeType`, `scopeId`,
+`memoryKind`, and `limit` (default 100, max 500).
+
+### `GET /memory-candidates/{id}`
+
+Returns one candidate including review status, reviewer, terminal reason,
+resulting memory ID, and target memory ID when applicable.
+
+### Terminal review
+
+`POST /memory-candidates/{id}/accept`
+
+```json
+{ "reviewedBy": "reviewer", "reason": "Evidence is sufficient." }
+```
+
+Creates one semantic memory using the candidate content.
+
+`POST /memory-candidates/{id}/reject`
+
+Uses the same review request shape and creates no durable memory.
+
+`POST /memory-candidates/{id}/supersede`
+
+```json
+{
+  "reviewedBy": "reviewer",
+  "targetMemoryId": "mem_old",
+  "reason": "New evidence corrects the old memory."
+}
+```
+
+Creates a replacement memory whose `supersedesId` is the target.
+
+`POST /memory-candidates/{id}/merge`
+
+```json
+{
+  "reviewedBy": "reviewer",
+  "targetMemoryId": "mem_old",
+  "mergedContent": "Explicit reviewer-approved merged content.",
+  "reason": "Both observations describe the same durable knowledge."
+}
+```
+
+Merge and supersede require the target memory to have the same scope and
+`memoryKind` as the candidate, and reject targets that already have a
+replacement. Terminal review is idempotent for retries of the same resolved
+candidate.
+
+These HTTP endpoints remain root-token protected. Capability-bound agents use
+the MCP surface: `memory:write` may propose candidates in authorized scope but
+does not grant terminal review actions.
