@@ -209,7 +209,6 @@ type CloseAgentSessionRequest struct {
 	Status string `json:"status,omitempty"`
 }
 
-
 // EpisodeRecord is an immutable occurrence in durable agent knowledge.
 // occurredAt describes when the event happened; provenance.observedAt
 // independently describes when AgentVault learned about it.
@@ -279,12 +278,44 @@ type CreateTemporalFactRequest struct {
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 }
 
-
 // EntityProfile is a deterministic standing view over one durable knowledge
 // object and the temporal facts currently visible at AsOf. It is derived state:
 // objects and facts remain the canonical journal-backed records.
 type EntityProfile struct {
-	Subject KnowledgeObject  `json:"subject"`
-	AsOf    string           `json:"asOf"`
-	Facts   []TemporalFact   `json:"facts"`
+	Subject KnowledgeObject `json:"subject"`
+	AsOf    string          `json:"asOf"`
+	Facts   []TemporalFact  `json:"facts"`
+}
+
+// TimelineFilter scopes the derived activity stream across canonical capture,
+// memory, episode, durable session-event, and mutation sources.
+type TimelineFilter struct {
+	Project   string `json:"project,omitempty"`
+	AgentID   string `json:"agentId,omitempty"`
+	SessionID string `json:"sessionId,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+	Since     string `json:"since,omitempty"`
+	Until     string `json:"until,omitempty"`
+	Limit     int    `json:"limit,omitempty"`
+}
+
+// TimelineItem is a normalized projection for human activity browsing. It is
+// intentionally derived state; source records remain canonical in Markdown or
+// the append-only knowledge journal.
+type TimelineItem struct {
+	Kind         string                 `json:"kind"`
+	ID           string                 `json:"id"`
+	Title        string                 `json:"title,omitempty"`
+	Summary      string                 `json:"summary,omitempty"`
+	Project      string                 `json:"project,omitempty"`
+	AgentID      string                 `json:"agentId,omitempty"`
+	SessionID    string                 `json:"sessionId,omitempty"`
+	ScopeType    string                 `json:"scopeType,omitempty"`
+	ScopeID      string                 `json:"scopeId,omitempty"`
+	EventType    string                 `json:"eventType,omitempty"`
+	ObjectIDs    []string               `json:"objectIds,omitempty"`
+	ProvenanceID string                 `json:"provenanceId,omitempty"`
+	OccurredAt   string                 `json:"occurredAt"`
+	CreatedAt    string                 `json:"createdAt"`
+	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 }

@@ -242,6 +242,9 @@ func (s *Server) RegisterRoutes() {
 	// universal objects, indexed notes, and durable session history.
 	s.mux.HandleFunc("POST /context/compile", s.withKnowledgeReady(s.handleCompileContext))
 
+	// Unified activity timeline derived from canonical capture and knowledge state.
+	s.mux.HandleFunc("GET /timeline", s.withKnowledgeReady(s.handleTimeline))
+
 	// Lists
 	s.mux.HandleFunc("GET /projects", s.handleProjects)
 	s.mux.HandleFunc("GET /recent", s.handleRecent)
