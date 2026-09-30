@@ -1832,7 +1832,6 @@ func (s *Server) handleRecordExperimentResult(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusCreated, experimentResultResponse(item))
 }
 
-
 // ── Context Compiler ─────────────────────────────────────────────────
 
 func contextSnapshotResponse(item *agentstate.ContextSnapshot) contract.ContextSnapshot {
