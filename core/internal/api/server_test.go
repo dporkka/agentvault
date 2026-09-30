@@ -878,7 +878,6 @@ func TestAuthVerifyEndpoint(t *testing.T) {
 	}
 }
 
-
 func TestAgentStateReadEndpoints(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
 	defer database.Close()
@@ -993,7 +992,6 @@ func TestAgentStateReadEndpoints(t *testing.T) {
 		}
 	})
 }
-
 
 func TestAgentStateWriteEndpoints(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
