@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/agentvault/core/internal/contract"
@@ -37,6 +38,8 @@ type PromotionResult struct {
 	Episode    contract.EpisodeRecord
 }
 
+var promotionLocks sync.Map // deterministic source identity -> *sync.Mutex
+
 // PromoteEvent idempotently turns one already-durable source event into a
 // provenance-backed episode. IDs are derived from source identity, so retries,
 // forced reindexing, and recovery cannot duplicate the promoted knowledge.
@@ -67,6 +70,9 @@ func (s *Store) PromoteEvent(input PromotionInput) (PromotionResult, error) {
 	if input.Summary == "" {
 		return PromotionResult{}, errors.New("promotion summary is required")
 	}
+
+	unlock := lockPromotion(input.SourceType + "\x00" + input.SourceID)
+	defer unlock()
 
 	scopeType, scopeID, err := s.resolvePromotionScope(input)
 	if err != nil {
@@ -208,4 +214,12 @@ func promotionMetadata(metadata map[string]interface{}, input PromotionInput) ma
 func deterministicPromotionID(prefix string, parts ...string) string {
 	hash := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return fmt.Sprintf("%s_%x", prefix, hash[:12])
+}
+
+
+func lockPromotion(key string) func() {
+	value, _ := promotionLocks.LoadOrStore(key, &sync.Mutex{})
+	mutex := value.(*sync.Mutex)
+	mutex.Lock()
+	return mutex.Unlock
 }
