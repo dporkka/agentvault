@@ -1709,3 +1709,56 @@ func TestHandleRegressionCaseProposalAndCapture(t *testing.T) {
 		}
 	}
 }
+
+
+func TestHandleCompareExperiments(t *testing.T) {
+	s, database := setupTestServer(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO evaluation_datasets (id, name, agent_id, created_at)
+		VALUES ('ds_compare_mcp', 'Regression suite', 'agt_compare_mcp', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO evaluation_cases (id, dataset_id, name, input_json, tags_json, created_at)
+		VALUES ('case_compare_mcp', 'ds_compare_mcp', 'Search regression', '{}', '[]', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO experiments (
+			id, dataset_id, name, agent_id, agent_revision, status, config_json, created_at, completed_at
+		) VALUES
+		('exp_compare_mcp_base', 'ds_compare_mcp', 'baseline', 'agt_compare_mcp', 1, 'completed', '{}', datetime('now'), datetime('now')),
+		('exp_compare_mcp_candidate', 'ds_compare_mcp', 'candidate', 'agt_compare_mcp', 2, 'completed', '{}', datetime('now'), datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO experiment_results (
+			experiment_id, case_id, label, metadata_json, created_at
+		) VALUES
+		('exp_compare_mcp_base', 'case_compare_mcp', 'pass', '{}', datetime('now')),
+		('exp_compare_mcp_candidate', 'case_compare_mcp', 'fail', '{}', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := s.handleCompareExperiments(map[string]interface{}{
+		"baseline_experiment_id": "exp_compare_mcp_base",
+		"candidate_experiment_id": "exp_compare_mcp_candidate",
+	})
+	if err != nil {
+		t.Fatalf("handleCompareExperiments: %v", err)
+	}
+	for _, want := range []string{
+		"exp_compare_mcp_base", "exp_compare_mcp_candidate",
+		"agt_compare_mcp", "Regressions: 1", "Search regression", "regressed",
+	} {
+		if !strings.Contains(result, want) {
+			t.Fatalf("expected %q in comparison output:\n%s", want, result)
+		}
+	}
+}
