@@ -1888,3 +1888,82 @@ func (s *Server) handleGetContextSnapshot(w http.ResponseWriter, r *http.Request
 	}
 	writeJSON(w, http.StatusOK, contextSnapshotResponse(item))
 }
+
+
+// ── Run Evidence Audit ───────────────────────────────────────────────
+
+func runRecordResponse(item agentstate.RunRecord) contract.RunRecord {
+	return contract.RunRecord{
+		ID: item.ID, AgentName: item.AgentName, AgentID: item.AgentID,
+		AgentRevision: item.AgentRevision, Task: item.Task, Status: string(item.Status),
+		ConversationID: item.ConversationID, ContextHash: item.ContextHash,
+		Input: item.Input, Output: item.Output, CapabilitySnapshot: item.CapabilitySnapshot,
+		RuntimeMetadata: item.RuntimeMetadata, StartedAt: item.StartedAt, EndedAt: item.EndedAt,
+		FilesChanged: item.FilesChanged, CreatedAt: item.CreatedAt,
+	}
+}
+
+func runAuditResponse(item *agentstate.RunAudit) contract.RunAudit {
+	observations := make([]contract.RunObservation, 0, len(item.Observations))
+	for _, observation := range item.Observations {
+		observations = append(observations, contract.RunObservation{
+			ID: observation.ID, RunID: observation.RunID,
+			ParentObservationID: observation.ParentObservationID,
+			Kind: string(observation.Kind), Name: observation.Name, Status: observation.Status,
+			Input: observation.Input, Output: observation.Output, Evidence: observation.Evidence,
+			StartedAt: observation.StartedAt, EndedAt: observation.EndedAt, CreatedAt: observation.CreatedAt,
+		})
+	}
+
+	evaluations := make([]contract.RunEvaluation, 0, len(item.Evaluations))
+	for _, evaluation := range item.Evaluations {
+		evaluations = append(evaluations, contract.RunEvaluation{
+			ID: evaluation.ID, RunID: evaluation.RunID, ObservationID: evaluation.ObservationID,
+			Evaluator: evaluation.Evaluator, Name: evaluation.Name, Score: evaluation.Score,
+			Label: evaluation.Label, Rationale: evaluation.Rationale,
+			Metadata: evaluation.Metadata, CreatedAt: evaluation.CreatedAt,
+		})
+	}
+
+	var contextSnapshot *contract.ContextSnapshot
+	if item.Context != nil {
+		mapped := contextSnapshotResponse(item.Context)
+		contextSnapshot = &mapped
+	}
+
+	return contract.RunAudit{
+		Run: runRecordResponse(item.Run), Context: contextSnapshot,
+		Observations: observations, Evaluations: evaluations,
+	}
+}
+
+func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
+	var req contract.CreateRunRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.RecordRun(s.db, agentstate.RunRecord{
+		AgentName: req.AgentName, AgentID: req.AgentID, AgentRevision: req.AgentRevision,
+		Task: req.Task, Status: agentstate.RunStatus(req.Status),
+		ConversationID: req.ConversationID, ContextHash: req.ContextHash,
+		Input: req.Input, Output: req.Output, CapabilitySnapshot: req.CapabilitySnapshot,
+		RuntimeMetadata: req.RuntimeMetadata, StartedAt: req.StartedAt, EndedAt: req.EndedAt,
+		FilesChanged: req.FilesChanged,
+	})
+	if err != nil {
+		writeAgentStateError(w, "run recording failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, runRecordResponse(*item))
+}
+
+func (s *Server) handleRunAudit(w http.ResponseWriter, r *http.Request) {
+	item, err := agentstate.GetRunAudit(s.db, r.PathValue("id"))
+	if err != nil {
+		writeAgentStateError(w, "run audit lookup failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, runAuditResponse(item))
+}
