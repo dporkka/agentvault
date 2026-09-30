@@ -203,15 +203,14 @@ func TestAgentStateReadContractJSONTags(t *testing.T) {
 	}
 }
 
-
 func TestContextSnapshotJSONTags(t *testing.T) {
 	snapshot := ContextSnapshot{
 		Hash: "sha256:abc", AgentID: "agt_1", AgentRevision: 2, AgentTitle: "Agent",
 		KnowledgeScopes: []string{"project:test"}, ArtifactScopes: []string{},
 		ConversationScopes: []string{}, CapabilityRefs: []string{"github"},
-		Sections: []ContextSection{{Kind: "identity", SourceID: "identity_1", SourcePath: "10-notes/id.md", Title: "Identity", Content: "Be precise."}},
+		Sections:   []ContextSection{{Kind: "identity", SourceID: "identity_1", SourcePath: "10-notes/id.md", Title: "Identity", Content: "Be precise."}},
 		Unresolved: []ContextReferenceIssue{},
-		Text: "## identity: Identity\nBe precise.",
+		Text:       "## identity: Identity\nBe precise.",
 	}
 	b, err := json.Marshal(snapshot)
 	if err != nil {
@@ -229,7 +228,6 @@ func TestContextSnapshotJSONTags(t *testing.T) {
 		}
 	}
 }
-
 
 func TestRunAuditJSONTags(t *testing.T) {
 	audit := RunAudit{
