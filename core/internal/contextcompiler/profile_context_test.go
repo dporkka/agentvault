@@ -35,11 +35,11 @@ func TestCompileAddsStandingProfileWithoutCrossProjectTarget(t *testing.T) {
 	}
 
 	bundle, err := compiler.Compile(contract.CompileContextRequest{
-		Task: "AgentVault deployment target",
-		Project: "agentvault",
-		ObjectIDs: []string{project.ID},
+		Task:        "AgentVault deployment target",
+		Project:     "agentvault",
+		ObjectIDs:   []string{project.ID},
 		TokenBudget: 4000,
-		MaxItems: 30,
+		MaxItems:    30,
 	})
 	if err != nil {
 		t.Fatal(err)
