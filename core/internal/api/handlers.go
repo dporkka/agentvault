@@ -1967,7 +1967,6 @@ func (s *Server) handleRunAudit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, runAuditResponse(item))
 }
 
-
 func (s *Server) handleProposeRunLearning(w http.ResponseWriter, r *http.Request) {
 	var req contract.RunLearningCandidateRequest
 	if err := readJSON(r, &req); err != nil {
