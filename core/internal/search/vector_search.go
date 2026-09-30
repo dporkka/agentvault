@@ -93,6 +93,127 @@ func (s *Searcher) SemanticScores(ctx context.Context, query string, allowedNote
 	return scores, nil
 }
 
+// SemanticCandidates returns vector-ranked notes inside an explicit project
+// scope. The project filter is applied in SQL before vector similarity is
+// computed, so semantic candidate generation cannot widen the caller's scope.
+// Empty project scope disables semantic expansion.
+func (s *Searcher) SemanticCandidates(ctx context.Context, query, project string, limit int) ([]Result, error) {
+	query = strings.TrimSpace(query)
+	project = strings.TrimSpace(project)
+	if query == "" || project == "" || limit == 0 || !s.HasEmbeddings() {
+		return []Result{}, nil
+	}
+	if limit < 0 {
+		limit = 20
+	}
+
+	embedClient, err := s.loadEmbedClient()
+	if err != nil {
+		return []Result{}, nil
+	}
+	queryEmbedding, err := embedClient.Generate(ctx, query)
+	if err != nil || len(queryEmbedding) == 0 {
+		return []Result{}, nil
+	}
+	vectors.Normalize(queryEmbedding)
+
+	rows, err := s.db.Query(`
+		SELECT
+			chunks.note_id,
+			chunks.text,
+			chunks.embedding_json,
+			notes.title,
+			files.path,
+			notes.type,
+			notes.project,
+			notes.status,
+			notes.updated_at
+		FROM chunks
+		JOIN notes ON notes.id = chunks.note_id
+		JOIN files ON files.id = notes.file_id
+		WHERE chunks.embedding_json IS NOT NULL
+		  AND chunks.embedding_json != ''
+		  AND notes.project = ?
+	`, project)
+	if err != nil {
+		return nil, fmt.Errorf("load scoped semantic candidates: %w", err)
+	}
+	defer rows.Close()
+
+	type candidate struct {
+		result    Result
+		embedding []float32
+	}
+	best := make(map[string]candidate)
+	for rows.Next() {
+		var (
+			noteID        string
+			chunkText     string
+			embeddingJSON string
+			result        Result
+		)
+		if err := rows.Scan(
+			&noteID,
+			&chunkText,
+			&embeddingJSON,
+			&result.Title,
+			&result.Path,
+			&result.Type,
+			&result.Project,
+			&result.Status,
+			&result.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan scoped semantic candidate: %w", err)
+		}
+
+		var embedding []float32
+		if err := json.Unmarshal([]byte(embeddingJSON), &embedding); err != nil || len(embedding) != len(queryEmbedding) {
+			continue
+		}
+		vectors.Normalize(embedding)
+		similarity := float64(vectors.CosineSimilarity(queryEmbedding, embedding))
+		normalized := (similarity + 1) / 2
+		if normalized < 0 {
+			normalized = 0
+		}
+		if normalized > 1 {
+			normalized = 1
+		}
+
+		result.ID = noteID
+		result.Snippet = chunkText
+		result.Score = normalized
+		if current, ok := best[noteID]; !ok || result.Score > current.result.Score {
+			best[noteID] = candidate{result: result, embedding: embedding}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+
+	results := make([]Result, 0, len(best))
+	for _, candidate := range best {
+		result := candidate.result
+		tags, err := s.loadTags(result.ID)
+		if err != nil {
+			return nil, err
+		}
+		result.Tags = tags
+		results = append(results, result)
+	}
+	sort.SliceStable(results, func(i, j int) bool {
+		if results[i].Score == results[j].Score {
+			return results[i].ID < results[j].ID
+		}
+		return results[i].Score > results[j].Score
+	})
+	if limit > 0 && len(results) > limit {
+		results = results[:limit]
+	}
+	return results, nil
+}
+
 // VectorSearch performs semantic search using embeddings.
 // It generates an embedding for the query text, loads all chunk embeddings from the DB,
 // computes cosine similarity, and returns the top-k matching results.
