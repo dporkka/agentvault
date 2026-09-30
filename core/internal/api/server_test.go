@@ -1412,3 +1412,112 @@ func TestRunAuditEndpoints(t *testing.T) {
 		}
 	})
 }
+
+
+func TestRunLearningCandidateEndpoint(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO agent_runs (
+			id, agent_name, agent_id, agent_revision, task, status, created_at
+		) VALUES
+		('run_learning_api', 'learning-agent', 'agt_learning_api', 3, 'fix regression', 'failed', datetime('now')),
+		('run_other_api', 'learning-agent', 'agt_learning_api', 3, 'other run', 'failed', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO run_observations (
+			id, run_id, kind, name, status, input_json, output_json, evidence_json, created_at
+		) VALUES
+		('obs_learning_api', 'run_learning_api', 'tool', 'go test', 'failed', '{}', '{}', '{}', datetime('now')),
+		('obs_other_api', 'run_other_api', 'tool', 'other', 'failed', '{}', '{}', '{}', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO evaluations (
+			id, run_id, observation_id, evaluator, name, label, rationale, metadata_json, created_at
+		) VALUES
+		('eval_learning_api', 'run_learning_api', 'obs_learning_api', 'human:test', 'regression', 'fail', 'Missing focused test.', '{}', datetime('now')),
+		('eval_other_api', 'run_other_api', 'obs_other_api', 'human:test', 'regression', 'fail', 'Other run.', '{}', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServer(vaultPath, database)
+	srv.RegisterRoutes()
+	var handler http.Handler = srv.mux
+	handler = srv.authMiddleware(handler)
+	handler = srv.corsMiddleware(handler)
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	post := func(runID string, body map[string]interface{}, withAuth bool) (*http.Response, map[string]interface{}) {
+		payload, _ := json.Marshal(body)
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/runs/"+runID+"/learning-candidates", bytes.NewReader(payload))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if withAuth {
+			req.Header.Set("X-AgentVault-Token", srv.AuthToken())
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode learning response: %v", err)
+		}
+		return resp, out
+	}
+
+	body := map[string]interface{}{
+		"targetKind":           "memory",
+		"candidate":            "Run the focused regression test before broad verification.",
+		"rationale":            "The failed evaluation identified a missing verification step.",
+		"sourceObservationIds": []string{"obs_learning_api"},
+		"sourceEvaluationIds":  []string{"eval_learning_api"},
+	}
+
+	t.Run("requires auth", func(t *testing.T) {
+		resp, _ := post("run_learning_api", body, false)
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("derives agent and records evidence lineage", func(t *testing.T) {
+		resp, out := post("run_learning_api", body, true)
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("expected 201, got %d body=%#v", resp.StatusCode, out)
+		}
+		if out["agentId"] != "agt_learning_api" || out["status"] != "proposed" {
+			t.Fatalf("unexpected promotion identity/state: %#v", out)
+		}
+		runIDs, _ := out["sourceRunIds"].([]interface{})
+		evalIDs, _ := out["sourceEvaluationIds"].([]interface{})
+		if len(runIDs) != 1 || runIDs[0] != "run_learning_api" {
+			t.Fatalf("expected originating run lineage, got %#v", out["sourceRunIds"])
+		}
+		if len(evalIDs) != 1 || evalIDs[0] != "eval_learning_api" {
+			t.Fatalf("expected evaluation lineage, got %#v", out["sourceEvaluationIds"])
+		}
+	})
+
+	t.Run("rejects evidence from another run", func(t *testing.T) {
+		bad := map[string]interface{}{}
+		for k, v := range body {
+			bad[k] = v
+		}
+		bad["sourceEvaluationIds"] = []string{"eval_other_api"}
+		resp, out := post("run_learning_api", bad, true)
+		if resp.StatusCode != http.StatusConflict {
+			t.Fatalf("expected 409, got %d body=%#v", resp.StatusCode, out)
+		}
+	})
+}
