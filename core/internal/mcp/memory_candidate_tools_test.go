@@ -331,3 +331,77 @@ func TestRuntimeSurfaceReconcilesMissedSemanticSessionEventPromotion(t *testing.
 		t.Fatalf("MCP runtime reconciliation did not backfill candidate: %+v", candidates)
 	}
 }
+
+
+func TestScopedRuntimeDoesNotReconcileOtherProjectsSemanticEvents(t *testing.T) {
+	_, database, vault := setupKnowledgeMCPServer(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO agent_sessions (
+			id, agent_id, project, objective, status, context_json, started_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		"session_beta_unreconciled",
+		"beta-agent",
+		"beta",
+		"Remain outside alpha scope",
+		"active",
+		"{}",
+		"2026-09-30T15:00:00Z",
+		"2026-09-30T15:01:00Z",
+	); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(map[string]interface{}{
+		"summary": "Beta-only durable decision.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO session_events (
+			id, session_id, event_type, payload_json, created_at
+		) VALUES (?, ?, ?, ?, ?)`,
+		"event_beta_unreconciled",
+		"session_beta_unreconciled",
+		"decision",
+		string(payload),
+		"2026-09-30T15:01:00Z",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	registry, err := authz.NewRegistry(vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued, err := registry.Mint(authz.MintRequest{
+		AgentID:      "alpha-extractor",
+		Capabilities: []authz.Capability{authz.MemoryWrite},
+		Scope:        authz.Scope{Projects: []string{"alpha"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(vault, database)
+	if err := server.SetCapabilityToken(issued.Token); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.RegisterRuntimeSurface(false); err != nil {
+		t.Fatal(err)
+	}
+
+	store := knowledge.New(database, vault)
+	candidates, err := store.ListMemoryCandidates(contract.MemoryCandidateFilter{
+		Status:    contract.MemoryCandidatePending,
+		ScopeType: "session",
+		ScopeID:   "session_beta_unreconciled",
+		Limit:     20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("scoped alpha runtime reconciled beta semantic state: %+v", candidates)
+	}
+}
