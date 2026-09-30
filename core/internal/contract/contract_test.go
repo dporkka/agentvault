@@ -342,7 +342,6 @@ func TestLearningRecommendationJSONTags(t *testing.T) {
 	}
 }
 
-
 func TestRegressionCaseProposalJSONTags(t *testing.T) {
 	proposal := RegressionCaseProposal{
 		RunID: "run_1", AgentID: "agt_1", AgentRevision: 4,
