@@ -303,3 +303,42 @@ func TestRunLearningCandidateRequestJSONTags(t *testing.T) {
 		t.Fatalf("run learning request must not allow caller-supplied agentId: %s", got)
 	}
 }
+
+
+func TestLearningRecommendationJSONTags(t *testing.T) {
+	rec := LearningRecommendation{
+		RunID: "run_1", AgentID: "agt_1", AgentRevision: 3,
+		Eligible: true, SupportLevel: "strong", EvidenceCount: 2,
+		SuggestedTargetKind: "memory",
+		ReasonCodes: []string{"failed_observation", "negative_evaluation"},
+		SourceObservationIDs: []string{"obs_1"},
+		SourceEvaluationIDs: []string{"eval_1"},
+		ContextMemoryRefs: []string{"memory_1"},
+		SupersedesNoteIDs: []string{"memory_1"},
+		Signals: []LearningSignal{{
+			Kind: "evaluation", ID: "eval_1", ObservationID: "obs_1",
+			Name: "regression", Label: "fail", Rationale: "Focused test was skipped.",
+		}},
+	}
+	b, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"runId":"run_1"`,
+		`"agentId":"agt_1"`,
+		`"supportLevel":"strong"`,
+		`"evidenceCount":2`,
+		`"suggestedTargetKind":"memory"`,
+		`"sourceObservationIds":["obs_1"]`,
+		`"sourceEvaluationIds":["eval_1"]`,
+		`"contextMemoryRefs":["memory_1"]`,
+		`"supersedesNoteIds":["memory_1"]`,
+		`"signals":[{"kind":"evaluation"`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected recommendation JSON to contain %s, got %s", want, got)
+		}
+	}
+}
