@@ -41,6 +41,8 @@ import type {
   ProposePromotionRequest,
   ReviewPromotionRequest,
   LearningRecommendation,
+  RegressionCaseProposal,
+  RunRegressionCaseCaptureRequest,
   RunAudit,
   RunLearningCandidateRequest,
   RunRecord,
@@ -99,6 +101,8 @@ export const routes: {
   readonly createRun: EndpointDef<CreateRunRequest, RunRecord>;
   readonly runAudit: EndpointDef<{ id: string }, RunAudit>;
   readonly learningRecommendation: EndpointDef<{ id: string }, LearningRecommendation>;
+  readonly regressionCaseProposal: EndpointDef<{ id: string }, RegressionCaseProposal>;
+  readonly captureRunRegressionCase: EndpointDef<RunRegressionCaseCaptureRequest, EvaluationCase>;
   readonly proposeRunLearning: EndpointDef<RunLearningCandidateRequest, Promotion>;
 } = {
   health: {
@@ -331,6 +335,20 @@ export const routes: {
     auth: false,
     request: undefined as unknown as { id: string },
     response: undefined as unknown as LearningRecommendation,
+  },
+  regressionCaseProposal: {
+    method: 'GET',
+    path: '/runs/{id}/regression-case-proposal',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as RegressionCaseProposal,
+  },
+  captureRunRegressionCase: {
+    method: 'POST',
+    path: '/runs/{id}/regression-cases',
+    auth: true,
+    request: undefined as unknown as RunRegressionCaseCaptureRequest,
+    response: undefined as unknown as EvaluationCase,
   },
   proposeRunLearning: {
     method: 'POST',
