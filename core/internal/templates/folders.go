@@ -13,6 +13,7 @@ func FolderForType(noteType string) string {
 		"project":  "20-projects",
 		"capture":  "00-inbox",
 		"daily":    "05-daily",
+		"agent":    "75-agents",
 	}
 	if f, ok := m[noteType]; ok {
 		return f
