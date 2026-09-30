@@ -38,6 +38,10 @@ func CompileUnified(c *Compiler, fileMemories *memory.Store, req contract.Compil
 	if err != nil {
 		return contract.ContextBundle{}, err
 	}
+	viewScope, err := c.resolveSavedViewScope(req)
+	if err != nil {
+		return contract.ContextBundle{}, err
+	}
 
 	collector := &candidateCollector{
 		compiler:   c,
@@ -45,6 +49,7 @@ func CompileUnified(c *Compiler, fileMemories *memory.Store, req contract.Compil
 		asOf:       asOf,
 		seen:       make(map[string]bool),
 		provenance: make(map[string]*contract.ContextProvenance),
+		viewScope:  viewScope,
 	}
 
 	if err := collector.addCurrentSession(); err != nil {
@@ -110,6 +115,7 @@ func CompileUnified(c *Compiler, fileMemories *memory.Store, req contract.Compil
 		Task:            req.Task,
 		WorkspaceID:     workspaceID,
 		Project:         req.Project,
+		ViewID:          strings.TrimSpace(req.ViewID),
 		AgentID:         req.AgentID,
 		SessionID:       req.SessionID,
 		AsOf:            asOf.Format(time.RFC3339Nano),
@@ -151,6 +157,9 @@ func addMarkdownMemories(c *candidateCollector, store *memory.Store) error {
 	terms := taskTerms(c.req.Task)
 	for _, record := range records {
 		if c.req.Project != "" && record.Project != "" && record.Project != c.req.Project {
+			continue
+		}
+		if c.viewScope != nil && !c.viewScope.allows(record.NoteID) {
 			continue
 		}
 
@@ -239,6 +248,9 @@ func addMarkdownMemories(c *candidateCollector, store *memory.Store) error {
 // memory notes can only enter through addMarkdownMemories, where workspace,
 // agent/session scope, validity, confidence, and supersession are enforced.
 func addNotesUnified(c *candidateCollector, store *memory.Store) error {
+	if c.viewScope != nil {
+		return c.addScopedNotes(store)
+	}
 	queryText := strings.Join(taskTerms(c.req.Task), " ")
 	if queryText == "" {
 		queryText = c.req.Task

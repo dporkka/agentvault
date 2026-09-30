@@ -6,6 +6,7 @@ type CompileContextRequest struct {
 	Task        string   `json:"task"`
 	WorkspaceID string   `json:"workspaceId,omitempty"`
 	Project     string   `json:"project,omitempty"`
+	ViewID      string   `json:"viewId,omitempty"`
 	AgentID     string   `json:"agentId,omitempty"`
 	SessionID   string   `json:"sessionId,omitempty"`
 	ObjectIDs   []string `json:"objectIds,omitempty"`
@@ -21,6 +22,7 @@ type ContextBundle struct {
 	Task            string             `json:"task"`
 	WorkspaceID     string             `json:"workspaceId,omitempty"`
 	Project         string             `json:"project,omitempty"`
+	ViewID          string             `json:"viewId,omitempty"`
 	AgentID         string             `json:"agentId,omitempty"`
 	SessionID       string             `json:"sessionId,omitempty"`
 	AsOf            string             `json:"asOf"`

@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/agentvault/core/internal/contract"
@@ -106,5 +109,67 @@ func TestCompileContextEndpointValidatesBudget(t *testing.T) {
 	server.mux.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestCompileContextEndpointAppliesSavedViewScope(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	viewDir := filepath.Join(vaultPath, ".agentvault", "views")
+	if err := os.MkdirAll(viewDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(viewDir, "active-test.yaml"), []byte(`version: 1
+name: Active test notes
+query:
+  projects: [test-project]
+  statuses: [active]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServer(vaultPath, database)
+	server.RegisterRoutes()
+	body, err := json.Marshal(contract.CompileContextRequest{
+		Task:        "test note body",
+		Project:     "test-project",
+		ViewID:      "active-test",
+		TokenBudget: 1000,
+		AsOf:        "2026-09-10T12:00:00Z",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/context/compile", bytes.NewReader(body))
+	recorder := httptest.NewRecorder()
+	server.mux.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	var bundle contract.ContextBundle
+	if err := json.NewDecoder(recorder.Body).Decode(&bundle); err != nil {
+		t.Fatal(err)
+	}
+	if bundle.ViewID != "active-test" {
+		t.Fatalf("viewId = %q, want active-test", bundle.ViewID)
+	}
+}
+
+func TestCompileContextEndpointRejectsMissingSavedView(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	server := NewServer(vaultPath, database)
+	server.RegisterRoutes()
+	req := httptest.NewRequest(http.MethodPost, "/context/compile", bytes.NewBufferString(`{"task":"test","viewId":"missing-view"}`))
+	recorder := httptest.NewRecorder()
+	server.mux.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "missing-view") {
+		t.Fatalf("expected missing view detail, got %s", recorder.Body.String())
 	}
 }
