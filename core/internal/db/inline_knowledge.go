@@ -1,6 +1,6 @@
 package db
 
-// inlineKnowledgeSchema mirrors migrations 004 through 007 for the rare fresh/test
+// inlineKnowledgeSchema mirrors migrations 004 through 008 for the rare fresh/test
 // path where embedded migration files are unavailable. It deliberately excludes
 // the migration-003 file-backed memory columns, which are created by the base
 // inline schema in db.go.
@@ -260,4 +260,37 @@ CREATE INDEX IF NOT EXISTS idx_memory_candidates_kind
 
 INSERT OR IGNORE INTO schema_migrations (version, applied_at)
 VALUES (7, datetime('now'));
+
+CREATE TABLE IF NOT EXISTS memory_syntheses (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('summary', 'model', 'policy', 'skill')),
+  scope_type TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
+  target_memory_id TEXT NOT NULL UNIQUE,
+  provenance_id TEXT,
+  created_by TEXT,
+  rationale TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(target_memory_id) REFERENCES memory_records(id) ON DELETE RESTRICT,
+  FOREIGN KEY(provenance_id) REFERENCES provenance_records(id)
+);
+
+CREATE TABLE IF NOT EXISTS memory_synthesis_sources (
+  synthesis_id TEXT NOT NULL,
+  source_memory_id TEXT NOT NULL,
+  source_order INTEGER NOT NULL,
+  PRIMARY KEY(synthesis_id, source_memory_id),
+  FOREIGN KEY(synthesis_id) REFERENCES memory_syntheses(id) ON DELETE CASCADE,
+  FOREIGN KEY(source_memory_id) REFERENCES memory_records(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_syntheses_scope
+  ON memory_syntheses(scope_type, scope_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_syntheses_kind
+  ON memory_syntheses(kind, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_synthesis_sources_memory
+  ON memory_synthesis_sources(source_memory_id);
+
+INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+VALUES (8, datetime('now'));
 `
