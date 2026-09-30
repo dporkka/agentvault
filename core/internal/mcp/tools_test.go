@@ -483,7 +483,7 @@ func TestHandleLogAgentRun_RejectsInvalidStructuredFields(t *testing.T) {
 		"agent_revision": float64(0),
 		"task":           "review",
 	})
-	if err == nil || !strings.Contains(err.Error(), "agent_revision") {
+	if err == nil || !strings.Contains(err.Error(), "agent revision") {
 		t.Fatalf("expected invalid agent revision error, got %v", err)
 	}
 
