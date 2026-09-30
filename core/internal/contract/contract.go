@@ -453,7 +453,6 @@ type RunAudit struct {
 	Evaluations  []RunEvaluation  `json:"evaluations"`
 }
 
-
 // RunLearningCandidateRequest creates a reviewable promotion proposal from one run.
 // Agent identity is derived server-side from the run and cannot be supplied here.
 type RunLearningCandidateRequest struct {
