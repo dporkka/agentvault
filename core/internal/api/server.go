@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -97,6 +98,13 @@ func NewServer(vaultPath string, database *db.DB) *Server {
 	idx := indexer.New(database, vaultPath)
 	knowledgeStore := knowledge.New(database, vaultPath)
 	knowledgeInitErr := knowledgeStore.ReplayJournal()
+	if knowledgeInitErr == nil {
+		if err := knowledgeStore.ReconcileSemanticSessionEvents(1000); err != nil {
+			// Session events are already durable. Candidate enrichment is
+			// retryable and must not take the knowledge plane offline.
+			log.Printf("[api] semantic session-event reconciliation will be retried: %v", err)
+		}
+	}
 	mutationEngine := mutations.New(vaultPath, knowledgeStore, idx)
 	mutationInitErr := knowledgeInitErr
 	if mutationInitErr == nil {
