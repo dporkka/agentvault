@@ -360,7 +360,6 @@ func TestRenderProjectTemplate(t *testing.T) {
 	}
 }
 
-
 func TestRenderAgentTemplate(t *testing.T) {
 	data := TemplateData{
 		ID:      "agt_2026_09_30_101",
