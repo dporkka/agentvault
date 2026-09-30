@@ -298,6 +298,41 @@ of being silently coerced.
 Supersession is append-only. Older memory remains reconstructable; readers can
 choose current or historical context.
 
+### Reviewable semantic-memory candidates
+
+Semantic extraction is separated from semantic acceptance. An extractor can
+propose a `MemoryCandidate` only from an existing provenance-backed
+`EpisodeRecord`. The candidate inherits the episode's scope and provenance;
+it cannot silently widen visibility or substitute different evidence.
+
+Candidates are canonical journal-backed review state with the lifecycle:
+
+```text
+pending
+  ├── accepted    -> create semantic memory
+  ├── rejected    -> create no memory
+  ├── merged      -> reviewer supplies merged content; create replacement memory
+  └── superseded  -> candidate content explicitly replaces one existing memory
+```
+
+Merge and supersede require an existing memory with the same scope and semantic
+kind. A memory that already has a replacement cannot be branched into a second
+independent successor through candidate review.
+
+Terminal review is recorded as one canonical journal event. When a review
+materializes memory, replay projects the resulting `MemoryRecord` and terminal
+candidate state atomically from that event. This avoids a crash window where
+semantic memory exists but its candidate still appears pending.
+
+Pending/rejected candidates never enter the Context Compiler. Only an explicit
+accept/merge/supersede action creates durable semantic memory eligible for
+retrieval.
+
+Capability-bound extraction agents with `memory:write` may submit candidates
+within their authorized project/session scope, but they are not given review
+tools. Trusted local/root surfaces perform terminal review. `knowledge:read`
+identities may inspect candidates only within their authorized scope.
+
 ## 6. Durable agent sessions
 
 An `AgentSession` is a durable workspace, not a chat transcript. It records the
@@ -372,10 +407,11 @@ Promotion is intentionally conservative:
 - startup mutation recovery reconciles committed mutations idempotently, so a
   crash after commit finalization but before promotion can be repaired later.
 
-This layer is deliberately distinct from **knowledge extraction**. Turning raw
-activity into semantic memory or temporal facts requires stronger evidence,
-deduplication/supersession logic, and review policy. AgentVault should not turn
-every action into permanent semantic truth automatically.
+This layer is deliberately distinct from **knowledge extraction**. Extractors
+may now turn provenance-backed episodes into reviewable memory candidates, but
+those candidates remain outside durable semantic memory and Context Compiler
+retrieval until explicit review. AgentVault still does not turn every action
+into permanent semantic truth automatically.
 
 ## 9. Integration boundaries
 

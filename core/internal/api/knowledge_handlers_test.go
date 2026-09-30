@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+
+	"github.com/agentvault/core/internal/contract"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -154,5 +156,100 @@ func TestKnowledgeHTTPAPIRejectsUnknownFields(t *testing.T) {
 	server.mux.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unknown field, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestMemoryCandidateHTTPReviewLifecycle(t *testing.T) {
+	vaultPath, database := setupTestVault(t)
+	defer database.Close()
+
+	server := NewServer(vaultPath, database)
+	provenance, err := server.knowledge.CreateProvenance(contract.ProvenanceRecord{
+		ID:         "prov_candidate_http",
+		SourceType: "agent-session",
+		Confidence: 0.92,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	episode, err := server.knowledge.RecordEpisode(contract.CreateEpisodeRequest{
+		ID:           "episode_candidate_http",
+		ScopeType:    "project",
+		ScopeID:      "agentvault",
+		EventType:    "decision.observed",
+		Summary:      "Observed reviewable decision",
+		ProvenanceID: provenance.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server.RegisterRoutes()
+	ts := httptest.NewServer(server.mux)
+	defer ts.Close()
+
+	request := func(method, path string, body interface{}, target interface{}, wantStatus int) {
+		t.Helper()
+		var payload []byte
+		if body != nil {
+			payload, err = json.Marshal(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		req, err := http.NewRequest(method, ts.URL+path, bytes.NewReader(payload))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != wantStatus {
+			var failure map[string]interface{}
+			_ = json.NewDecoder(resp.Body).Decode(&failure)
+			t.Fatalf("%s %s status=%d want=%d body=%v", method, path, resp.StatusCode, wantStatus, failure)
+		}
+		if target != nil {
+			if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	var candidate contract.MemoryCandidate
+	request(http.MethodPost, "/memory-candidates", map[string]interface{}{
+		"episodeId":  episode.ID,
+		"memoryKind": "decision",
+		"content":    "Semantic memory requires explicit review.",
+		"proposedBy": "extractor",
+	}, &candidate, http.StatusCreated)
+	if candidate.Status != contract.MemoryCandidatePending || candidate.ProvenanceID != provenance.ID {
+		t.Fatalf("unexpected candidate: %+v", candidate)
+	}
+
+	var pending []contract.MemoryCandidate
+	request(http.MethodGet, "/memory-candidates?status=pending&scopeType=project&scopeId=agentvault", nil, &pending, http.StatusOK)
+	if len(pending) != 1 || pending[0].ID != candidate.ID {
+		t.Fatalf("unexpected candidate queue: %+v", pending)
+	}
+
+	var accepted contract.MemoryCandidate
+	request(http.MethodPost, "/memory-candidates/"+candidate.ID+"/accept", map[string]interface{}{
+		"reviewedBy": "david",
+		"reason":     "Evidence is sufficient.",
+	}, &accepted, http.StatusOK)
+	if accepted.Status != contract.MemoryCandidateAccepted || accepted.ResultMemoryID == "" {
+		t.Fatalf("unexpected accepted candidate: %+v", accepted)
+	}
+
+	var loaded contract.MemoryCandidate
+	request(http.MethodGet, "/memory-candidates/"+candidate.ID, nil, &loaded, http.StatusOK)
+	if loaded.ResultMemoryID != accepted.ResultMemoryID || loaded.ReviewedBy != "david" {
+		t.Fatalf("candidate review not persisted: %+v", loaded)
 	}
 }

@@ -172,7 +172,7 @@ agentvault serve
 agentvault serve --port 8080
 ```
 
-The server prints an auth token at startup. `GET` endpoints are open locally; write endpoints require the token in either the `X-AgentVault-Token` header or `Authorization: Bearer <token>`.
+The server prints an auth token at startup. All data-bearing reads and writes require the token in either the `X-AgentVault-Token` header or `Authorization: Bearer <token>`; only health/auth verification and CORS preflights are public.
 
 | Endpoint | Description |
 | --- | --- |
@@ -189,6 +189,11 @@ The server prints an auth token at startup. `GET` endpoints are open locally; wr
 | `GET /recent` | Recent notes |
 | `GET /stale` | Stale notes |
 | `GET /git/status` | Vault Git status |
+| `GET/POST /memory-candidates` | List or propose reviewable semantic-memory candidates |
+| `POST /memory-candidates/{id}/accept` | Accept candidate into durable semantic memory |
+| `POST /memory-candidates/{id}/reject` | Reject candidate without creating memory |
+| `POST /memory-candidates/{id}/merge` | Merge candidate with an existing memory |
+| `POST /memory-candidates/{id}/supersede` | Replace an existing memory with the candidate |
 
 For the full contract, including exact request/response shapes, auth rules, CORS policy, and rate limits, see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
 
@@ -216,6 +221,13 @@ Registered tools:
 - `agentvault.git_status`
 - `agentvault.log_agent_run`
 - `agentvault.ask`
+- `agentvault.propose_memory_candidate`
+- `agentvault.list_memory_candidates`
+- `agentvault.get_memory_candidate`
+- `agentvault.accept_memory_candidate` (trusted local surface)
+- `agentvault.reject_memory_candidate` (trusted local surface)
+- `agentvault.merge_memory_candidate` (trusted local surface)
+- `agentvault.supersede_memory_candidate` (trusted local surface)
 
 ## Clients
 

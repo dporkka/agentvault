@@ -162,6 +162,72 @@ export interface MemoryFilter {
   limit?: number;
 }
 
+export type MemoryCandidateStatus =
+  | 'pending'
+  | 'accepted'
+  | 'rejected'
+  | 'merged'
+  | 'superseded';
+
+export interface MemoryCandidate {
+  id: string;
+  sourceEpisodeId: string;
+  memoryKind: Exclude<MemoryKind, 'episode' | 'procedure'>;
+  scopeType: string;
+  scopeId: string;
+  content: string;
+  objectId?: string;
+  provenanceId: string;
+  confidence: number;
+  status: MemoryCandidateStatus;
+  proposedBy?: string;
+  reviewedBy?: string;
+  reviewReason?: string;
+  resultMemoryId?: string;
+  targetMemoryId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string;
+}
+
+export interface CreateMemoryCandidateRequest {
+  id?: string;
+  episodeId: string;
+  memoryKind: MemoryCandidate['memoryKind'];
+  content: string;
+  objectId?: string;
+  confidence?: number;
+  proposedBy?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryCandidateFilter {
+  status?: MemoryCandidateStatus;
+  scopeType?: string;
+  scopeId?: string;
+  memoryKind?: MemoryCandidate['memoryKind'];
+  limit?: number;
+}
+
+export interface ReviewMemoryCandidateRequest {
+  reviewedBy: string;
+  reason?: string;
+}
+
+export interface SupersedeMemoryCandidateRequest {
+  reviewedBy: string;
+  targetMemoryId: string;
+  reason?: string;
+}
+
+export interface MergeMemoryCandidateRequest {
+  reviewedBy: string;
+  targetMemoryId: string;
+  mergedContent: string;
+  reason?: string;
+}
+
 export interface SessionEvent {
   id: string;
   sessionId: string;

@@ -276,6 +276,16 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /memory", s.withKnowledgeReady(s.handleListMemories))
 	s.mux.HandleFunc("POST /memory", s.withKnowledgeReady(s.handleCreateMemory))
 
+	// Reviewable semantic-memory candidates. Proposal never materializes memory;
+	// explicit terminal review is required for acceptance, merge, or supersession.
+	s.mux.HandleFunc("GET /memory-candidates", s.withKnowledgeReady(s.handleListMemoryCandidates))
+	s.mux.HandleFunc("POST /memory-candidates", s.withKnowledgeReady(s.handleProposeMemoryCandidate))
+	s.mux.HandleFunc("GET /memory-candidates/{id}", s.withKnowledgeReady(s.handleGetMemoryCandidate))
+	s.mux.HandleFunc("POST /memory-candidates/{id}/accept", s.withKnowledgeReady(s.handleAcceptMemoryCandidate))
+	s.mux.HandleFunc("POST /memory-candidates/{id}/reject", s.withKnowledgeReady(s.handleRejectMemoryCandidate))
+	s.mux.HandleFunc("POST /memory-candidates/{id}/merge", s.withKnowledgeReady(s.handleMergeMemoryCandidate))
+	s.mux.HandleFunc("POST /memory-candidates/{id}/supersede", s.withKnowledgeReady(s.handleSupersedeMemoryCandidate))
+
 	// Durable agent sessions and append-only session events.
 	s.mux.HandleFunc("POST /sessions", s.withKnowledgeReady(s.handleStartAgentSession))
 	s.mux.HandleFunc("GET /sessions/{id}", s.withKnowledgeReady(s.handleGetAgentSession))

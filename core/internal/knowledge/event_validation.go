@@ -66,6 +66,21 @@ func validateJournalPayload(eventType string, payload interface{}) error {
 		if _, err := time.Parse(time.RFC3339, record.ObservedAt); err != nil {
 			return fmt.Errorf("observedAt must be RFC3339: %w", err)
 		}
+	case eventMemoryCandidateProposed:
+		candidate, ok := payload.(contract.MemoryCandidate)
+		if !ok {
+			return fmt.Errorf("%s payload must be MemoryCandidate", eventType)
+		}
+		return validateMemoryCandidate(candidate)
+	case eventMemoryCandidateAccepted,
+		eventMemoryCandidateRejected,
+		eventMemoryCandidateMerged,
+		eventMemoryCandidateSuperseded:
+		resolution, ok := payload.(memoryCandidateResolution)
+		if !ok {
+			return fmt.Errorf("%s payload must be memoryCandidateResolution", eventType)
+		}
+		return validateMemoryCandidateResolution(resolution)
 	}
 	return nil
 }

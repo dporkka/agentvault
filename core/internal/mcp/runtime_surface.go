@@ -49,10 +49,14 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 		}
 		if authz.HasCapability(principal, authz.KnowledgeRead) {
 			s.RegisterKnowledgeReadTools()
+			s.RegisterMemoryCandidateReadTools()
 		}
 		if authz.HasAnyCapability(principal, authz.KnowledgeWrite, authz.MemoryWrite, authz.SessionWrite) {
 			s.RegisterKnowledgeWriteTools()
 			s.HardenKnowledgeWriteTools()
+			if authz.HasCapability(principal, authz.MemoryWrite) {
+				s.RegisterMemoryCandidateProposalTool()
+			}
 		}
 		if authz.HasCapability(principal, authz.ContextCompile) {
 			s.RegisterContextTool()
@@ -84,6 +88,7 @@ func (s *Server) RegisterRuntimeSurface(allowDirectWrites bool) error {
 		s.RegisterSafeTools()
 	}
 	s.RegisterKnowledgeTools()
+	s.RegisterMemoryCandidateTools()
 	s.RegisterContextTool()
 	s.RegisterMutationTools()
 	s.RegisterResources()
