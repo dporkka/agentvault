@@ -247,7 +247,6 @@ func (s *Server) handleToolsCall(req JSONRPCRequest) JSONRPCResponse {
 	}
 }
 
-
 // resourceDescription is the JSON representation of a resource for
 // the resources/list response.
 type resourceDescription struct {
