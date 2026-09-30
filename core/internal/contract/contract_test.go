@@ -304,17 +304,16 @@ func TestRunLearningCandidateRequestJSONTags(t *testing.T) {
 	}
 }
 
-
 func TestLearningRecommendationJSONTags(t *testing.T) {
 	rec := LearningRecommendation{
 		RunID: "run_1", AgentID: "agt_1", AgentRevision: 3,
 		Eligible: true, SupportLevel: "strong", EvidenceCount: 2,
-		SuggestedTargetKind: "memory",
-		ReasonCodes: []string{"failed_observation", "negative_evaluation"},
+		SuggestedTargetKind:  "memory",
+		ReasonCodes:          []string{"failed_observation", "negative_evaluation"},
 		SourceObservationIDs: []string{"obs_1"},
-		SourceEvaluationIDs: []string{"eval_1"},
-		ContextMemoryRefs: []string{"memory_1"},
-		SupersedesNoteIDs: []string{"memory_1"},
+		SourceEvaluationIDs:  []string{"eval_1"},
+		ContextMemoryRefs:    []string{"memory_1"},
+		SupersedesNoteIDs:    []string{"memory_1"},
 		Signals: []LearningSignal{{
 			Kind: "evaluation", ID: "eval_1", ObservationID: "obs_1",
 			Name: "regression", Label: "fail", Rationale: "Focused test was skipped.",
