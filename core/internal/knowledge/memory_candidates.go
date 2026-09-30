@@ -60,7 +60,7 @@ func (s *Store) ProposeMemoryCandidate(req contract.CreateMemoryCandidateRequest
 	if err != nil {
 		return contract.MemoryCandidate{}, fmt.Errorf("source episode provenance: %w", err)
 	}
-	if err := s.validateOptionalObject(req.ObjectID); err != nil {
+	if err := s.validateCandidateObjectScope(episode, req.ObjectID); err != nil {
 		return contract.MemoryCandidate{}, err
 	}
 
@@ -282,6 +282,14 @@ func (s *Store) resolveMemoryCandidate(
 		if target.MemoryKind != candidate.MemoryKind {
 			return contract.MemoryCandidate{}, errors.New("target memory must have the same memoryKind as the candidate")
 		}
+		var replacementID string
+		err := s.db.QueryRow("SELECT id FROM memory_records WHERE supersedes_id = ? LIMIT 1", targetMemoryID).Scan(&replacementID)
+		if err == nil {
+			return contract.MemoryCandidate{}, fmt.Errorf("target memory %s is already superseded by %s", targetMemoryID, replacementID)
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return contract.MemoryCandidate{}, fmt.Errorf("check target memory supersession: %w", err)
+		}
 		if status == contract.MemoryCandidateMerged && mergedContent == "" {
 			return contract.MemoryCandidate{}, errors.New("mergedContent is required")
 		}
@@ -349,6 +357,33 @@ func (s *Store) resolveMemoryCandidate(
 		return contract.MemoryCandidate{}, err
 	}
 	return s.GetMemoryCandidate(candidate.ID)
+}
+
+func (s *Store) validateCandidateObjectScope(episode contract.EpisodeRecord, objectID string) error {
+	objectID = strings.TrimSpace(objectID)
+	if objectID == "" {
+		return nil
+	}
+	object, err := s.GetObject(objectID)
+	if err != nil {
+		return fmt.Errorf("object: %w", err)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(episode.ScopeType)) {
+	case "project":
+		if object.Project == "" || object.Project != episode.ScopeID {
+			return errors.New("candidate object must belong to the source episode project")
+		}
+	case "session":
+		session, err := s.GetSession(episode.ScopeID)
+		if err != nil {
+			return fmt.Errorf("source episode session: %w", err)
+		}
+		if session.Project == "" || object.Project != session.Project {
+			return errors.New("candidate object must belong to the source episode session project")
+		}
+	}
+	return nil
 }
 
 func validSemanticCandidateKind(kind string) bool {
