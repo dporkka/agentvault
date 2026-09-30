@@ -1889,7 +1889,6 @@ func (s *Server) handleGetContextSnapshot(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, contextSnapshotResponse(item))
 }
 
-
 // ── Run Evidence Audit ───────────────────────────────────────────────
 
 func runRecordResponse(item agentstate.RunRecord) contract.RunRecord {
@@ -1909,7 +1908,7 @@ func runAuditResponse(item *agentstate.RunAudit) contract.RunAudit {
 		observations = append(observations, contract.RunObservation{
 			ID: observation.ID, RunID: observation.RunID,
 			ParentObservationID: observation.ParentObservationID,
-			Kind: string(observation.Kind), Name: observation.Name, Status: observation.Status,
+			Kind:                string(observation.Kind), Name: observation.Name, Status: observation.Status,
 			Input: observation.Input, Output: observation.Output, Evidence: observation.Evidence,
 			StartedAt: observation.StartedAt, EndedAt: observation.EndedAt, CreatedAt: observation.CreatedAt,
 		})
