@@ -513,6 +513,16 @@ func intArg(args map[string]interface{}, key string, defaultVal int) int {
 	return defaultVal
 }
 
+func floatArg(args map[string]interface{}, key string) float64 {
+	if v, ok := args[key].(float64); ok {
+		return v
+	}
+	if v, ok := args[key].(int); ok {
+		return float64(v)
+	}
+	return 0
+}
+
 // stringSliceArg extracts a string slice argument from args map.
 func stringSliceArg(args map[string]interface{}, key string) []string {
 	raw, ok := args[key]
