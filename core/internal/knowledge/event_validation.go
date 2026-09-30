@@ -81,6 +81,7 @@ func validateJournalPayload(eventType string, payload interface{}) error {
 			return fmt.Errorf("%s payload must be memoryCandidateResolution", eventType)
 		}
 		return validateMemoryCandidateResolution(resolution)
+	}
 	return nil
 }
 
