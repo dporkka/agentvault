@@ -229,3 +229,49 @@ func TestContextSnapshotJSONTags(t *testing.T) {
 		}
 	}
 }
+
+
+func TestRunAuditJSONTags(t *testing.T) {
+	audit := RunAudit{
+		Run: RunRecord{
+			ID: "run_1", AgentName: "coder", AgentID: "agt_1", AgentRevision: 3,
+			Task: "audit", Status: "succeeded", ContextHash: "sha256:ctx",
+			Input: map[string]interface{}{"issue": 81}, Output: map[string]interface{}{"ok": true},
+			CapabilitySnapshot: map[string]interface{}{}, RuntimeMetadata: map[string]interface{}{},
+			FilesChanged: []string{"README.md"}, CreatedAt: "now",
+		},
+		Context: &ContextSnapshot{
+			Hash: "sha256:ctx", AgentID: "agt_1", AgentRevision: 3, AgentTitle: "Coder",
+			KnowledgeScopes: []string{}, ArtifactScopes: []string{}, ConversationScopes: []string{},
+			CapabilityRefs: []string{}, Sections: []ContextSection{
+				{Kind: "identity", SourceID: "identity_1", SourcePath: "10-notes/identity.md", Title: "Identity", Content: "Be precise."},
+			},
+			Unresolved: []ContextReferenceIssue{}, Text: "compiled",
+		},
+		Observations: []RunObservation{{
+			ID: "obs_1", RunID: "run_1", Kind: "retrieval", Name: "search",
+			Input: map[string]interface{}{}, Output: map[string]interface{}{}, Evidence: map[string]interface{}{"noteId": "memory_1"},
+		}},
+		Evaluations: []RunEvaluation{{
+			ID: "eval_1", RunID: "run_1", Evaluator: "human:test", Name: "correctness",
+			Label: "pass", Metadata: map[string]interface{}{},
+		}},
+	}
+	b, err := json.Marshal(audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"agentId":"agt_1"`,
+		`"contextHash":"sha256:ctx"`,
+		`"context":{"hash":"sha256:ctx"`,
+		`"observations":[{"id":"obs_1"`,
+		`"evaluations":[{"id":"eval_1"`,
+		`"sourceId":"identity_1"`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected run audit JSON to contain %s, got %s", want, got)
+		}
+	}
+}
