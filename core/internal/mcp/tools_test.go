@@ -1653,7 +1653,6 @@ func TestHandleGetLearningRecommendation(t *testing.T) {
 	}
 }
 
-
 func TestHandleRegressionCaseProposalAndCapture(t *testing.T) {
 	s, database := setupTestServer(t)
 	defer database.Close()
