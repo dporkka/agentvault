@@ -190,6 +190,7 @@ The server prints an auth token at startup. All data-bearing reads and writes re
 | `GET /stale` | Stale notes |
 | `GET /git/status` | Vault Git status |
 | `GET/POST /memory-candidates` | List or propose reviewable semantic-memory candidates |
+| `POST /memory-candidates/extract` | Deterministically extract review candidates from a provenance-backed episode |
 | `POST /memory-candidates/{id}/accept` | Accept candidate into durable semantic memory |
 | `POST /memory-candidates/{id}/reject` | Reject candidate without creating memory |
 | `POST /memory-candidates/{id}/merge` | Merge candidate with an existing memory |
@@ -222,6 +223,7 @@ Registered tools:
 - `agentvault.log_agent_run`
 - `agentvault.ask`
 - `agentvault.propose_memory_candidate`
+- `agentvault.extract_memory_candidates`
 - `agentvault.list_memory_candidates`
 - `agentvault.get_memory_candidate`
 - `agentvault.accept_memory_candidate` (trusted local surface)
