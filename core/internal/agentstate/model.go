@@ -201,6 +201,11 @@ type PromotionRecord struct {
 	SourceEvaluationIDs  []string
 	TargetNoteID         string
 	SupersedesNoteID     string
+	CreatedAt            string
+	ReviewedAt           string
+	ReviewedBy           string
+	ReviewNote           string
+	CommittedAt          string
 }
 
 func (p PromotionRecord) Validate() error {
@@ -249,6 +254,7 @@ type EvaluationDataset struct {
 	Name        string
 	Description string
 	AgentID     string
+	CreatedAt   string
 }
 
 func (d EvaluationDataset) Validate() error {
@@ -269,6 +275,7 @@ type EvaluationCase struct {
 	Input     map[string]any
 	Expected  map[string]any
 	Tags      []string
+	CreatedAt string
 }
 
 func (c EvaluationCase) Validate() error {
@@ -315,6 +322,8 @@ type Experiment struct {
 	AgentRevision int
 	Status        ExperimentStatus
 	Config        map[string]any
+	CreatedAt     string
+	CompletedAt   string
 }
 
 func (e Experiment) Validate() error {
@@ -347,6 +356,7 @@ type ExperimentResult struct {
 	Score        *float64
 	Label        string
 	Metadata     map[string]any
+	CreatedAt    string
 }
 
 func (r ExperimentResult) Validate() error {
