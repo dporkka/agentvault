@@ -1,6 +1,6 @@
 # AgentVault Local HTTP API Contract
 
-Last updated: 2026-07-07
+Last updated: 2026-09-30
 
 This is the single source of truth for the local HTTP API exposed by
 `agentvault serve` (package `core/internal/api`). It documents every route, its
@@ -108,6 +108,8 @@ A missing or incorrect token on a write endpoint returns `401` with
 | GET | `/experiments/{id}` | no | 200 / 404 | camelCase (`ExperimentDetail`) |
 | POST | `/experiments` | yes | 201 / 400 / 404 | camelCase (`Experiment`) |
 | POST | `/experiments/{id}/results` | yes | 201 / 400 / 404 / 409 | camelCase (`ExperimentResult`) |
+| POST | `/agents/{id}/context` | yes | 200 / 400 / 404 | camelCase (`ContextSnapshot`) |
+| GET | `/contexts/{hash}` | no | 200 / 400 / 404 | camelCase (`ContextSnapshot`) |
 
 ---
 
@@ -378,6 +380,72 @@ Auth required. Records metadata for an experiment executed by an external runtim
 
 Auth required. Records one case-level result. The case must belong to the same dataset as the experiment or the server returns `409 Conflict`.
 
+## POST /agents/{id}/context
+
+Auth required. Compiles deterministic context from the canonical Markdown agent manifest plus explicit runtime inputs, then stores the exact compiled snapshot as immutable execution evidence keyed by a SHA-256 hash.
+
+The compiler includes sources in stable order:
+
+1. canonical agent manifest body,
+2. `identity_ref`,
+3. `context_policy_ref`,
+4. ordered `memory_refs`,
+5. current task,
+6. explicitly supplied retrieved knowledge notes,
+7. recent conversation messages in chronological order,
+8. explicitly supplied artifact notes.
+
+Knowledge/artifact retrieval remains external: the caller supplies `retrievedNoteIds` and `artifactNoteIds`; the compiler does not hide search/ranking policy inside context assembly. Manifest scopes and capability refs are carried into the snapshot as provenance metadata.
+
+Request:
+
+```json
+{
+  "task": "Implement the next slice",
+  "conversationId": "conv_...",
+  "retrievedNoteIds": ["note_..."],
+  "artifactNoteIds": ["note_..."],
+  "maxConversationMessages": 20
+}
+```
+
+Missing referenced notes are recorded in `unresolved` rather than silently omitted. A missing or non-agent `{id}` is an error. Identical deterministic inputs and source contents produce the same `sha256:...` hash.
+
+Response:
+
+```json
+{
+  "hash": "sha256:...",
+  "agentId": "agt_...",
+  "agentRevision": 3,
+  "agentTitle": "Coding Agent",
+  "task": "Implement the next slice",
+  "conversationId": "conv_...",
+  "knowledgeScopes": ["project:platform"],
+  "artifactScopes": [],
+  "conversationScopes": [],
+  "capabilityRefs": ["github"],
+  "contextPolicyRef": "note_policy",
+  "sections": [
+    {
+      "kind": "identity",
+      "sourceId": "note_identity",
+      "sourcePath": "10-notes/identity.md",
+      "title": "Identity",
+      "content": "..."
+    }
+  ],
+  "unresolved": [],
+  "text": "## agent: Coding Agent\n..."
+}
+```
+
+The persisted row is evidence, not a second canonical knowledge store. Markdown remains canonical; the snapshot preserves what a particular execution context actually contained even if source files later change.
+
+## GET /contexts/{hash}
+
+No auth. Returns the exact immutable `ContextSnapshot` persisted by context compilation. Returns `404` when the hash is unknown. This endpoint is intended for run audit/replay and for explaining behavioral differences between agent revisions or context selections.
+
 ## GET /promotions
 
 No auth. Lists evidence-backed promotion records. With no query parameters, returns only `proposed` records (the pending review queue), newest first.
@@ -437,4 +505,4 @@ every client and the server now produce.
   `contract.VaultStatus` (`isVault`, not `isOpen`) and the Wails
   frontend checks `vaultStatus?.isVault`.
 
-All endpoints are now aligned across server, tests, and clients, including the durable agent-state read surfaces `/promotions`, `/evaluation-datasets/{id}`, and `/experiments/{id}`.
+All endpoints are now aligned across server, tests, and clients, including durable agent-state reads/writes and deterministic context compilation via `/agents/{id}/context` and `/contexts/{hash}`.
