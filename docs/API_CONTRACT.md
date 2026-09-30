@@ -99,8 +99,15 @@ A missing or incorrect token on a write endpoint returns `401` with
 | GET | `/stale` | no | 200 | camelCase (`[]search.Result`) |
 | GET | `/git/status` | no | 200 | camelCase |
 | GET | `/promotions` | no | 200 / 400 | camelCase (`Promotion[]`) |
+| POST | `/promotions` | yes | 201 / 400 | camelCase (`Promotion`) |
+| POST | `/promotions/{id}/review` | yes | 200 / 400 / 404 / 409 | camelCase (`Promotion`) |
+| POST | `/promotions/{id}/commit` | yes | 200 / 400 / 403 / 404 / 409 | camelCase (`Promotion`) |
 | GET | `/evaluation-datasets/{id}` | no | 200 / 404 | camelCase (`EvaluationDatasetDetail`) |
+| POST | `/evaluation-datasets` | yes | 201 / 400 | camelCase (`EvaluationDataset`) |
+| POST | `/evaluation-datasets/{id}/cases` | yes | 201 / 400 / 404 | camelCase (`EvaluationCase`) |
 | GET | `/experiments/{id}` | no | 200 / 404 | camelCase (`ExperimentDetail`) |
+| POST | `/experiments` | yes | 201 / 400 / 404 | camelCase (`Experiment`) |
+| POST | `/experiments/{id}/results` | yes | 201 / 400 / 404 / 409 | camelCase (`ExperimentResult`) |
 
 ---
 
@@ -342,6 +349,34 @@ vault is a valid state and returns `isGitRepo: false` (not an error). Uses
 
 When `isGitRepo` is `false`: `branch` is `""`, `clean` is `true`, and both file
 arrays are empty (never `null`).
+
+## POST /promotions
+
+Auth required. Creates an evidence-backed promotion proposal without mutating canonical memory or knowledge. At least one source run, observation, or evaluation ID is required.
+
+## POST /promotions/{id}/review
+
+Auth required. Explicitly approves or rejects a proposed promotion. Invalid state transitions return `409 Conflict`.
+
+## POST /promotions/{id}/commit
+
+Auth required. Commits an approved promotion only after the target note resolves inside the vault and its Markdown body contains the exact candidate text. AgentVault records the target note and lineage; it does not create hidden memory rows.
+
+## POST /evaluation-datasets
+
+Auth required. Creates a reusable evaluation dataset.
+
+## POST /evaluation-datasets/{id}/cases
+
+Auth required. Adds one reproducible evaluation case with a required JSON-object `input`, optional `expected` object, and optional tags.
+
+## POST /experiments
+
+Auth required. Records metadata for an experiment executed by an external runtime. Terminal states (`completed`, `failed`, `cancelled`) receive a completion timestamp.
+
+## POST /experiments/{id}/results
+
+Auth required. Records one case-level result. The case must belong to the same dataset as the experiment or the server returns `409 Conflict`.
 
 ## GET /promotions
 
