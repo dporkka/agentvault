@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/agentvault/core/internal/authz"
@@ -18,6 +19,11 @@ var semanticCandidateKinds = []string{"observation", "fact", "preference", "deci
 func (s *Server) RegisterMemoryCandidateTools() {
 	store := knowledge.New(s.db, s.vaultPath)
 	initErr := store.ReplayJournal()
+	if initErr == nil {
+		if err := store.ReconcileSemanticSessionEvents(1000); err != nil {
+			log.Printf("[mcp] semantic session-event reconciliation will be retried: %v", err)
+		}
+	}
 	ready := func(handler func(*knowledge.Store, map[string]interface{}) (string, error)) func(map[string]interface{}) (string, error) {
 		return func(args map[string]interface{}) (string, error) {
 			if initErr != nil {
@@ -120,6 +126,11 @@ func (s *Server) RegisterMemoryCandidateTools() {
 func (s *Server) RegisterMemoryCandidateReadTools() {
 	store := knowledge.New(s.db, s.vaultPath)
 	initErr := store.ReplayJournal()
+	if initErr == nil {
+		if err := store.ReconcileSemanticSessionEvents(1000); err != nil {
+			log.Printf("[mcp] semantic session-event reconciliation will be retried: %v", err)
+		}
+	}
 	ready := func(handler func(*knowledge.Store, map[string]interface{}) (string, error)) func(map[string]interface{}) (string, error) {
 		return func(args map[string]interface{}) (string, error) {
 			if initErr != nil {
@@ -136,6 +147,11 @@ func (s *Server) RegisterMemoryCandidateReadTools() {
 func (s *Server) RegisterMemoryCandidateProposalTool() {
 	store := knowledge.New(s.db, s.vaultPath)
 	initErr := store.ReplayJournal()
+	if initErr == nil {
+		if err := store.ReconcileSemanticSessionEvents(1000); err != nil {
+			log.Printf("[mcp] semantic session-event reconciliation will be retried: %v", err)
+		}
+	}
 	ready := func(handler func(*knowledge.Store, map[string]interface{}) (string, error)) func(map[string]interface{}) (string, error) {
 		return func(args map[string]interface{}) (string, error) {
 			if initErr != nil {
