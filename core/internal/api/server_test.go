@@ -1655,7 +1655,7 @@ func TestRunRegressionCaseEndpoints(t *testing.T) {
 
 	captureBody, _ := json.Marshal(map[string]interface{}{
 		"datasetId": "ds_regression_api",
-		"tags": []string{"checkout"},
+		"tags":      []string{"checkout"},
 	})
 
 	t.Run("capture requires auth", func(t *testing.T) {
@@ -1713,7 +1713,6 @@ func TestRunRegressionCaseEndpoints(t *testing.T) {
 		}
 	})
 }
-
 
 func TestExperimentComparisonEndpoint(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
