@@ -17,6 +17,7 @@ var DefaultFolders = []string{
 	"50-people",
 	"60-companies",
 	"70-prompts",
+	"75-agents",
 	"80-agent-runs",
 	"90-archive",
 }
