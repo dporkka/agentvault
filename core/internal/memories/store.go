@@ -209,13 +209,13 @@ func (s *Store) Promote(ctx context.Context, id string, input PromoteInput) (Mem
 		actorType = "system"
 	}
 	if _, err := events.NewStore(s.db).AppendTx(ctx, tx, events.AppendInput{
-		Type:        "memory.promoted",
-		ActorType:   actorType,
-		ActorID:     strings.TrimSpace(input.ActorID),
-		SubjectType: "memory",
-		SubjectID:   id,
-		ScopeType:   current.ScopeType,
-		ScopeID:     current.ScopeID,
+		Type:          "memory.promoted",
+		ActorType:     actorType,
+		ActorID:       strings.TrimSpace(input.ActorID),
+		SubjectType:   "memory",
+		SubjectID:     id,
+		ScopeType:     current.ScopeType,
+		ScopeID:       current.ScopeID,
 		ParentEventID: current.SourceEventID,
 		Payload: map[string]interface{}{
 			"kind":       current.Kind,
