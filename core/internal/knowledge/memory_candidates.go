@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/agentvault/core/internal/contract"
@@ -18,6 +19,8 @@ const (
 	eventMemoryCandidateMerged     = "memory_candidate.merged"
 	eventMemoryCandidateSuperseded = "memory_candidate.superseded"
 )
+
+var memoryCandidateLocks sync.Map // candidate id -> *sync.Mutex
 
 type memoryCandidateResolution struct {
 	CandidateID    string                         `json:"candidateId"`
@@ -76,6 +79,9 @@ func (s *Store) ProposeMemoryCandidate(req contract.CreateMemoryCandidateRequest
 	if id == "" {
 		id = deterministicPromotionID("candidate", episode.ID, req.MemoryKind, req.Content, req.ObjectID)
 	}
+	unlock := lockMemoryCandidate(id)
+	defer unlock()
+
 	if existing, err := s.GetMemoryCandidate(id); err == nil {
 		if existing.SourceEpisodeID == episode.ID &&
 			existing.MemoryKind == req.MemoryKind &&
@@ -245,6 +251,9 @@ func (s *Store) resolveMemoryCandidate(
 		return contract.MemoryCandidate{}, errors.New("reviewedBy is required")
 	}
 
+	unlock := lockMemoryCandidate(id)
+	defer unlock()
+
 	candidate, err := s.GetMemoryCandidate(id)
 	if err != nil {
 		return contract.MemoryCandidate{}, err
@@ -384,6 +393,13 @@ func (s *Store) validateCandidateObjectScope(episode contract.EpisodeRecord, obj
 		}
 	}
 	return nil
+}
+
+func lockMemoryCandidate(id string) func() {
+	value, _ := memoryCandidateLocks.LoadOrStore(id, &sync.Mutex{})
+	mutex := value.(*sync.Mutex)
+	mutex.Lock()
+	return mutex.Unlock
 }
 
 func validSemanticCandidateKind(kind string) bool {
@@ -554,10 +570,11 @@ func (s *Store) projectMemoryCandidateResolution(resolution memoryCandidateResol
 		UPDATE memory_candidates
 		SET status = ?, reviewed_by = ?, review_reason = ?, result_memory_id = ?,
 		    target_memory_id = ?, updated_at = ?, reviewed_at = ?
-		WHERE id = ?`,
+		WHERE id = ? AND (status = ? OR status = ?)`,
 		resolution.Status, resolution.ReviewedBy, nullIfEmpty(resolution.Reason),
 		nullIfEmpty(resultMemoryID), nullIfEmpty(resolution.TargetMemoryID),
 		resolution.ReviewedAt, resolution.ReviewedAt, resolution.CandidateID,
+		contract.MemoryCandidatePending, resolution.Status,
 	)
 	if err != nil {
 		return fmt.Errorf("project memory candidate resolution: %w", err)
