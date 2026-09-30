@@ -254,7 +254,6 @@ func TestMemoryCandidateHTTPReviewLifecycle(t *testing.T) {
 	}
 }
 
-
 func TestMemoryCandidateHTTPDeterministicExtraction(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
 	defer database.Close()
@@ -329,7 +328,6 @@ func TestMemoryCandidateHTTPDeterministicExtraction(t *testing.T) {
 		t.Fatalf("raw episode extracted candidates: %+v", rawCandidates)
 	}
 }
-
 
 func TestNewServerReconcilesMissedSemanticSessionEventPromotion(t *testing.T) {
 	vaultPath, database := setupTestVault(t)
