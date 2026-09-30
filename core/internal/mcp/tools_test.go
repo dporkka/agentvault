@@ -629,7 +629,6 @@ func TestHandleProposePromotion_RequiresEvidence(t *testing.T) {
 	}
 }
 
-
 func TestHandleReviewPromotionApprove(t *testing.T) {
 	s, db := setupTestServer(t)
 	defer db.Close()
@@ -716,7 +715,7 @@ func TestHandleCommitPromotionRequiresCanonicalContent(t *testing.T) {
 	}
 
 	result, err := s.handleCommitPromotion(map[string]interface{}{
-		"promotion_id": "promo_commit_1",
+		"promotion_id":   "promo_commit_1",
 		"target_note_id": "note_memory_1",
 	})
 	if err != nil {
@@ -762,7 +761,7 @@ func TestHandleCommitPromotionRejectsMissingCandidateContent(t *testing.T) {
 	}
 
 	_, err := s.handleCommitPromotion(map[string]interface{}{
-		"promotion_id": "promo_commit_2",
+		"promotion_id":   "promo_commit_2",
 		"target_note_id": "note_memory_2",
 	})
 	if err == nil || !strings.Contains(err.Error(), "candidate") {
