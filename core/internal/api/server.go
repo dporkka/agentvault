@@ -196,6 +196,10 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("POST /agents/{id}/context", s.handleCompileContext)
 	s.mux.HandleFunc("GET /contexts/{hash}", s.handleGetContextSnapshot)
 
+	// Runtime execution evidence and audit
+	s.mux.HandleFunc("POST /runs", s.handleCreateRun)
+	s.mux.HandleFunc("GET /runs/{id}/audit", s.handleRunAudit)
+
 	// Conversations
 	s.mux.HandleFunc("POST /conversations", s.handleCreateConversation)
 	s.mux.HandleFunc("GET /conversations", s.handleListConversations)
