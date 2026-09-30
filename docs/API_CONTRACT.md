@@ -113,6 +113,8 @@ A missing or incorrect token on a write endpoint returns `401` with
 | POST | `/runs` | yes | 201 / 400 / 404 / 409 | camelCase (`RunRecord`) |
 | GET | `/runs/{id}/audit` | no | 200 / 400 / 404 / 409 | camelCase (`RunAudit`) |
 | GET | `/runs/{id}/learning-recommendation` | no | 200 / 400 / 404 / 409 | camelCase (`LearningRecommendation`) |
+| GET | `/runs/{id}/regression-case-proposal` | no | 200 / 400 / 404 / 409 | camelCase (`RegressionCaseProposal`) |
+| POST | `/runs/{id}/regression-cases` | yes | 201 / 400 / 404 / 409 | camelCase (`EvaluationCase`) |
 | POST | `/runs/{id}/learning-candidates` | yes | 201 / 400 / 404 / 409 | camelCase (`Promotion`) |
 
 ---
@@ -552,6 +554,50 @@ Example response:
   ]
 }
 ```
+
+## GET /runs/{id}/regression-case-proposal
+
+No auth. Returns a deterministic, read-only `RegressionCaseProposal` for an audited run.
+
+The proposal:
+- copies the original persisted run input,
+- derives agent ID/revision from the run,
+- reuses the learning recommendation's negative-evidence lineage,
+- generates a deterministic default name from the run task,
+- adds the `regression` tag,
+- reads expected behavior only from explicit negative-evaluation metadata keys `expected`, `expected_output`, or `expectedOutput`.
+
+AgentVault does not infer expected behavior from the failed output. If multiple negative evaluations provide conflicting expected objects, `expected` is omitted and `conflicting_expected_hints` is added to `reasonCodes`.
+
+This endpoint does not write an evaluation case.
+
+## POST /runs/{id}/regression-cases
+
+Auth required. Explicitly captures an eligible regression proposal into the caller-selected evaluation dataset.
+
+Request:
+
+```json
+{
+  "datasetId": "ds_...",
+  "name": "optional override",
+  "expected": {"status": "pass"},
+  "tags": ["checkout"]
+}
+```
+
+The stored `EvaluationCase` preserves:
+- `sourceRunId`,
+- `sourceObservationIds`,
+- `sourceEvaluationIds`,
+- `agentId`,
+- `agentRevision`.
+
+If the dataset is scoped to a different agent than the source run, the server returns `409 Conflict`.
+
+Capture is idempotent for a dataset + source run pair: retries return the existing case instead of creating another regression entry. The database also enforces uniqueness for that pair.
+
+AgentVault stores the regression case but does not execute it; experiments remain externally executed and recorded back through the existing experiment/result APIs.
 
 ## POST /runs/{id}/learning-candidates
 
