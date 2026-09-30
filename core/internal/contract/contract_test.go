@@ -341,3 +341,61 @@ func TestLearningRecommendationJSONTags(t *testing.T) {
 		}
 	}
 }
+
+
+func TestRegressionCaseProposalJSONTags(t *testing.T) {
+	proposal := RegressionCaseProposal{
+		RunID: "run_1", AgentID: "agt_1", AgentRevision: 4,
+		Eligible: true, SupportLevel: "strong", Name: "Regression: checkout",
+		Input: map[string]interface{}{"fixture": "checkout-42"},
+		Expected: map[string]interface{}{"status": "pass"},
+		Tags: []string{"regression"},
+		ReasonCodes: []string{"negative_evaluation"},
+		SourceObservationIDs: []string{"obs_1"},
+		SourceEvaluationIDs: []string{"eval_1"},
+	}
+	b, err := json.Marshal(proposal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"runId":"run_1"`,
+		`"agentId":"agt_1"`,
+		`"agentRevision":4`,
+		`"supportLevel":"strong"`,
+		`"name":"Regression: checkout"`,
+		`"input":{"fixture":"checkout-42"}`,
+		`"expected":{"status":"pass"}`,
+		`"sourceEvaluationIds":["eval_1"]`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected proposal JSON to contain %s, got %s", want, got)
+		}
+	}
+}
+
+func TestEvaluationCaseProvenanceJSONTags(t *testing.T) {
+	item := EvaluationCase{
+		ID: "case_1", DatasetID: "ds_1", Name: "Regression",
+		Input: map[string]interface{}{}, Tags: []string{"regression"},
+		SourceRunID: "run_1", SourceObservationIDs: []string{"obs_1"},
+		SourceEvaluationIDs: []string{"eval_1"}, AgentID: "agt_1", AgentRevision: 3,
+	}
+	b, err := json.Marshal(item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"sourceRunId":"run_1"`,
+		`"sourceObservationIds":["obs_1"]`,
+		`"sourceEvaluationIds":["eval_1"]`,
+		`"agentId":"agt_1"`,
+		`"agentRevision":3`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected case provenance JSON to contain %s, got %s", want, got)
+		}
+	}
+}
