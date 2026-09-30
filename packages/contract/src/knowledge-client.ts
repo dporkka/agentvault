@@ -25,6 +25,8 @@ import type {
   ProvenanceRecord,
   SessionEvent,
   StartAgentSessionRequest,
+  TimelineFilter,
+  TimelineItem,
   UpsertKnowledgeObjectRequest,
 } from './knowledge';
 import type {
@@ -59,6 +61,7 @@ export interface KnowledgeClient {
   getSession(id: string): Promise<AgentSession>;
   appendSessionEvent(id: string, req: AppendSessionEventRequest): Promise<SessionEvent>;
   closeSession(id: string, req?: CloseAgentSessionRequest): Promise<AgentSession>;
+  listTimeline(filter?: TimelineFilter): Promise<TimelineItem[]>;
 
   /** Dry-run and persist a reviewable mutation proposal. Never changes the target file. */
   proposeMutation(req: CreateMutationProposalRequest): Promise<MutationProposal>;
@@ -169,6 +172,10 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions = {}): Knowle
     },
     closeSession(id, req = {}) {
       return call<AgentSession>('POST', `/sessions/${encodeURIComponent(id)}/close`, req);
+    },
+    listTimeline(filter = {}) {
+      const qs = queryString(filter);
+      return call<TimelineItem[]>('GET', qs ? `/timeline?${qs}` : '/timeline');
     },
     proposeMutation(req) {
       return call<MutationProposal>('POST', '/mutations', req);
