@@ -1652,3 +1652,61 @@ func TestHandleGetLearningRecommendation(t *testing.T) {
 		}
 	}
 }
+
+
+func TestHandleRegressionCaseProposalAndCapture(t *testing.T) {
+	s, database := setupTestServer(t)
+	defer database.Close()
+
+	if _, err := database.Exec(`
+		INSERT INTO evaluation_datasets (id, name, agent_id, created_at)
+		VALUES ('ds_regression_mcp', 'Regression suite', 'agt_regression_mcp', datetime('now'))
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO agent_runs (
+			id, agent_name, agent_id, agent_revision, task, status, input_json, created_at
+		) VALUES (
+			'run_regression_mcp', 'regression-agent', 'agt_regression_mcp', 2,
+			'fix search regression', 'failed', '{"query":"pricing"}', datetime('now')
+		)
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO run_observations (
+			id, run_id, kind, name, status, input_json, output_json, evidence_json, created_at
+		) VALUES (
+			'obs_regression_mcp', 'run_regression_mcp', 'tool', 'search test', 'failed',
+			'{}', '{}', '{}', datetime('now')
+		)
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	proposal, err := s.handleGetRegressionCaseProposal(map[string]interface{}{
+		"run_id": "run_regression_mcp",
+	})
+	if err != nil {
+		t.Fatalf("handleGetRegressionCaseProposal: %v", err)
+	}
+	for _, want := range []string{"run_regression_mcp", "agt_regression_mcp", "Regression: fix search regression", "weak"} {
+		if !strings.Contains(proposal, want) {
+			t.Fatalf("expected %q in proposal output:\n%s", want, proposal)
+		}
+	}
+
+	captured, err := s.handleCaptureRunRegressionCase(map[string]interface{}{
+		"run_id": "run_regression_mcp", "dataset_id": "ds_regression_mcp",
+		"tags": []interface{}{"search"},
+	})
+	if err != nil {
+		t.Fatalf("handleCaptureRunRegressionCase: %v", err)
+	}
+	for _, want := range []string{"ds_regression_mcp", "run_regression_mcp", "agt_regression_mcp"} {
+		if !strings.Contains(captured, want) {
+			t.Fatalf("expected %q in capture output:\n%s", want, captured)
+		}
+	}
+}
