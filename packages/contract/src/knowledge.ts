@@ -279,7 +279,7 @@ export interface EntityProfile {
 }
 
 
-export type TimelineKind = 'capture' | 'session_event' | 'episode' | 'memory';
+export type TimelineKind = 'capture' | 'session_event' | 'episode' | 'memory' | 'mutation';
 
 export interface TimelineFilter {
   project?: string;
