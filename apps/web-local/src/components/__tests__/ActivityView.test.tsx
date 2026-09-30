@@ -9,6 +9,9 @@ const {
   mockGetSession,
   mockGetObject,
   mockGetMutation,
+  mockListMemoryCandidates,
+  mockAcceptMemoryCandidate,
+  mockRejectMemoryCandidate,
 } = vi.hoisted(() => ({
   mockGetProjects: vi.fn(),
   mockListTimeline: vi.fn(),
@@ -16,6 +19,9 @@ const {
   mockGetSession: vi.fn(),
   mockGetObject: vi.fn(),
   mockGetMutation: vi.fn(),
+  mockListMemoryCandidates: vi.fn(),
+  mockAcceptMemoryCandidate: vi.fn(),
+  mockRejectMemoryCandidate: vi.fn(),
 }));
 
 vi.mock('@/api/client', () => ({
@@ -28,6 +34,9 @@ vi.mock('@/api/client', () => ({
     getSession: mockGetSession,
     getObject: mockGetObject,
     getMutation: mockGetMutation,
+    listMemoryCandidates: mockListMemoryCandidates,
+    acceptMemoryCandidate: mockAcceptMemoryCandidate,
+    rejectMemoryCandidate: mockRejectMemoryCandidate,
   },
 }));
 
@@ -68,9 +77,46 @@ describe('ActivityView', () => {
     mockGetSession.mockReset();
     mockGetObject.mockReset();
     mockGetMutation.mockReset();
+    mockListMemoryCandidates.mockReset();
+    mockAcceptMemoryCandidate.mockReset();
+    mockRejectMemoryCandidate.mockReset();
 
     mockGetProjects.mockResolvedValue(['agentvault', 'adacavo']);
     mockListTimeline.mockResolvedValue([mutation, episode]);
+    mockListMemoryCandidates.mockResolvedValue([]);
+    mockAcceptMemoryCandidate.mockImplementation(async (id: string, request: { reviewedBy: string; reason?: string }) => ({
+      id,
+      sourceEpisodeId: 'episode_candidate_1',
+      memoryKind: 'decision',
+      scopeType: 'project',
+      scopeId: 'agentvault',
+      content: 'Keep deterministic extraction reviewable.',
+      provenanceId: 'prov_candidate_1',
+      confidence: 0.91,
+      status: 'accepted',
+      reviewedBy: request.reviewedBy,
+      reviewReason: request.reason,
+      resultMemoryId: 'mem_candidate_1',
+      createdAt: '2026-09-30T12:10:00Z',
+      updatedAt: '2026-09-30T12:20:00Z',
+      reviewedAt: '2026-09-30T12:20:00Z',
+    }));
+    mockRejectMemoryCandidate.mockImplementation(async (id: string, request: { reviewedBy: string; reason?: string }) => ({
+      id,
+      sourceEpisodeId: 'episode_candidate_1',
+      memoryKind: 'decision',
+      scopeType: 'project',
+      scopeId: 'agentvault',
+      content: 'Keep deterministic extraction reviewable.',
+      provenanceId: 'prov_candidate_1',
+      confidence: 0.91,
+      status: 'rejected',
+      reviewedBy: request.reviewedBy,
+      reviewReason: request.reason,
+      createdAt: '2026-09-30T12:10:00Z',
+      updatedAt: '2026-09-30T12:20:00Z',
+      reviewedAt: '2026-09-30T12:20:00Z',
+    }));
   });
 
   it('loads and renders the unified activity stream', async () => {
@@ -189,4 +235,161 @@ describe('ActivityView', () => {
     expect(screen.getByLabelText('Project')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'All activity' })).toBeInTheDocument();
   });
+
+
+  it('loads the pending memory review queue without mixing candidates into the activity timeline', async () => {
+    mockListMemoryCandidates.mockResolvedValue([{
+      id: 'candidate_1',
+      sourceEpisodeId: 'episode_candidate_1',
+      memoryKind: 'decision',
+      scopeType: 'project',
+      scopeId: 'agentvault',
+      content: 'Keep deterministic extraction reviewable.',
+      provenanceId: 'prov_candidate_1',
+      confidence: 0.91,
+      status: 'pending',
+      proposedBy: 'deterministic-extractor-v1',
+      createdAt: '2026-09-30T12:10:00Z',
+      updatedAt: '2026-09-30T12:10:00Z',
+    }]);
+
+    render(<ActivityView />);
+    await screen.findByText('Architecture changed');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Memory review' }));
+
+    expect(await screen.findByText('Keep deterministic extraction reviewable.')).toBeInTheDocument();
+    expect(screen.getByText('91% confidence')).toBeInTheDocument();
+    expect(screen.getByText('project · agentvault')).toBeInTheDocument();
+    expect(mockListMemoryCandidates).toHaveBeenCalledWith({ status: 'pending', limit: 100 });
+    expect(mockListTimeline).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows source episode, provenance evidence, and scoped context for a selected candidate', async () => {
+    mockListMemoryCandidates.mockResolvedValue([{
+      id: 'candidate_1',
+      sourceEpisodeId: 'episode_candidate_1',
+      memoryKind: 'constraint',
+      scopeType: 'session',
+      scopeId: 'session_1',
+      content: 'Semantic memory requires explicit review.',
+      objectId: 'obj_1',
+      provenanceId: 'prov_candidate_1',
+      confidence: 0.94,
+      status: 'pending',
+      proposedBy: 'deterministic-extractor-v1',
+      createdAt: '2026-09-30T12:10:00Z',
+      updatedAt: '2026-09-30T12:10:00Z',
+    }]);
+    mockGetProvenance.mockResolvedValue({
+      id: 'prov_candidate_1',
+      sourceType: 'session-event',
+      sourceId: 'event_1',
+      confidence: 0.94,
+      observedAt: '2026-09-30T12:09:00Z',
+      createdAt: '2026-09-30T12:10:00Z',
+      evidence: [{
+        source: 'file',
+        path: 'docs/KNOWLEDGE_CORE.md',
+        quote: 'Pending candidates do not enter retrieval.',
+      }],
+    });
+    mockGetSession.mockResolvedValue({
+      id: 'session_1',
+      agentId: 'architect',
+      project: 'agentvault',
+      objective: 'Define memory governance',
+      status: 'active',
+      startedAt: '2026-09-30T10:00:00Z',
+      updatedAt: '2026-09-30T12:00:00Z',
+      events: [],
+    });
+    mockGetObject.mockResolvedValue({
+      id: 'obj_1',
+      type: 'project',
+      title: 'AgentVault',
+      project: 'agentvault',
+      createdAt: '2026-09-29T10:00:00Z',
+      updatedAt: '2026-09-30T10:00:00Z',
+    });
+
+    render(<ActivityView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Memory review' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Semantic memory requires explicit review/i }));
+
+    expect(await screen.findByText('episode_candidate_1')).toBeInTheDocument();
+    expect(screen.getByText('Pending candidates do not enter retrieval.')).toBeInTheDocument();
+    expect(screen.getByText('Define memory governance')).toBeInTheDocument();
+    expect(screen.getByText('AgentVault')).toBeInTheDocument();
+    expect(mockGetProvenance).toHaveBeenCalledWith('prov_candidate_1');
+    expect(mockGetSession).toHaveBeenCalledWith('session_1');
+    expect(mockGetObject).toHaveBeenCalledWith('obj_1');
+  });
+
+  it('accepts a candidate only with an explicit reviewer and removes it from the pending queue', async () => {
+    mockListMemoryCandidates.mockResolvedValue([{
+      id: 'candidate_1',
+      sourceEpisodeId: 'episode_candidate_1',
+      memoryKind: 'decision',
+      scopeType: 'project',
+      scopeId: 'agentvault',
+      content: 'Keep deterministic extraction reviewable.',
+      provenanceId: 'prov_candidate_1',
+      confidence: 0.91,
+      status: 'pending',
+      createdAt: '2026-09-30T12:10:00Z',
+      updatedAt: '2026-09-30T12:10:00Z',
+    }]);
+
+    render(<ActivityView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Memory review' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Keep deterministic extraction reviewable/i }));
+
+    const accept = screen.getByRole('button', { name: 'Accept memory' });
+    expect(accept).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Reviewer'), { target: { value: 'david' } });
+    fireEvent.change(screen.getByLabelText('Review reason'), { target: { value: 'Verified against source evidence.' } });
+    fireEvent.click(accept);
+
+    await waitFor(() =>
+      expect(mockAcceptMemoryCandidate).toHaveBeenCalledWith('candidate_1', {
+        reviewedBy: 'david',
+        reason: 'Verified against source evidence.',
+      }),
+    );
+    expect(await screen.findByText('Candidate accepted.')).toBeInTheDocument();
+    expect(screen.queryByText('Keep deterministic extraction reviewable.')).not.toBeInTheDocument();
+  });
+
+  it('rejects a candidate without creating durable memory', async () => {
+    mockListMemoryCandidates.mockResolvedValue([{
+      id: 'candidate_1',
+      sourceEpisodeId: 'episode_candidate_1',
+      memoryKind: 'fact',
+      scopeType: 'project',
+      scopeId: 'agentvault',
+      content: 'Unverified semantic claim.',
+      provenanceId: 'prov_candidate_1',
+      confidence: 0.55,
+      status: 'pending',
+      createdAt: '2026-09-30T12:10:00Z',
+      updatedAt: '2026-09-30T12:10:00Z',
+    }]);
+
+    render(<ActivityView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Memory review' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Unverified semantic claim/i }));
+    fireEvent.change(screen.getByLabelText('Reviewer'), { target: { value: 'reviewer' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reject candidate' }));
+
+    await waitFor(() =>
+      expect(mockRejectMemoryCandidate).toHaveBeenCalledWith('candidate_1', {
+        reviewedBy: 'reviewer',
+        reason: undefined,
+      }),
+    );
+    expect(await screen.findByText('Candidate rejected.')).toBeInTheDocument();
+  });
+
 });
