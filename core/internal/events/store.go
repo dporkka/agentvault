@@ -4,6 +4,7 @@ package events
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -58,6 +59,21 @@ func NewStore(database *db.DB) *Store {
 }
 
 func (s *Store) Append(ctx context.Context, input AppendInput) (Event, error) {
+	return s.appendWith(ctx, s.db.Conn(), input)
+}
+
+func (s *Store) AppendTx(ctx context.Context, tx *sql.Tx, input AppendInput) (Event, error) {
+	if tx == nil {
+		return Event{}, errors.New("transaction is required")
+	}
+	return s.appendWith(ctx, tx, input)
+}
+
+type execContext interface {
+	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
+}
+
+func (s *Store) appendWith(ctx context.Context, executor execContext, input AppendInput) (Event, error) {
 	if input.Type == "" {
 		return Event{}, errors.New("event type is required")
 	}
@@ -89,7 +105,7 @@ func (s *Store) Append(ctx context.Context, input AppendInput) (Event, error) {
 		occurredAt = recordedAt
 	}
 
-	_, err = s.db.Conn().ExecContext(ctx, `
+	_, err = executor.ExecContext(ctx, `
 		INSERT INTO events (
 			id, event_type, actor_type, actor_id, subject_type, subject_id,
 			scope_type, scope_id, run_id, conversation_id, source_id,
