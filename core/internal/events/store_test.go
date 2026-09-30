@@ -33,6 +33,19 @@ func TestAppendPersistsEventWithProvenance(t *testing.T) {
 	store, database := setupEventStore(t)
 	defer database.Close()
 
+	if _, err := database.Exec(
+		"INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+		"conv_123", "Test conversation", time.Now().UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano),
+	); err != nil {
+		t.Fatalf("seed conversation: %v", err)
+	}
+	if _, err := database.Exec(
+		"INSERT INTO agent_runs (id, agent_name, task, created_at) VALUES (?, ?, ?, ?)",
+		"run_123", "test-agent", "test task", time.Now().UTC().Format(time.RFC3339Nano),
+	); err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+
 	occurred := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
 	event, err := store.Append(context.Background(), AppendInput{
 		Type:         "agent.run.logged",
