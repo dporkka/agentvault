@@ -269,13 +269,18 @@ func (d EvaluationDataset) Validate() error {
 
 // EvaluationCase is a single reproducible input and optional expected outcome.
 type EvaluationCase struct {
-	ID        string
-	DatasetID string
-	Name      string
-	Input     map[string]any
-	Expected  map[string]any
-	Tags      []string
-	CreatedAt string
+	ID                   string
+	DatasetID            string
+	Name                 string
+	Input                map[string]any
+	Expected             map[string]any
+	Tags                 []string
+	SourceRunID          string
+	SourceObservationIDs []string
+	SourceEvaluationIDs  []string
+	AgentID              string
+	AgentRevision        int
+	CreatedAt            string
 }
 
 func (c EvaluationCase) Validate() error {
