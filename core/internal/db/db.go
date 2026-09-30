@@ -321,7 +321,55 @@ CREATE TABLE IF NOT EXISTS promotion_records (
   supersedes_note_id TEXT,
   created_at TEXT NOT NULL,
   reviewed_at TEXT,
+  reviewed_by TEXT,
+  review_note TEXT,
   committed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS evaluation_datasets (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  agent_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS evaluation_cases (
+  id TEXT PRIMARY KEY,
+  dataset_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  input_json TEXT NOT NULL,
+  expected_json TEXT,
+  tags_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(dataset_id) REFERENCES evaluation_datasets(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS experiments (
+  id TEXT PRIMARY KEY,
+  dataset_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  agent_revision INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('planned', 'running', 'completed', 'failed', 'cancelled')),
+  config_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  FOREIGN KEY(dataset_id) REFERENCES evaluation_datasets(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS experiment_results (
+  experiment_id TEXT NOT NULL,
+  case_id TEXT NOT NULL,
+  run_id TEXT,
+  score REAL,
+  label TEXT,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(experiment_id, case_id),
+  FOREIGN KEY(experiment_id) REFERENCES experiments(id) ON DELETE CASCADE,
+  FOREIGN KEY(case_id) REFERENCES evaluation_cases(id) ON DELETE CASCADE,
+  FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS captures (
@@ -359,13 +407,17 @@ CREATE INDEX IF NOT EXISTS idx_evaluations_run ON evaluations(run_id, created_at
 CREATE INDEX IF NOT EXISTS idx_evaluations_observation ON evaluations(observation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_promotion_records_agent ON promotion_records(agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_promotion_records_status ON promotion_records(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_evaluation_cases_dataset ON evaluation_cases(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_experiments_dataset ON experiments(dataset_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_experiments_agent ON experiments(agent_id, agent_revision, created_at);
+CREATE INDEX IF NOT EXISTS idx_experiment_results_run ON experiment_results(run_id);
 `
 	_, err := d.conn.Exec(schema)
 	if err != nil {
 		return fmt.Errorf("failed to run inline migrations: %w", err)
 	}
 	_, err = d.conn.Exec(
-		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, datetime('now'))`,
+		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, datetime('now'))`,
 	)
 	return err
 }
