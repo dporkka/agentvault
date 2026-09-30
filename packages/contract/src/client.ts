@@ -11,9 +11,24 @@ import type {
   AuthVerifyResponse,
   CaptureRequest,
   CaptureResponse,
+  CommitPromotionRequest,
+  ContextCompileRequest,
+  ContextSnapshot,
+  CreateRunRequest,
+  CreateEvaluationCaseRequest,
+  CreateEvaluationDatasetRequest,
+  CreateExperimentRequest,
+  CreateExperimentResultRequest,
   CreateNoteRequest,
   CreateNoteResponse,
   DeleteNoteResponse,
+  EvaluationCase,
+  EvaluationDataset,
+  EvaluationDatasetDetail,
+  Experiment,
+  ExperimentComparison,
+  ExperimentDetail,
+  ExperimentResult,
   Graph,
   GitStatus,
   HealthResponse,
@@ -22,6 +37,16 @@ import type {
   NoteDetail,
   NoteLinks,
   Projects,
+  Promotion,
+  PromotionParams,
+  ProposePromotionRequest,
+  ReviewPromotionRequest,
+  LearningRecommendation,
+  RegressionCaseProposal,
+  RunRegressionCaseCaptureRequest,
+  RunAudit,
+  RunLearningCandidateRequest,
+  RunRecord,
   RecentParams,
   SearchParams,
   SearchResult,
@@ -93,17 +118,37 @@ export interface ApiClient {
   getGitStatus(): Promise<GitStatus>;
   getGraph(center: string, depth?: number): Promise<Graph>;
   getGraphNeighbors(id: string): Promise<Graph>;
+  listPromotions(params?: PromotionParams): Promise<Promotion[]>;
+  proposePromotion(req: ProposePromotionRequest): Promise<Promotion>;
+  reviewPromotion(id: string, req: ReviewPromotionRequest): Promise<Promotion>;
+  commitPromotion(id: string, req: CommitPromotionRequest): Promise<Promotion>;
+  getEvaluationDataset(id: string): Promise<EvaluationDatasetDetail>;
+  createEvaluationDataset(req: CreateEvaluationDatasetRequest): Promise<EvaluationDataset>;
+  createEvaluationCase(datasetId: string, req: CreateEvaluationCaseRequest): Promise<EvaluationCase>;
+  getExperiment(id: string): Promise<ExperimentDetail>;
+  compareExperiments(baselineId: string, candidateId: string): Promise<ExperimentComparison>;
+  createExperiment(req: CreateExperimentRequest): Promise<Experiment>;
+  createExperimentResult(experimentId: string, req: CreateExperimentResultRequest): Promise<ExperimentResult>;
+  compileContext(agentId: string, req: ContextCompileRequest): Promise<ContextSnapshot>;
+  getContextSnapshot(hash: string): Promise<ContextSnapshot>;
+  createRun(req: CreateRunRequest): Promise<RunRecord>;
+  getRunAudit(id: string): Promise<RunAudit>;
+  getLearningRecommendation(id: string): Promise<LearningRecommendation>;
+  getRegressionCaseProposal(id: string): Promise<RegressionCaseProposal>;
+  captureRunRegressionCase(id: string, req: RunRegressionCaseCaptureRequest): Promise<EvaluationCase>;
+  proposeRunLearning(id: string, req: RunLearningCandidateRequest): Promise<Promotion>;
   pinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
   unpinNote(id: string): Promise<{path: string; id: string; pinned: boolean}>;
 }
 
-function buildSearch(params: SearchParams | RecentParams | StaleParams | undefined): string {
+function buildSearch(params: SearchParams | RecentParams | StaleParams | PromotionParams | undefined): string {
   const sp = new URLSearchParams();
   if (!params) return '';
   // The server expects snake_case for these query params while the TS API
   // stays camelCase to match the rest of the contract.
   const keyMap: Record<string, string> = {
     hybridWeight: 'hybrid_weight',
+    agentId: 'agent_id',
   };
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined || v === null) continue;
@@ -241,6 +286,69 @@ export function createClient(opts: CreateClientOptions = {}): ApiClient {
     },
     getGraphNeighbors(id) {
       return call<Graph>('GET', `/graph/neighbors?id=${encodeURIComponent(id)}`, undefined, false);
+    },
+    listPromotions(params) {
+      const qs = buildSearch(params);
+      return call<Promotion[]>('GET', qs ? `/promotions?${qs}` : '/promotions', undefined, false);
+    },
+    proposePromotion(req) {
+      return call<Promotion>('POST', '/promotions', req);
+    },
+    reviewPromotion(id, req) {
+      return call<Promotion>('POST', `/promotions/${encodeURIComponent(id)}/review`, req);
+    },
+    commitPromotion(id, req) {
+      return call<Promotion>('POST', `/promotions/${encodeURIComponent(id)}/commit`, req);
+    },
+    getEvaluationDataset(id) {
+      return call<EvaluationDatasetDetail>('GET', `/evaluation-datasets/${encodeURIComponent(id)}`, undefined, false);
+    },
+    createEvaluationDataset(req) {
+      return call<EvaluationDataset>('POST', '/evaluation-datasets', req);
+    },
+    createEvaluationCase(datasetId, req) {
+      return call<EvaluationCase>('POST', `/evaluation-datasets/${encodeURIComponent(datasetId)}/cases`, req);
+    },
+    getExperiment(id) {
+      return call<ExperimentDetail>('GET', `/experiments/${encodeURIComponent(id)}`, undefined, false);
+    },
+    compareExperiments(baselineId, candidateId) {
+      return call<ExperimentComparison>(
+        'GET',
+        `/experiments/${encodeURIComponent(baselineId)}/compare/${encodeURIComponent(candidateId)}`,
+        undefined,
+        false,
+      );
+    },
+    createExperiment(req) {
+      return call<Experiment>('POST', '/experiments', req);
+    },
+    createExperimentResult(experimentId, req) {
+      return call<ExperimentResult>('POST', `/experiments/${encodeURIComponent(experimentId)}/results`, req);
+    },
+    compileContext(agentId, req) {
+      return call<ContextSnapshot>('POST', `/agents/${encodeURIComponent(agentId)}/context`, req);
+    },
+    getContextSnapshot(hash) {
+      return call<ContextSnapshot>('GET', `/contexts/${encodeURIComponent(hash)}`, undefined, false);
+    },
+    createRun(req) {
+      return call<RunRecord>('POST', '/runs', req);
+    },
+    getRunAudit(id) {
+      return call<RunAudit>('GET', `/runs/${encodeURIComponent(id)}/audit`, undefined, false);
+    },
+    getLearningRecommendation(id) {
+      return call<LearningRecommendation>('GET', `/runs/${encodeURIComponent(id)}/learning-recommendation`, undefined, false);
+    },
+    getRegressionCaseProposal(id) {
+      return call<RegressionCaseProposal>('GET', `/runs/${encodeURIComponent(id)}/regression-case-proposal`, undefined, false);
+    },
+    captureRunRegressionCase(id, req) {
+      return call<EvaluationCase>('POST', `/runs/${encodeURIComponent(id)}/regression-cases`, req);
+    },
+    proposeRunLearning(id, req) {
+      return call<Promotion>('POST', `/runs/${encodeURIComponent(id)}/learning-candidates`, req);
     },
     pinNote(id) {
       return call<{path: string; id: string; pinned: boolean}>('POST', `/notes/${encodeURIComponent(id)}/pin`, undefined, true);

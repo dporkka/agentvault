@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,16 +13,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/agentstate"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/git"
+	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
 	"github.com/agentvault/core/internal/rag"
 	"github.com/agentvault/core/internal/search"
-	"github.com/agentvault/core/internal/graph"
+	"github.com/agentvault/core/internal/templates"
 	"github.com/agentvault/core/internal/vault"
 	"gopkg.in/yaml.v3"
-	"github.com/agentvault/core/internal/templates"
 )
 
 // ── Health ──────────────────────────────────────────────────────────
@@ -766,11 +768,11 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Question     string  `json:"question"`
-		UseVector    *bool   `json:"useVector,omitempty"`
+		Question     string   `json:"question"`
+		UseVector    *bool    `json:"useVector,omitempty"`
 		HybridWeight *float64 `json:"hybridWeight,omitempty"`
-		TopK         *int    `json:"topK,omitempty"`
-		MaxSources   *int    `json:"maxSources,omitempty"`
+		TopK         *int     `json:"topK,omitempty"`
+		MaxSources   *int     `json:"maxSources,omitempty"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
@@ -805,25 +807,25 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.HybridWeight != nil {
 			opts.HybridWeight = *req.HybridWeight
+		}
+		if req.TopK != nil {
+			opts.TopK = *req.TopK
+		}
+		if req.MaxSources != nil {
+			opts.MaxSources = *req.MaxSources
+		}
 	}
-	if req.TopK != nil {
-		opts.TopK = *req.TopK
-	}
-	if req.MaxSources != nil {
-		opts.MaxSources = *req.MaxSources
-	}
-}
 
-answer, err := rag.New(s.searcher, provider).AskWithOptions(r.Context(), req.Question, opts)
-if err != nil {
-	writeJSON(w, http.StatusBadGateway, map[string]interface{}{
-		"error":  "AI provider failed",
-		"detail": err.Error(),
-	})
-	return
-}
+	answer, err := rag.New(s.searcher, provider).AskWithOptions(r.Context(), req.Question, opts)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]interface{}{
+			"error":  "AI provider failed",
+			"detail": err.Error(),
+		})
+		return
+	}
 
-writeJSON(w, http.StatusOK, answer)
+	writeJSON(w, http.StatusOK, answer)
 }
 
 // ── Daily Note ───────────────────────────────────────────────────────
@@ -1397,7 +1399,6 @@ func (s *Server) handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-
 // ── Graph ────────────────────────────────────────────────────────────
 
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
@@ -1452,10 +1453,647 @@ func (s *Server) handleGraphNeighbors(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, g)
 }
+
 // safeCloseBody is a helper to safely close request bodies.
 func safeCloseBody(r *http.Request) {
 	if r != nil && r.Body != nil {
 		_, _ = io.Copy(io.Discard, r.Body)
 		r.Body.Close()
 	}
+}
+
+// ── Agent State Reads ────────────────────────────────────────────────
+
+func (s *Server) handlePromotions(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status")
+	agentID := r.URL.Query().Get("agent_id")
+	limit := 50
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	items, err := agentstate.ListPromotions(s.db, status, agentID, limit)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "invalid promotion status") {
+			code = http.StatusBadRequest
+		}
+		writeJSON(w, code, map[string]interface{}{"error": "promotion query failed", "detail": err.Error()})
+		return
+	}
+
+	out := make([]contract.Promotion, 0, len(items))
+	for _, item := range items {
+		out = append(out, contract.Promotion{
+			ID:                   item.ID,
+			AgentID:              item.AgentID,
+			TargetKind:           string(item.TargetKind),
+			Status:               string(item.Status),
+			Candidate:            item.Candidate,
+			Rationale:            item.Rationale,
+			SourceRunIDs:         item.SourceRunIDs,
+			SourceObservationIDs: item.SourceObservationIDs,
+			SourceEvaluationIDs:  item.SourceEvaluationIDs,
+			TargetNoteID:         item.TargetNoteID,
+			SupersedesNoteID:     item.SupersedesNoteID,
+			CreatedAt:            item.CreatedAt,
+			ReviewedAt:           item.ReviewedAt,
+			ReviewedBy:           item.ReviewedBy,
+			ReviewNote:           item.ReviewNote,
+			CommittedAt:          item.CommittedAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleEvaluationDataset(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "missing dataset id"})
+		return
+	}
+
+	item, err := agentstate.GetEvaluationDataset(s.db, id)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "not found") {
+			code = http.StatusNotFound
+		}
+		writeJSON(w, code, map[string]interface{}{"error": "dataset lookup failed", "detail": err.Error()})
+		return
+	}
+
+	out := contract.EvaluationDatasetDetail{
+		EvaluationDataset: contract.EvaluationDataset{
+			ID: item.ID, Name: item.Name, Description: item.Description,
+			AgentID: item.AgentID, CreatedAt: item.CreatedAt,
+		},
+		Cases: make([]contract.EvaluationCase, 0, len(item.Cases)),
+	}
+	for _, evaluationCase := range item.Cases {
+		out.Cases = append(out.Cases, evaluationCaseResponse(&evaluationCase))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleExperiment(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "missing experiment id"})
+		return
+	}
+
+	item, err := agentstate.GetExperiment(s.db, id)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "not found") {
+			code = http.StatusNotFound
+		}
+		writeJSON(w, code, map[string]interface{}{"error": "experiment lookup failed", "detail": err.Error()})
+		return
+	}
+
+	out := contract.ExperimentDetail{
+		Experiment: contract.Experiment{
+			ID: item.ID, DatasetID: item.DatasetID, Name: item.Name,
+			AgentID: item.AgentID, AgentRevision: item.AgentRevision,
+			Status: string(item.Status), Config: item.Config,
+			CreatedAt: item.CreatedAt, CompletedAt: item.CompletedAt,
+		},
+		Results: make([]contract.ExperimentResult, 0, len(item.Results)),
+	}
+	for _, result := range item.Results {
+		out.Results = append(out.Results, contract.ExperimentResult{
+			ExperimentID: result.ExperimentID, CaseID: result.CaseID, RunID: result.RunID,
+			Score: result.Score, Label: result.Label, Metadata: result.Metadata, CreatedAt: result.CreatedAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// ── Agent State Writes ───────────────────────────────────────────────
+
+func writeAgentStateError(w http.ResponseWriter, summary string, err error) {
+	status := http.StatusInternalServerError
+	switch {
+	case errors.Is(err, agentstate.ErrInvalid):
+		status = http.StatusBadRequest
+	case errors.Is(err, agentstate.ErrNotFound):
+		status = http.StatusNotFound
+	case errors.Is(err, agentstate.ErrConflict):
+		status = http.StatusConflict
+	case errors.Is(err, agentstate.ErrStorage):
+		status = http.StatusInternalServerError
+	}
+	writeJSON(w, status, map[string]interface{}{"error": summary, "detail": err.Error()})
+}
+
+func promotionResponse(item *agentstate.PromotionRecord) contract.Promotion {
+	return contract.Promotion{
+		ID:                   item.ID,
+		AgentID:              item.AgentID,
+		TargetKind:           string(item.TargetKind),
+		Status:               string(item.Status),
+		Candidate:            item.Candidate,
+		Rationale:            item.Rationale,
+		SourceRunIDs:         item.SourceRunIDs,
+		SourceObservationIDs: item.SourceObservationIDs,
+		SourceEvaluationIDs:  item.SourceEvaluationIDs,
+		TargetNoteID:         item.TargetNoteID,
+		SupersedesNoteID:     item.SupersedesNoteID,
+		CreatedAt:            item.CreatedAt,
+		ReviewedAt:           item.ReviewedAt,
+		ReviewedBy:           item.ReviewedBy,
+		ReviewNote:           item.ReviewNote,
+		CommittedAt:          item.CommittedAt,
+	}
+}
+
+func evaluationDatasetResponse(item *agentstate.EvaluationDataset) contract.EvaluationDataset {
+	return contract.EvaluationDataset{
+		ID: item.ID, Name: item.Name, Description: item.Description,
+		AgentID: item.AgentID, CreatedAt: item.CreatedAt,
+	}
+}
+
+func evaluationCaseResponse(item *agentstate.EvaluationCase) contract.EvaluationCase {
+	return contract.EvaluationCase{
+		ID: item.ID, DatasetID: item.DatasetID, Name: item.Name,
+		Input: item.Input, Expected: item.Expected, Tags: item.Tags,
+		SourceRunID: item.SourceRunID, SourceObservationIDs: item.SourceObservationIDs,
+		SourceEvaluationIDs: item.SourceEvaluationIDs, AgentID: item.AgentID,
+		AgentRevision: item.AgentRevision, CreatedAt: item.CreatedAt,
+	}
+}
+
+func experimentResponse(item *agentstate.Experiment) contract.Experiment {
+	return contract.Experiment{
+		ID: item.ID, DatasetID: item.DatasetID, Name: item.Name,
+		AgentID: item.AgentID, AgentRevision: item.AgentRevision,
+		Status: string(item.Status), Config: item.Config,
+		CreatedAt: item.CreatedAt, CompletedAt: item.CompletedAt,
+	}
+}
+
+func experimentResultResponse(item *agentstate.ExperimentResult) contract.ExperimentResult {
+	return contract.ExperimentResult{
+		ExperimentID: item.ExperimentID, CaseID: item.CaseID, RunID: item.RunID,
+		Score: item.Score, Label: item.Label, Metadata: item.Metadata, CreatedAt: item.CreatedAt,
+	}
+}
+
+func (s *Server) handleProposePromotion(w http.ResponseWriter, r *http.Request) {
+	var req contract.ProposePromotionRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.ProposePromotion(s.db, agentstate.PromotionRecord{
+		AgentID:              req.AgentID,
+		TargetKind:           agentstate.PromotionTargetKind(req.TargetKind),
+		Candidate:            req.Candidate,
+		Rationale:            req.Rationale,
+		SourceRunIDs:         req.SourceRunIDs,
+		SourceObservationIDs: req.SourceObservationIDs,
+		SourceEvaluationIDs:  req.SourceEvaluationIDs,
+		SupersedesNoteID:     req.SupersedesNoteID,
+	})
+	if err != nil {
+		writeAgentStateError(w, "promotion proposal failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, promotionResponse(item))
+}
+
+func (s *Server) handleReviewPromotion(w http.ResponseWriter, r *http.Request) {
+	var req contract.ReviewPromotionRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	var decision agentstate.PromotionStatus
+	switch req.Decision {
+	case "approve":
+		decision = agentstate.PromotionApproved
+	case "reject":
+		decision = agentstate.PromotionRejected
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid review decision", "detail": "decision must be approve or reject"})
+		return
+	}
+
+	item, err := agentstate.ReviewPromotion(s.db, r.PathValue("id"), decision, req.Reviewer, req.Note)
+	if err != nil {
+		writeAgentStateError(w, "promotion review failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, promotionResponse(item))
+}
+
+func (s *Server) handleCommitPromotion(w http.ResponseWriter, r *http.Request) {
+	var req contract.CommitPromotionRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	promotionID := r.PathValue("id")
+	item, err := agentstate.GetPromotion(s.db, promotionID)
+	if err != nil {
+		writeAgentStateError(w, "promotion lookup failed", err)
+		return
+	}
+	if req.TargetNoteID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": "targetNoteId is required"})
+		return
+	}
+
+	note, err := s.searcher.GetByID(req.TargetNoteID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]interface{}{"error": "target note not found", "detail": err.Error()})
+		return
+	}
+	fullPath := filepath.Join(s.vaultPath, note.Path)
+	absFull, err := filepath.Abs(fullPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "failed to resolve target note", "detail": err.Error()})
+		return
+	}
+	absVault, err := filepath.Abs(s.vaultPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "failed to resolve vault", "detail": err.Error()})
+		return
+	}
+	clean := filepath.Clean(absFull)
+	vaultClean := filepath.Clean(absVault)
+	if !strings.HasPrefix(clean, vaultClean+string(filepath.Separator)) && clean != vaultClean {
+		writeJSON(w, http.StatusForbidden, map[string]interface{}{"error": "path traversal detected"})
+		return
+	}
+	doc, err := markdown.ParseFile(clean)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "target note is not readable canonical Markdown", "detail": err.Error()})
+		return
+	}
+	if !strings.Contains(doc.Body, item.Candidate) {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "target note does not contain promotion candidate text"})
+		return
+	}
+
+	committed, err := agentstate.CommitPromotion(s.db, promotionID, req.TargetNoteID)
+	if err != nil {
+		writeAgentStateError(w, "promotion commit failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, promotionResponse(committed))
+}
+
+func (s *Server) handleCreateEvaluationDataset(w http.ResponseWriter, r *http.Request) {
+	var req contract.CreateEvaluationDatasetRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.CreateEvaluationDataset(s.db, agentstate.EvaluationDataset{
+		Name: req.Name, Description: req.Description, AgentID: req.AgentID,
+	})
+	if err != nil {
+		writeAgentStateError(w, "evaluation dataset creation failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, evaluationDatasetResponse(item))
+}
+
+func (s *Server) handleCreateEvaluationCase(w http.ResponseWriter, r *http.Request) {
+	var req contract.CreateEvaluationCaseRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.AddEvaluationCase(s.db, agentstate.EvaluationCase{
+		DatasetID: r.PathValue("id"),
+		Name:      req.Name,
+		Input:     req.Input,
+		Expected:  req.Expected,
+		Tags:      req.Tags,
+	})
+	if err != nil {
+		writeAgentStateError(w, "evaluation case creation failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, evaluationCaseResponse(item))
+}
+
+func (s *Server) handleRecordExperiment(w http.ResponseWriter, r *http.Request) {
+	var req contract.CreateExperimentRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.RecordExperiment(s.db, agentstate.Experiment{
+		DatasetID: req.DatasetID, Name: req.Name,
+		AgentID: req.AgentID, AgentRevision: req.AgentRevision,
+		Status: agentstate.ExperimentStatus(req.Status), Config: req.Config,
+	})
+	if err != nil {
+		writeAgentStateError(w, "experiment recording failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, experimentResponse(item))
+}
+
+func (s *Server) handleRecordExperimentResult(w http.ResponseWriter, r *http.Request) {
+	var req contract.CreateExperimentResultRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.RecordExperimentResult(s.db, agentstate.ExperimentResult{
+		ExperimentID: r.PathValue("id"),
+		CaseID:       req.CaseID,
+		RunID:        req.RunID,
+		Score:        req.Score,
+		Label:        req.Label,
+		Metadata:     req.Metadata,
+	})
+	if err != nil {
+		writeAgentStateError(w, "experiment result recording failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, experimentResultResponse(item))
+}
+
+// ── Context Compiler ─────────────────────────────────────────────────
+
+func contextSnapshotResponse(item *agentstate.ContextSnapshot) contract.ContextSnapshot {
+	sections := make([]contract.ContextSection, 0, len(item.Sections))
+	for _, section := range item.Sections {
+		sections = append(sections, contract.ContextSection{
+			Kind: string(section.Kind), SourceID: section.SourceID,
+			SourcePath: section.SourcePath, Title: section.Title, Content: section.Content,
+		})
+	}
+	unresolved := make([]contract.ContextReferenceIssue, 0, len(item.Unresolved))
+	for _, issue := range item.Unresolved {
+		unresolved = append(unresolved, contract.ContextReferenceIssue{
+			Kind: string(issue.Kind), SourceID: issue.SourceID, Reason: issue.Reason,
+		})
+	}
+	return contract.ContextSnapshot{
+		Hash: item.Hash, AgentID: item.AgentID, AgentRevision: item.AgentRevision,
+		AgentTitle: item.AgentTitle, Task: item.Task, ConversationID: item.ConversationID,
+		KnowledgeScopes: item.KnowledgeScopes, ArtifactScopes: item.ArtifactScopes,
+		ConversationScopes: item.ConversationScopes, CapabilityRefs: item.CapabilityRefs,
+		ContextPolicyRef: item.ContextPolicyRef, Sections: sections,
+		Unresolved: unresolved, Text: item.Text,
+	}
+}
+
+func (s *Server) handleCompileContext(w http.ResponseWriter, r *http.Request) {
+	var req contract.ContextCompileRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.CompileContext(s.db, s.vaultPath, agentstate.ContextCompileRequest{
+		AgentID:                 r.PathValue("id"),
+		Task:                    req.Task,
+		ConversationID:          req.ConversationID,
+		RetrievedNoteIDs:        req.RetrievedNoteIDs,
+		ArtifactNoteIDs:         req.ArtifactNoteIDs,
+		MaxConversationMessages: req.MaxConversationMessages,
+	})
+	if err != nil {
+		writeAgentStateError(w, "context compilation failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, contextSnapshotResponse(item))
+}
+
+func (s *Server) handleGetContextSnapshot(w http.ResponseWriter, r *http.Request) {
+	item, err := agentstate.GetContextSnapshot(s.db, r.PathValue("hash"))
+	if err != nil {
+		writeAgentStateError(w, "context snapshot lookup failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, contextSnapshotResponse(item))
+}
+
+// ── Run Evidence Audit ───────────────────────────────────────────────
+
+func runRecordResponse(item agentstate.RunRecord) contract.RunRecord {
+	return contract.RunRecord{
+		ID: item.ID, AgentName: item.AgentName, AgentID: item.AgentID,
+		AgentRevision: item.AgentRevision, Task: item.Task, Status: string(item.Status),
+		ConversationID: item.ConversationID, ContextHash: item.ContextHash,
+		Input: item.Input, Output: item.Output, CapabilitySnapshot: item.CapabilitySnapshot,
+		RuntimeMetadata: item.RuntimeMetadata, StartedAt: item.StartedAt, EndedAt: item.EndedAt,
+		FilesChanged: item.FilesChanged, CreatedAt: item.CreatedAt,
+	}
+}
+
+func runAuditResponse(item *agentstate.RunAudit) contract.RunAudit {
+	observations := make([]contract.RunObservation, 0, len(item.Observations))
+	for _, observation := range item.Observations {
+		observations = append(observations, contract.RunObservation{
+			ID: observation.ID, RunID: observation.RunID,
+			ParentObservationID: observation.ParentObservationID,
+			Kind:                string(observation.Kind), Name: observation.Name, Status: observation.Status,
+			Input: observation.Input, Output: observation.Output, Evidence: observation.Evidence,
+			StartedAt: observation.StartedAt, EndedAt: observation.EndedAt, CreatedAt: observation.CreatedAt,
+		})
+	}
+
+	evaluations := make([]contract.RunEvaluation, 0, len(item.Evaluations))
+	for _, evaluation := range item.Evaluations {
+		evaluations = append(evaluations, contract.RunEvaluation{
+			ID: evaluation.ID, RunID: evaluation.RunID, ObservationID: evaluation.ObservationID,
+			Evaluator: evaluation.Evaluator, Name: evaluation.Name, Score: evaluation.Score,
+			Label: evaluation.Label, Rationale: evaluation.Rationale,
+			Metadata: evaluation.Metadata, CreatedAt: evaluation.CreatedAt,
+		})
+	}
+
+	var contextSnapshot *contract.ContextSnapshot
+	if item.Context != nil {
+		mapped := contextSnapshotResponse(item.Context)
+		contextSnapshot = &mapped
+	}
+
+	return contract.RunAudit{
+		Run: runRecordResponse(item.Run), Context: contextSnapshot,
+		Observations: observations, Evaluations: evaluations,
+	}
+}
+
+func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
+	var req contract.CreateRunRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.RecordRun(s.db, agentstate.RunRecord{
+		AgentName: req.AgentName, AgentID: req.AgentID, AgentRevision: req.AgentRevision,
+		Task: req.Task, Status: agentstate.RunStatus(req.Status),
+		ConversationID: req.ConversationID, ContextHash: req.ContextHash,
+		Input: req.Input, Output: req.Output, CapabilitySnapshot: req.CapabilitySnapshot,
+		RuntimeMetadata: req.RuntimeMetadata, StartedAt: req.StartedAt, EndedAt: req.EndedAt,
+		FilesChanged: req.FilesChanged,
+	})
+	if err != nil {
+		writeAgentStateError(w, "run recording failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, runRecordResponse(*item))
+}
+
+func (s *Server) handleRunAudit(w http.ResponseWriter, r *http.Request) {
+	item, err := agentstate.GetRunAudit(s.db, r.PathValue("id"))
+	if err != nil {
+		writeAgentStateError(w, "run audit lookup failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, runAuditResponse(item))
+}
+
+func (s *Server) handleProposeRunLearning(w http.ResponseWriter, r *http.Request) {
+	var req contract.RunLearningCandidateRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.ProposeRunLearningCandidate(s.db, agentstate.RunLearningCandidate{
+		RunID:                r.PathValue("id"),
+		TargetKind:           agentstate.PromotionTargetKind(req.TargetKind),
+		Candidate:            req.Candidate,
+		Rationale:            req.Rationale,
+		SourceObservationIDs: req.SourceObservationIDs,
+		SourceEvaluationIDs:  req.SourceEvaluationIDs,
+		SupersedesNoteID:     req.SupersedesNoteID,
+	})
+	if err != nil {
+		writeAgentStateError(w, "run learning proposal failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, promotionResponse(item))
+}
+
+func learningRecommendationResponse(item *agentstate.LearningRecommendation) contract.LearningRecommendation {
+	signals := make([]contract.LearningSignal, 0, len(item.Signals))
+	for _, signal := range item.Signals {
+		signals = append(signals, contract.LearningSignal{
+			Kind: string(signal.Kind), ID: signal.ID, ObservationID: signal.ObservationID,
+			Name: signal.Name, Status: signal.Status, Label: signal.Label,
+			Score: signal.Score, Rationale: signal.Rationale,
+		})
+	}
+	return contract.LearningRecommendation{
+		RunID: item.RunID, AgentID: item.AgentID, AgentRevision: item.AgentRevision,
+		Eligible: item.Eligible, SupportLevel: string(item.SupportLevel),
+		EvidenceCount: item.EvidenceCount, SuggestedTargetKind: string(item.SuggestedTargetKind),
+		ReasonCodes: item.ReasonCodes, SourceObservationIDs: item.SourceObservationIDs,
+		SourceEvaluationIDs: item.SourceEvaluationIDs, ContextMemoryRefs: item.ContextMemoryRefs,
+		SupersedesNoteIDs: item.SupersedesNoteIDs, Signals: signals,
+	}
+}
+
+func (s *Server) handleLearningRecommendation(w http.ResponseWriter, r *http.Request) {
+	item, err := agentstate.RecommendRunLearning(s.db, r.PathValue("id"))
+	if err != nil {
+		writeAgentStateError(w, "learning recommendation lookup failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, learningRecommendationResponse(item))
+}
+
+func regressionCaseProposalResponse(item *agentstate.RegressionCaseProposal) contract.RegressionCaseProposal {
+	return contract.RegressionCaseProposal{
+		RunID: item.RunID, AgentID: item.AgentID, AgentRevision: item.AgentRevision,
+		Eligible: item.Eligible, SupportLevel: string(item.SupportLevel), Name: item.Name,
+		Input: item.Input, Expected: item.Expected, Tags: item.Tags,
+		ReasonCodes: item.ReasonCodes, SourceObservationIDs: item.SourceObservationIDs,
+		SourceEvaluationIDs: item.SourceEvaluationIDs,
+	}
+}
+
+func (s *Server) handleRegressionCaseProposal(w http.ResponseWriter, r *http.Request) {
+	item, err := agentstate.RecommendRunRegressionCase(s.db, r.PathValue("id"))
+	if err != nil {
+		writeAgentStateError(w, "regression case proposal lookup failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, regressionCaseProposalResponse(item))
+}
+
+func (s *Server) handleCaptureRunRegressionCase(w http.ResponseWriter, r *http.Request) {
+	var req contract.RunRegressionCaseCaptureRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request", "detail": err.Error()})
+		return
+	}
+
+	item, err := agentstate.CaptureRunRegressionCase(s.db, agentstate.RunRegressionCaseCapture{
+		RunID: r.PathValue("id"), DatasetID: req.DatasetID, Name: req.Name,
+		Expected: req.Expected, Tags: req.Tags,
+	})
+	if err != nil {
+		writeAgentStateError(w, "regression case capture failed", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, evaluationCaseResponse(item))
+}
+
+func experimentComparisonResponse(item *agentstate.ExperimentComparison) contract.ExperimentComparison {
+	cases := make([]contract.ExperimentCaseComparison, 0, len(item.Cases))
+	for _, comparison := range item.Cases {
+		cases = append(cases, contract.ExperimentCaseComparison{
+			CaseID: comparison.CaseID, CaseName: comparison.CaseName,
+			Transition:    string(comparison.Transition),
+			BaselineRunID: comparison.BaselineRunID, CandidateRunID: comparison.CandidateRunID,
+			BaselineLabel: comparison.BaselineLabel, CandidateLabel: comparison.CandidateLabel,
+			BaselineScore: comparison.BaselineScore, CandidateScore: comparison.CandidateScore,
+			ScoreDelta: comparison.ScoreDelta,
+		})
+	}
+	return contract.ExperimentComparison{
+		BaselineExperimentID:  item.BaselineExperimentID,
+		CandidateExperimentID: item.CandidateExperimentID,
+		DatasetID:             item.DatasetID, AgentID: item.AgentID,
+		BaselineAgentRevision:  item.BaselineAgentRevision,
+		CandidateAgentRevision: item.CandidateAgentRevision,
+		Comparable:             item.Comparable, ReasonCodes: item.ReasonCodes,
+		Summary: contract.ExperimentComparisonSummary{
+			TotalCases: item.Summary.TotalCases, PairedResults: item.Summary.PairedResults,
+			Fixes: item.Summary.Fixes, Regressions: item.Summary.Regressions,
+			StablePass: item.Summary.StablePass, StableFail: item.Summary.StableFail,
+			Unclassified:     item.Summary.Unclassified,
+			MissingBaseline:  item.Summary.MissingBaseline,
+			MissingCandidate: item.Summary.MissingCandidate,
+		},
+		Cases: cases,
+	}
+}
+
+func (s *Server) handleExperimentComparison(w http.ResponseWriter, r *http.Request) {
+	item, err := agentstate.CompareExperiments(
+		s.db,
+		r.PathValue("id"),
+		r.PathValue("candidateId"),
+	)
+	if err != nil {
+		writeAgentStateError(w, "experiment comparison failed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, experimentComparisonResponse(item))
 }

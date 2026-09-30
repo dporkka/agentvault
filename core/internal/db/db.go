@@ -246,6 +246,139 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   input_json TEXT,
   output_json TEXT,
   files_changed_json TEXT,
+  agent_id TEXT,
+  agent_revision INTEGER,
+  conversation_id TEXT,
+  status TEXT NOT NULL DEFAULT 'succeeded',
+  started_at TEXT,
+  ended_at TEXT,
+  context_hash TEXT,
+  capability_snapshot_json TEXT,
+  runtime_metadata_json TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS conversations (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT 'Untitled',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
+  content TEXT NOT NULL,
+  sources_json TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS run_observations (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  parent_observation_id TEXT,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  status TEXT,
+  input_json TEXT,
+  output_json TEXT,
+  evidence_json TEXT,
+  started_at TEXT,
+  ended_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE,
+  FOREIGN KEY(parent_observation_id) REFERENCES run_observations(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS evaluations (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  observation_id TEXT,
+  evaluator TEXT NOT NULL,
+  name TEXT NOT NULL,
+  score REAL,
+  label TEXT,
+  rationale TEXT,
+  metadata_json TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE,
+  FOREIGN KEY(observation_id) REFERENCES run_observations(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS promotion_records (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  target_kind TEXT NOT NULL CHECK(target_kind IN ('memory', 'knowledge')),
+  status TEXT NOT NULL CHECK(status IN ('proposed', 'approved', 'rejected', 'committed', 'superseded')),
+  candidate TEXT NOT NULL,
+  rationale TEXT,
+  source_run_ids_json TEXT NOT NULL DEFAULT '[]',
+  source_observation_ids_json TEXT NOT NULL DEFAULT '[]',
+  source_evaluation_ids_json TEXT NOT NULL DEFAULT '[]',
+  target_note_id TEXT,
+  supersedes_note_id TEXT,
+  created_at TEXT NOT NULL,
+  reviewed_at TEXT,
+  reviewed_by TEXT,
+  review_note TEXT,
+  committed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS evaluation_datasets (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  agent_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS evaluation_cases (
+  id TEXT PRIMARY KEY,
+  dataset_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  input_json TEXT NOT NULL,
+  expected_json TEXT,
+  tags_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(dataset_id) REFERENCES evaluation_datasets(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS experiments (
+  id TEXT PRIMARY KEY,
+  dataset_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  agent_revision INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('planned', 'running', 'completed', 'failed', 'cancelled')),
+  config_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  FOREIGN KEY(dataset_id) REFERENCES evaluation_datasets(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS experiment_results (
+  experiment_id TEXT NOT NULL,
+  case_id TEXT NOT NULL,
+  run_id TEXT,
+  score REAL,
+  label TEXT,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(experiment_id, case_id),
+  FOREIGN KEY(experiment_id) REFERENCES experiments(id) ON DELETE CASCADE,
+  FOREIGN KEY(case_id) REFERENCES evaluation_cases(id) ON DELETE CASCADE,
+  FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS context_snapshots (
+  hash TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  agent_revision INTEGER NOT NULL,
+  task TEXT,
+  conversation_id TEXT,
+  context_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
 
@@ -274,13 +407,28 @@ CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
 CREATE INDEX IF NOT EXISTS idx_links_from ON links(from_note_id);
 CREATE INDEX IF NOT EXISTS idx_links_to ON links(to_note_id);
 CREATE INDEX IF NOT EXISTS idx_captures_project ON captures(project);
+CREATE INDEX IF NOT EXISTS idx_conv_messages_conv ON conversation_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conv_messages_created ON conversation_messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_agent ON agent_runs(agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_conversation ON agent_runs(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_run_observations_run ON run_observations(run_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_run_observations_kind ON run_observations(kind, created_at);
+CREATE INDEX IF NOT EXISTS idx_evaluations_run ON evaluations(run_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_evaluations_observation ON evaluations(observation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_promotion_records_agent ON promotion_records(agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_promotion_records_status ON promotion_records(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_evaluation_cases_dataset ON evaluation_cases(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_experiments_dataset ON experiments(dataset_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_experiments_agent ON experiments(agent_id, agent_revision, created_at);
+CREATE INDEX IF NOT EXISTS idx_experiment_results_run ON experiment_results(run_id);
+CREATE INDEX IF NOT EXISTS idx_context_snapshots_agent ON context_snapshots(agent_id, agent_revision, created_at);
 `
 	_, err := d.conn.Exec(schema)
 	if err != nil {
 		return fmt.Errorf("failed to run inline migrations: %w", err)
 	}
 	_, err = d.conn.Exec(
-		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, datetime('now'))`,
+		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (5, datetime('now'))`,
 	)
 	return err
 }

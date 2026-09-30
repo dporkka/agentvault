@@ -256,3 +256,377 @@ export interface CreateConversationRequest {
 export interface ConversationAskRequest {
   question: string;
 }
+
+
+export type PromotionStatus =
+  | 'proposed'
+  | 'approved'
+  | 'rejected'
+  | 'committed'
+  | 'superseded';
+
+export interface Promotion {
+  id: string;
+  agentId: string;
+  targetKind: 'memory' | 'knowledge';
+  status: PromotionStatus;
+  candidate: string;
+  rationale: string;
+  sourceRunIds: string[];
+  sourceObservationIds: string[];
+  sourceEvaluationIds: string[];
+  targetNoteId: string;
+  supersedesNoteId: string;
+  createdAt: string;
+  reviewedAt: string;
+  reviewedBy: string;
+  reviewNote: string;
+  committedAt: string;
+}
+
+export interface PromotionParams {
+  status?: PromotionStatus | 'all';
+  agentId?: string;
+  limit?: number;
+}
+
+export interface EvaluationDataset {
+  id: string;
+  name: string;
+  description: string;
+  agentId: string;
+  createdAt: string;
+}
+
+export interface EvaluationCase {
+  id: string;
+  datasetId: string;
+  name: string;
+  input: Record<string, unknown>;
+  expected: Record<string, unknown> | null;
+  tags: string[];
+  sourceRunId: string;
+  sourceObservationIds: string[];
+  sourceEvaluationIds: string[];
+  agentId: string;
+  agentRevision: number;
+  createdAt: string;
+}
+
+export interface EvaluationDatasetDetail extends EvaluationDataset {
+  cases: EvaluationCase[];
+}
+
+export interface Experiment {
+  id: string;
+  datasetId: string;
+  name: string;
+  agentId: string;
+  agentRevision: number;
+  status: 'planned' | 'running' | 'completed' | 'failed' | 'cancelled';
+  config: Record<string, unknown>;
+  createdAt: string;
+  completedAt: string;
+}
+
+export interface ExperimentResult {
+  experimentId: string;
+  caseId: string;
+  runId: string;
+  score: number | null;
+  label: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ExperimentDetail extends Experiment {
+  results: ExperimentResult[];
+}
+
+
+export interface ProposePromotionRequest {
+  agentId: string;
+  targetKind: 'memory' | 'knowledge';
+  candidate: string;
+  rationale?: string;
+  sourceRunIds?: string[];
+  sourceObservationIds?: string[];
+  sourceEvaluationIds?: string[];
+  supersedesNoteId?: string;
+}
+
+export interface ReviewPromotionRequest {
+  decision: 'approve' | 'reject';
+  reviewer: string;
+  note?: string;
+}
+
+export interface CommitPromotionRequest {
+  targetNoteId: string;
+}
+
+export interface CreateEvaluationDatasetRequest {
+  name: string;
+  description?: string;
+  agentId?: string;
+}
+
+export interface CreateEvaluationCaseRequest {
+  name: string;
+  input: Record<string, unknown>;
+  expected?: Record<string, unknown>;
+  tags?: string[];
+}
+
+export interface CreateExperimentRequest {
+  datasetId: string;
+  name: string;
+  agentId: string;
+  agentRevision: number;
+  status?: Experiment['status'];
+  config?: Record<string, unknown>;
+}
+
+export interface CreateExperimentResultRequest {
+  caseId: string;
+  runId?: string;
+  score?: number;
+  label?: string;
+  metadata?: Record<string, unknown>;
+}
+
+
+export interface ContextCompileRequest {
+  task?: string;
+  conversationId?: string;
+  retrievedNoteIds?: string[];
+  artifactNoteIds?: string[];
+  maxConversationMessages?: number;
+}
+
+export type ContextSectionKind =
+  | 'agent'
+  | 'identity'
+  | 'context_policy'
+  | 'memory'
+  | 'task'
+  | 'knowledge'
+  | 'conversation'
+  | 'artifact';
+
+export interface ContextSection {
+  kind: ContextSectionKind;
+  sourceId: string;
+  sourcePath: string;
+  title: string;
+  content: string;
+}
+
+export interface ContextReferenceIssue {
+  kind: ContextSectionKind;
+  sourceId: string;
+  reason: string;
+}
+
+export interface ContextSnapshot {
+  hash: string;
+  agentId: string;
+  agentRevision: number;
+  agentTitle: string;
+  task: string;
+  conversationId: string;
+  knowledgeScopes: string[];
+  artifactScopes: string[];
+  conversationScopes: string[];
+  capabilityRefs: string[];
+  contextPolicyRef: string;
+  sections: ContextSection[];
+  unresolved: ContextReferenceIssue[];
+  text: string;
+}
+
+
+export type RunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+export interface CreateRunRequest {
+  agentName: string;
+  agentId?: string;
+  agentRevision?: number;
+  task: string;
+  status?: RunStatus;
+  conversationId?: string;
+  contextHash?: string;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  capabilitySnapshot?: Record<string, unknown>;
+  runtimeMetadata?: Record<string, unknown>;
+  startedAt?: string;
+  endedAt?: string;
+  filesChanged?: string[];
+}
+
+export interface RunRecord {
+  id: string;
+  agentName: string;
+  agentId: string;
+  agentRevision: number;
+  task: string;
+  status: RunStatus;
+  conversationId: string;
+  contextHash: string;
+  input: Record<string, unknown>;
+  output: Record<string, unknown>;
+  capabilitySnapshot: Record<string, unknown>;
+  runtimeMetadata: Record<string, unknown>;
+  startedAt: string;
+  endedAt: string;
+  filesChanged: string[];
+  createdAt: string;
+}
+
+export interface RunObservation {
+  id: string;
+  runId: string;
+  parentObservationId: string;
+  kind: 'context.compile' | 'retrieval' | 'generation' | 'tool' | 'artifact.write' | 'event';
+  name: string;
+  status: string;
+  input: Record<string, unknown>;
+  output: Record<string, unknown>;
+  evidence: Record<string, unknown>;
+  startedAt: string;
+  endedAt: string;
+  createdAt: string;
+}
+
+export interface RunEvaluation {
+  id: string;
+  runId: string;
+  observationId: string;
+  evaluator: string;
+  name: string;
+  score: number | null;
+  label: string;
+  rationale: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface RunAudit {
+  run: RunRecord;
+  context: ContextSnapshot | null;
+  observations: RunObservation[];
+  evaluations: RunEvaluation[];
+}
+
+
+export interface RunLearningCandidateRequest {
+  targetKind: 'memory' | 'knowledge';
+  candidate: string;
+  rationale?: string;
+  sourceObservationIds?: string[];
+  sourceEvaluationIds?: string[];
+  supersedesNoteId?: string;
+}
+
+
+export type LearningSupportLevel = 'none' | 'weak' | 'moderate' | 'strong';
+export type LearningSignalKind = 'observation' | 'evaluation';
+
+export interface LearningSignal {
+  kind: LearningSignalKind;
+  id: string;
+  observationId: string;
+  name: string;
+  status: string;
+  label: string;
+  score: number | null;
+  rationale: string;
+}
+
+export interface LearningRecommendation {
+  runId: string;
+  agentId: string;
+  agentRevision: number;
+  eligible: boolean;
+  supportLevel: LearningSupportLevel;
+  evidenceCount: number;
+  suggestedTargetKind: '' | 'memory' | 'knowledge';
+  reasonCodes: string[];
+  sourceObservationIds: string[];
+  sourceEvaluationIds: string[];
+  contextMemoryRefs: string[];
+  supersedesNoteIds: string[];
+  signals: LearningSignal[];
+}
+
+
+export interface RegressionCaseProposal {
+  runId: string;
+  agentId: string;
+  agentRevision: number;
+  eligible: boolean;
+  supportLevel: LearningSupportLevel;
+  name: string;
+  input: Record<string, unknown>;
+  expected: Record<string, unknown> | null;
+  tags: string[];
+  reasonCodes: string[];
+  sourceObservationIds: string[];
+  sourceEvaluationIds: string[];
+}
+
+export interface RunRegressionCaseCaptureRequest {
+  datasetId: string;
+  name?: string;
+  expected?: Record<string, unknown>;
+  tags?: string[];
+}
+
+
+export type ExperimentTransition =
+  | 'fixed'
+  | 'regressed'
+  | 'stable_pass'
+  | 'stable_fail'
+  | 'unclassified'
+  | 'missing_baseline'
+  | 'missing_candidate';
+
+export interface ExperimentCaseComparison {
+  caseId: string;
+  caseName: string;
+  transition: ExperimentTransition;
+  baselineRunId: string;
+  candidateRunId: string;
+  baselineLabel: string;
+  candidateLabel: string;
+  baselineScore: number | null;
+  candidateScore: number | null;
+  scoreDelta: number | null;
+}
+
+export interface ExperimentComparisonSummary {
+  totalCases: number;
+  pairedResults: number;
+  fixes: number;
+  regressions: number;
+  stablePass: number;
+  stableFail: number;
+  unclassified: number;
+  missingBaseline: number;
+  missingCandidate: number;
+}
+
+export interface ExperimentComparison {
+  baselineExperimentId: string;
+  candidateExperimentId: string;
+  datasetId: string;
+  agentId: string;
+  baselineAgentRevision: number;
+  candidateAgentRevision: number;
+  comparable: boolean;
+  reasonCodes: string[];
+  summary: ExperimentComparisonSummary;
+  cases: ExperimentCaseComparison[];
+}

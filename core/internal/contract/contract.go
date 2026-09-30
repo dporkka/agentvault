@@ -112,11 +112,11 @@ type GitModifiedFile struct {
 // Link represents a link between two notes. It is populated during indexing
 // from wiki links and markdown links in note bodies.
 type Link struct {
-	ID          int     `json:"id"`
-	FromNoteID  string  `json:"fromNoteId"`
-	ToNoteID    *string `json:"toNoteId"`
-	RawTarget   string  `json:"rawTarget"`
-	LinkType    string  `json:"linkType"`
+	ID         int     `json:"id"`
+	FromNoteID string  `json:"fromNoteId"`
+	ToNoteID   *string `json:"toNoteId"`
+	RawTarget  string  `json:"rawTarget"`
+	LinkType   string  `json:"linkType"`
 }
 
 // NoteLinks groups backlinks and outgoing links for a note.
@@ -173,11 +173,11 @@ type Conversation struct {
 
 // ConversationMessage is a single message in a conversation.
 type ConversationMessage struct {
-	ID             int     `json:"id"`
-	Role           string  `json:"role"`
-	Content        string  `json:"content"`
-	SourcesJSON    *string `json:"sourcesJson,omitempty"`
-	CreatedAt      string  `json:"createdAt"`
+	ID          int     `json:"id"`
+	Role        string  `json:"role"`
+	Content     string  `json:"content"`
+	SourcesJSON *string `json:"sourcesJson,omitempty"`
+	CreatedAt   string  `json:"createdAt"`
 }
 
 // CreateConversationRequest is the body for POST /conversations.
@@ -198,4 +198,369 @@ type AnnotateRequest struct {
 	Status    string            `json:"status,omitempty"`
 	Priority  *int              `json:"priority,omitempty"`
 	Extra     map[string]string `json:"extra,omitempty"`
+}
+
+// Promotion is an evidence-backed memory or knowledge promotion record.
+type Promotion struct {
+	ID                   string   `json:"id"`
+	AgentID              string   `json:"agentId"`
+	TargetKind           string   `json:"targetKind"`
+	Status               string   `json:"status"`
+	Candidate            string   `json:"candidate"`
+	Rationale            string   `json:"rationale"`
+	SourceRunIDs         []string `json:"sourceRunIds"`
+	SourceObservationIDs []string `json:"sourceObservationIds"`
+	SourceEvaluationIDs  []string `json:"sourceEvaluationIds"`
+	TargetNoteID         string   `json:"targetNoteId"`
+	SupersedesNoteID     string   `json:"supersedesNoteId"`
+	CreatedAt            string   `json:"createdAt"`
+	ReviewedAt           string   `json:"reviewedAt"`
+	ReviewedBy           string   `json:"reviewedBy"`
+	ReviewNote           string   `json:"reviewNote"`
+	CommittedAt          string   `json:"committedAt"`
+}
+
+// EvaluationDataset is the metadata for a reusable evaluation dataset.
+type EvaluationDataset struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	AgentID     string `json:"agentId"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+// EvaluationCase is one stable input/expected-output pair in a dataset.
+type EvaluationCase struct {
+	ID                   string                 `json:"id"`
+	DatasetID            string                 `json:"datasetId"`
+	Name                 string                 `json:"name"`
+	Input                map[string]interface{} `json:"input"`
+	Expected             map[string]interface{} `json:"expected"`
+	Tags                 []string               `json:"tags"`
+	SourceRunID          string                 `json:"sourceRunId"`
+	SourceObservationIDs []string               `json:"sourceObservationIds"`
+	SourceEvaluationIDs  []string               `json:"sourceEvaluationIds"`
+	AgentID              string                 `json:"agentId"`
+	AgentRevision        int                    `json:"agentRevision"`
+	CreatedAt            string                 `json:"createdAt"`
+}
+
+// EvaluationDatasetDetail returns a dataset together with its cases.
+type EvaluationDatasetDetail struct {
+	EvaluationDataset
+	Cases []EvaluationCase `json:"cases"`
+}
+
+// Experiment is an externally executed evaluation run recorded by AgentVault.
+type Experiment struct {
+	ID            string                 `json:"id"`
+	DatasetID     string                 `json:"datasetId"`
+	Name          string                 `json:"name"`
+	AgentID       string                 `json:"agentId"`
+	AgentRevision int                    `json:"agentRevision"`
+	Status        string                 `json:"status"`
+	Config        map[string]interface{} `json:"config"`
+	CreatedAt     string                 `json:"createdAt"`
+	CompletedAt   string                 `json:"completedAt"`
+}
+
+// ExperimentResult is one case-level result within an experiment.
+type ExperimentResult struct {
+	ExperimentID string                 `json:"experimentId"`
+	CaseID       string                 `json:"caseId"`
+	RunID        string                 `json:"runId"`
+	Score        *float64               `json:"score"`
+	Label        string                 `json:"label"`
+	Metadata     map[string]interface{} `json:"metadata"`
+	CreatedAt    string                 `json:"createdAt"`
+}
+
+// ExperimentDetail returns an experiment together with all recorded case results.
+type ExperimentDetail struct {
+	Experiment
+	Results []ExperimentResult `json:"results"`
+}
+
+// ProposePromotionRequest is the body for POST /promotions.
+type ProposePromotionRequest struct {
+	AgentID              string   `json:"agentId"`
+	TargetKind           string   `json:"targetKind"`
+	Candidate            string   `json:"candidate"`
+	Rationale            string   `json:"rationale,omitempty"`
+	SourceRunIDs         []string `json:"sourceRunIds,omitempty"`
+	SourceObservationIDs []string `json:"sourceObservationIds,omitempty"`
+	SourceEvaluationIDs  []string `json:"sourceEvaluationIds,omitempty"`
+	SupersedesNoteID     string   `json:"supersedesNoteId,omitempty"`
+}
+
+// ReviewPromotionRequest is the body for POST /promotions/{id}/review.
+type ReviewPromotionRequest struct {
+	Decision string `json:"decision"`
+	Reviewer string `json:"reviewer"`
+	Note     string `json:"note,omitempty"`
+}
+
+// CommitPromotionRequest is the body for POST /promotions/{id}/commit.
+type CommitPromotionRequest struct {
+	TargetNoteID string `json:"targetNoteId"`
+}
+
+// CreateEvaluationDatasetRequest is the body for POST /evaluation-datasets.
+type CreateEvaluationDatasetRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	AgentID     string `json:"agentId,omitempty"`
+}
+
+// CreateEvaluationCaseRequest is the body for POST /evaluation-datasets/{id}/cases.
+type CreateEvaluationCaseRequest struct {
+	Name     string                 `json:"name"`
+	Input    map[string]interface{} `json:"input"`
+	Expected map[string]interface{} `json:"expected,omitempty"`
+	Tags     []string               `json:"tags,omitempty"`
+}
+
+// CreateExperimentRequest is the body for POST /experiments.
+type CreateExperimentRequest struct {
+	DatasetID     string                 `json:"datasetId"`
+	Name          string                 `json:"name"`
+	AgentID       string                 `json:"agentId"`
+	AgentRevision int                    `json:"agentRevision"`
+	Status        string                 `json:"status,omitempty"`
+	Config        map[string]interface{} `json:"config,omitempty"`
+}
+
+// CreateExperimentResultRequest is the body for POST /experiments/{id}/results.
+type CreateExperimentResultRequest struct {
+	CaseID   string                 `json:"caseId"`
+	RunID    string                 `json:"runId,omitempty"`
+	Score    *float64               `json:"score,omitempty"`
+	Label    string                 `json:"label,omitempty"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// ContextCompileRequest is the body for POST /agents/{id}/context.
+type ContextCompileRequest struct {
+	Task                    string   `json:"task,omitempty"`
+	ConversationID          string   `json:"conversationId,omitempty"`
+	RetrievedNoteIDs        []string `json:"retrievedNoteIds,omitempty"`
+	ArtifactNoteIDs         []string `json:"artifactNoteIds,omitempty"`
+	MaxConversationMessages int      `json:"maxConversationMessages,omitempty"`
+}
+
+// ContextSection is one ordered source included in a compiled context.
+type ContextSection struct {
+	Kind       string `json:"kind"`
+	SourceID   string `json:"sourceId"`
+	SourcePath string `json:"sourcePath"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+}
+
+// ContextReferenceIssue records a manifest or request reference that could not be resolved.
+type ContextReferenceIssue struct {
+	Kind     string `json:"kind"`
+	SourceID string `json:"sourceId"`
+	Reason   string `json:"reason"`
+}
+
+// ContextSnapshot is the immutable, provenance-carrying result of context compilation.
+type ContextSnapshot struct {
+	Hash               string                  `json:"hash"`
+	AgentID            string                  `json:"agentId"`
+	AgentRevision      int                     `json:"agentRevision"`
+	AgentTitle         string                  `json:"agentTitle"`
+	Task               string                  `json:"task"`
+	ConversationID     string                  `json:"conversationId"`
+	KnowledgeScopes    []string                `json:"knowledgeScopes"`
+	ArtifactScopes     []string                `json:"artifactScopes"`
+	ConversationScopes []string                `json:"conversationScopes"`
+	CapabilityRefs     []string                `json:"capabilityRefs"`
+	ContextPolicyRef   string                  `json:"contextPolicyRef"`
+	Sections           []ContextSection        `json:"sections"`
+	Unresolved         []ContextReferenceIssue `json:"unresolved"`
+	Text               string                  `json:"text"`
+}
+
+// CreateRunRequest is the body for POST /runs.
+type CreateRunRequest struct {
+	AgentName          string                 `json:"agentName"`
+	AgentID            string                 `json:"agentId,omitempty"`
+	AgentRevision      int                    `json:"agentRevision,omitempty"`
+	Task               string                 `json:"task"`
+	Status             string                 `json:"status,omitempty"`
+	ConversationID     string                 `json:"conversationId,omitempty"`
+	ContextHash        string                 `json:"contextHash,omitempty"`
+	Input              map[string]interface{} `json:"input,omitempty"`
+	Output             map[string]interface{} `json:"output,omitempty"`
+	CapabilitySnapshot map[string]interface{} `json:"capabilitySnapshot,omitempty"`
+	RuntimeMetadata    map[string]interface{} `json:"runtimeMetadata,omitempty"`
+	StartedAt          string                 `json:"startedAt,omitempty"`
+	EndedAt            string                 `json:"endedAt,omitempty"`
+	FilesChanged       []string               `json:"filesChanged,omitempty"`
+}
+
+// RunRecord is persisted execution evidence for one agent runtime invocation.
+type RunRecord struct {
+	ID                 string                 `json:"id"`
+	AgentName          string                 `json:"agentName"`
+	AgentID            string                 `json:"agentId"`
+	AgentRevision      int                    `json:"agentRevision"`
+	Task               string                 `json:"task"`
+	Status             string                 `json:"status"`
+	ConversationID     string                 `json:"conversationId"`
+	ContextHash        string                 `json:"contextHash"`
+	Input              map[string]interface{} `json:"input"`
+	Output             map[string]interface{} `json:"output"`
+	CapabilitySnapshot map[string]interface{} `json:"capabilitySnapshot"`
+	RuntimeMetadata    map[string]interface{} `json:"runtimeMetadata"`
+	StartedAt          string                 `json:"startedAt"`
+	EndedAt            string                 `json:"endedAt"`
+	FilesChanged       []string               `json:"filesChanged"`
+	CreatedAt          string                 `json:"createdAt"`
+}
+
+// RunObservation is one structured observation attached to a run audit.
+type RunObservation struct {
+	ID                  string                 `json:"id"`
+	RunID               string                 `json:"runId"`
+	ParentObservationID string                 `json:"parentObservationId"`
+	Kind                string                 `json:"kind"`
+	Name                string                 `json:"name"`
+	Status              string                 `json:"status"`
+	Input               map[string]interface{} `json:"input"`
+	Output              map[string]interface{} `json:"output"`
+	Evidence            map[string]interface{} `json:"evidence"`
+	StartedAt           string                 `json:"startedAt"`
+	EndedAt             string                 `json:"endedAt"`
+	CreatedAt           string                 `json:"createdAt"`
+}
+
+// RunEvaluation is evaluation evidence attached to a run or observation.
+type RunEvaluation struct {
+	ID            string                 `json:"id"`
+	RunID         string                 `json:"runId"`
+	ObservationID string                 `json:"observationId"`
+	Evaluator     string                 `json:"evaluator"`
+	Name          string                 `json:"name"`
+	Score         *float64               `json:"score"`
+	Label         string                 `json:"label"`
+	Rationale     string                 `json:"rationale"`
+	Metadata      map[string]interface{} `json:"metadata"`
+	CreatedAt     string                 `json:"createdAt"`
+}
+
+// RunAudit joins a run to its exact immutable context and downstream evidence.
+type RunAudit struct {
+	Run          RunRecord        `json:"run"`
+	Context      *ContextSnapshot `json:"context"`
+	Observations []RunObservation `json:"observations"`
+	Evaluations  []RunEvaluation  `json:"evaluations"`
+}
+
+// RunLearningCandidateRequest creates a reviewable promotion proposal from one run.
+// Agent identity is derived server-side from the run and cannot be supplied here.
+type RunLearningCandidateRequest struct {
+	TargetKind           string   `json:"targetKind"`
+	Candidate            string   `json:"candidate"`
+	Rationale            string   `json:"rationale,omitempty"`
+	SourceObservationIDs []string `json:"sourceObservationIds,omitempty"`
+	SourceEvaluationIDs  []string `json:"sourceEvaluationIds,omitempty"`
+	SupersedesNoteID     string   `json:"supersedesNoteId,omitempty"`
+}
+
+// LearningSignal is one explicit failure signal surfaced from run evidence.
+type LearningSignal struct {
+	Kind          string   `json:"kind"`
+	ID            string   `json:"id"`
+	ObservationID string   `json:"observationId"`
+	Name          string   `json:"name"`
+	Status        string   `json:"status"`
+	Label         string   `json:"label"`
+	Score         *float64 `json:"score"`
+	Rationale     string   `json:"rationale"`
+}
+
+// LearningRecommendation is a deterministic, read-only set of evidence inputs
+// that a caller may use when deciding whether and how to propose learning.
+type LearningRecommendation struct {
+	RunID                string           `json:"runId"`
+	AgentID              string           `json:"agentId"`
+	AgentRevision        int              `json:"agentRevision"`
+	Eligible             bool             `json:"eligible"`
+	SupportLevel         string           `json:"supportLevel"`
+	EvidenceCount        int              `json:"evidenceCount"`
+	SuggestedTargetKind  string           `json:"suggestedTargetKind"`
+	ReasonCodes          []string         `json:"reasonCodes"`
+	SourceObservationIDs []string         `json:"sourceObservationIds"`
+	SourceEvaluationIDs  []string         `json:"sourceEvaluationIds"`
+	ContextMemoryRefs    []string         `json:"contextMemoryRefs"`
+	SupersedesNoteIDs    []string         `json:"supersedesNoteIds"`
+	Signals              []LearningSignal `json:"signals"`
+}
+
+// RegressionCaseProposal is a deterministic read-only projection of one run
+// into an evaluation-case candidate.
+type RegressionCaseProposal struct {
+	RunID                string                 `json:"runId"`
+	AgentID              string                 `json:"agentId"`
+	AgentRevision        int                    `json:"agentRevision"`
+	Eligible             bool                   `json:"eligible"`
+	SupportLevel         string                 `json:"supportLevel"`
+	Name                 string                 `json:"name"`
+	Input                map[string]interface{} `json:"input"`
+	Expected             map[string]interface{} `json:"expected"`
+	Tags                 []string               `json:"tags"`
+	ReasonCodes          []string               `json:"reasonCodes"`
+	SourceObservationIDs []string               `json:"sourceObservationIds"`
+	SourceEvaluationIDs  []string               `json:"sourceEvaluationIds"`
+}
+
+// RunRegressionCaseCaptureRequest explicitly captures a run into a caller-selected dataset.
+type RunRegressionCaseCaptureRequest struct {
+	DatasetID string                 `json:"datasetId"`
+	Name      string                 `json:"name,omitempty"`
+	Expected  map[string]interface{} `json:"expected,omitempty"`
+	Tags      []string               `json:"tags,omitempty"`
+}
+
+// ExperimentCaseComparison compares one dataset case between two recorded experiments.
+type ExperimentCaseComparison struct {
+	CaseID         string   `json:"caseId"`
+	CaseName       string   `json:"caseName"`
+	Transition     string   `json:"transition"`
+	BaselineRunID  string   `json:"baselineRunId"`
+	CandidateRunID string   `json:"candidateRunId"`
+	BaselineLabel  string   `json:"baselineLabel"`
+	CandidateLabel string   `json:"candidateLabel"`
+	BaselineScore  *float64 `json:"baselineScore"`
+	CandidateScore *float64 `json:"candidateScore"`
+	ScoreDelta     *float64 `json:"scoreDelta"`
+}
+
+// ExperimentComparisonSummary counts explicit categorical transitions and missing evidence.
+type ExperimentComparisonSummary struct {
+	TotalCases       int `json:"totalCases"`
+	PairedResults    int `json:"pairedResults"`
+	Fixes            int `json:"fixes"`
+	Regressions      int `json:"regressions"`
+	StablePass       int `json:"stablePass"`
+	StableFail       int `json:"stableFail"`
+	Unclassified     int `json:"unclassified"`
+	MissingBaseline  int `json:"missingBaseline"`
+	MissingCandidate int `json:"missingCandidate"`
+}
+
+// ExperimentComparison is a read-only comparison of two persisted experiments.
+type ExperimentComparison struct {
+	BaselineExperimentID   string                      `json:"baselineExperimentId"`
+	CandidateExperimentID  string                      `json:"candidateExperimentId"`
+	DatasetID              string                      `json:"datasetId"`
+	AgentID                string                      `json:"agentId"`
+	BaselineAgentRevision  int                         `json:"baselineAgentRevision"`
+	CandidateAgentRevision int                         `json:"candidateAgentRevision"`
+	Comparable             bool                        `json:"comparable"`
+	ReasonCodes            []string                    `json:"reasonCodes"`
+	Summary                ExperimentComparisonSummary `json:"summary"`
+	Cases                  []ExperimentCaseComparison  `json:"cases"`
 }

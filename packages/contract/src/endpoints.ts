@@ -9,6 +9,14 @@ import type {
   AuthVerifyResponse,
   CaptureRequest,
   CaptureResponse,
+  CommitPromotionRequest,
+  ContextCompileRequest,
+  ContextSnapshot,
+  CreateRunRequest,
+  CreateEvaluationCaseRequest,
+  CreateEvaluationDatasetRequest,
+  CreateExperimentRequest,
+  CreateExperimentResultRequest,
   CreateNoteRequest,
   CreateNoteResponse,
   UpdateNoteRequest,
@@ -17,11 +25,28 @@ import type {
   GitStatus,
   Graph,
   HealthResponse,
+  EvaluationCase,
+  EvaluationDataset,
+  EvaluationDatasetDetail,
+  Experiment,
+  ExperimentComparison,
+  ExperimentDetail,
+  ExperimentResult,
   IndexOptions,
   IndexResult,
   NoteLinks,
   NoteDetail,
   Projects,
+  Promotion,
+  PromotionParams,
+  ProposePromotionRequest,
+  ReviewPromotionRequest,
+  LearningRecommendation,
+  RegressionCaseProposal,
+  RunRegressionCaseCaptureRequest,
+  RunAudit,
+  RunLearningCandidateRequest,
+  RunRecord,
   RecentParams,
   SearchResult,
   SearchParams,
@@ -62,6 +87,25 @@ export const routes: {
   readonly gitStatus: EndpointDef<NoRequest, GitStatus>;
   readonly graph: EndpointDef<{ center: string; depth?: number }, Graph>;
   readonly graphNeighbors: EndpointDef<{ id: string }, Graph>;
+  readonly promotions: EndpointDef<PromotionParams | undefined, Promotion[]>;
+  readonly proposePromotion: EndpointDef<ProposePromotionRequest, Promotion>;
+  readonly reviewPromotion: EndpointDef<ReviewPromotionRequest, Promotion>;
+  readonly commitPromotion: EndpointDef<CommitPromotionRequest, Promotion>;
+  readonly evaluationDataset: EndpointDef<{ id: string }, EvaluationDatasetDetail>;
+  readonly createEvaluationDataset: EndpointDef<CreateEvaluationDatasetRequest, EvaluationDataset>;
+  readonly createEvaluationCase: EndpointDef<CreateEvaluationCaseRequest, EvaluationCase>;
+  readonly experiment: EndpointDef<{ id: string }, ExperimentDetail>;
+  readonly experimentComparison: EndpointDef<{ id: string; candidateId: string }, ExperimentComparison>;
+  readonly createExperiment: EndpointDef<CreateExperimentRequest, Experiment>;
+  readonly createExperimentResult: EndpointDef<CreateExperimentResultRequest, ExperimentResult>;
+  readonly compileContext: EndpointDef<ContextCompileRequest, ContextSnapshot>;
+  readonly contextSnapshot: EndpointDef<{ hash: string }, ContextSnapshot>;
+  readonly createRun: EndpointDef<CreateRunRequest, RunRecord>;
+  readonly runAudit: EndpointDef<{ id: string }, RunAudit>;
+  readonly learningRecommendation: EndpointDef<{ id: string }, LearningRecommendation>;
+  readonly regressionCaseProposal: EndpointDef<{ id: string }, RegressionCaseProposal>;
+  readonly captureRunRegressionCase: EndpointDef<RunRegressionCaseCaptureRequest, EvaluationCase>;
+  readonly proposeRunLearning: EndpointDef<RunLearningCandidateRequest, Promotion>;
 } = {
   health: {
     method: 'GET',
@@ -188,6 +232,139 @@ export const routes: {
     auth: false,
     request: undefined as unknown as { id: string },
     response: undefined as unknown as Graph,
+  },
+  promotions: {
+    method: 'GET',
+    path: '/promotions',
+    auth: false,
+    request: undefined as unknown as PromotionParams | undefined,
+    response: undefined as unknown as Promotion[],
+  },
+  evaluationDataset: {
+    method: 'GET',
+    path: '/evaluation-datasets/{id}',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as EvaluationDatasetDetail,
+  },
+  experiment: {
+    method: 'GET',
+    path: '/experiments/{id}',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as ExperimentDetail,
+  },
+  experimentComparison: {
+    method: 'GET',
+    path: '/experiments/{id}/compare/{candidateId}',
+    auth: false,
+    request: undefined as unknown as { id: string; candidateId: string },
+    response: undefined as unknown as ExperimentComparison,
+  },
+  proposePromotion: {
+    method: 'POST',
+    path: '/promotions',
+    auth: true,
+    request: undefined as unknown as ProposePromotionRequest,
+    response: undefined as unknown as Promotion,
+  },
+  reviewPromotion: {
+    method: 'POST',
+    path: '/promotions/{id}/review',
+    auth: true,
+    request: undefined as unknown as ReviewPromotionRequest,
+    response: undefined as unknown as Promotion,
+  },
+  commitPromotion: {
+    method: 'POST',
+    path: '/promotions/{id}/commit',
+    auth: true,
+    request: undefined as unknown as CommitPromotionRequest,
+    response: undefined as unknown as Promotion,
+  },
+  createEvaluationDataset: {
+    method: 'POST',
+    path: '/evaluation-datasets',
+    auth: true,
+    request: undefined as unknown as CreateEvaluationDatasetRequest,
+    response: undefined as unknown as EvaluationDataset,
+  },
+  createEvaluationCase: {
+    method: 'POST',
+    path: '/evaluation-datasets/{id}/cases',
+    auth: true,
+    request: undefined as unknown as CreateEvaluationCaseRequest,
+    response: undefined as unknown as EvaluationCase,
+  },
+  createExperiment: {
+    method: 'POST',
+    path: '/experiments',
+    auth: true,
+    request: undefined as unknown as CreateExperimentRequest,
+    response: undefined as unknown as Experiment,
+  },
+  createExperimentResult: {
+    method: 'POST',
+    path: '/experiments/{id}/results',
+    auth: true,
+    request: undefined as unknown as CreateExperimentResultRequest,
+    response: undefined as unknown as ExperimentResult,
+  },
+  compileContext: {
+    method: 'POST',
+    path: '/agents/{id}/context',
+    auth: true,
+    request: undefined as unknown as ContextCompileRequest,
+    response: undefined as unknown as ContextSnapshot,
+  },
+  contextSnapshot: {
+    method: 'GET',
+    path: '/contexts/{hash}',
+    auth: false,
+    request: undefined as unknown as { hash: string },
+    response: undefined as unknown as ContextSnapshot,
+  },
+  createRun: {
+    method: 'POST',
+    path: '/runs',
+    auth: true,
+    request: undefined as unknown as CreateRunRequest,
+    response: undefined as unknown as RunRecord,
+  },
+  runAudit: {
+    method: 'GET',
+    path: '/runs/{id}/audit',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as RunAudit,
+  },
+  learningRecommendation: {
+    method: 'GET',
+    path: '/runs/{id}/learning-recommendation',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as LearningRecommendation,
+  },
+  regressionCaseProposal: {
+    method: 'GET',
+    path: '/runs/{id}/regression-case-proposal',
+    auth: false,
+    request: undefined as unknown as { id: string },
+    response: undefined as unknown as RegressionCaseProposal,
+  },
+  captureRunRegressionCase: {
+    method: 'POST',
+    path: '/runs/{id}/regression-cases',
+    auth: true,
+    request: undefined as unknown as RunRegressionCaseCaptureRequest,
+    response: undefined as unknown as EvaluationCase,
+  },
+  proposeRunLearning: {
+    method: 'POST',
+    path: '/runs/{id}/learning-candidates',
+    auth: true,
+    request: undefined as unknown as RunLearningCandidateRequest,
+    response: undefined as unknown as Promotion,
   },
 };
 

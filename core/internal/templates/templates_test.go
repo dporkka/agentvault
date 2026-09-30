@@ -105,6 +105,7 @@ func TestGenerateIDFormat(t *testing.T) {
 		{"project", "prj_"},
 		{"prompt", "prm_"},
 		{"capture", "cap_"},
+		{"agent", "agt_"},
 	}
 
 	for _, tt := range tests {
@@ -153,8 +154,8 @@ func TestGenerateIDUnknownType(t *testing.T) {
 
 func TestAvailableReturnsAllTemplates(t *testing.T) {
 	names := Available()
-	if len(names) != 7 {
-		t.Errorf("Available() returned %d names, want 7", len(names))
+	if len(names) != 8 {
+		t.Errorf("Available() returned %d names, want 8", len(names))
 	}
 
 	expected := map[string]bool{
@@ -165,6 +166,7 @@ func TestAvailableReturnsAllTemplates(t *testing.T) {
 		"source":   false,
 		"project":  false,
 		"daily":    false,
+		"agent":    false,
 	}
 
 	for _, name := range names {
@@ -355,5 +357,32 @@ func TestRenderProjectTemplate(t *testing.T) {
 	}
 	if !strings.Contains(result, "## Goals") {
 		t.Errorf("Expected ## Goals section")
+	}
+}
+
+func TestRenderAgentTemplate(t *testing.T) {
+	data := TemplateData{
+		ID:      "agt_2026_09_30_101",
+		Title:   "Coding Agent",
+		Tags:    []string{"agent", "coding"},
+		Created: "2026-09-30T12:00:00Z",
+	}
+
+	result, err := Render("agent", data)
+	if err != nil {
+		t.Fatalf("Render agent template: %v", err)
+	}
+
+	for _, expected := range []string{
+		"type: agent",
+		"revision: 1",
+		"memory_refs: []",
+		"knowledge_scopes: []",
+		"capability_refs: []",
+		"## Context policy",
+	} {
+		if !strings.Contains(result, expected) {
+			t.Errorf("expected %q in rendered agent manifest, got:\n%s", expected, result)
+		}
 	}
 }

@@ -117,6 +117,26 @@ func (s *Server) RegisterTools() {
 	s.registerGitStatus()
 	s.registerOpenDaily()
 	s.registerLogAgentRun()
+	s.registerLogObservation()
+	s.registerLogEvaluation()
+	s.registerGetLearningRecommendation()
+	s.registerGetRegressionCaseProposal()
+	s.registerCaptureRunRegressionCase()
+	s.registerProposeRunLearning()
+	s.registerProposePromotion()
+	s.registerReviewPromotion()
+	s.registerCommitPromotion()
+	s.registerCreateEvaluationDataset()
+	s.registerAddEvaluationCase()
+	s.registerRecordExperiment()
+	s.registerRecordExperimentResult()
+	s.registerListPromotions()
+	s.registerGetEvaluationDataset()
+	s.registerCompareExperiments()
+	s.registerGetExperiment()
+	s.registerCompileContext()
+	s.registerGetContextSnapshot()
+	s.registerGetRunAudit()
 	s.registerAnnotate()
 	s.registerSetStatus()
 	s.registerAsk()
@@ -244,7 +264,6 @@ func (s *Server) handleToolsCall(req JSONRPCRequest) JSONRPCResponse {
 		Result:  result,
 	}
 }
-
 
 // resourceDescription is the JSON representation of a resource for
 // the resources/list response.
@@ -381,6 +400,7 @@ func matchResourceTemplate(tmpl, uri string) bool {
 	}
 	return true
 }
+
 // ServeStdio runs the MCP server over stdin/stdout.
 func (s *Server) ServeStdio() {
 	ctx, cancel := context.WithCancel(context.Background())

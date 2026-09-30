@@ -180,6 +180,31 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /graph", s.handleGraph)
 	s.mux.HandleFunc("GET /graph/neighbors", s.handleGraphNeighbors)
 
+	// Durable agent state and evaluation evidence
+	s.mux.HandleFunc("GET /promotions", s.handlePromotions)
+	s.mux.HandleFunc("POST /promotions", s.handleProposePromotion)
+	s.mux.HandleFunc("POST /promotions/{id}/review", s.handleReviewPromotion)
+	s.mux.HandleFunc("POST /promotions/{id}/commit", s.handleCommitPromotion)
+	s.mux.HandleFunc("GET /evaluation-datasets/{id}", s.handleEvaluationDataset)
+	s.mux.HandleFunc("POST /evaluation-datasets", s.handleCreateEvaluationDataset)
+	s.mux.HandleFunc("POST /evaluation-datasets/{id}/cases", s.handleCreateEvaluationCase)
+	s.mux.HandleFunc("GET /experiments/{id}", s.handleExperiment)
+	s.mux.HandleFunc("GET /experiments/{id}/compare/{candidateId}", s.handleExperimentComparison)
+	s.mux.HandleFunc("POST /experiments", s.handleRecordExperiment)
+	s.mux.HandleFunc("POST /experiments/{id}/results", s.handleRecordExperimentResult)
+
+	// Deterministic compiled context evidence
+	s.mux.HandleFunc("POST /agents/{id}/context", s.handleCompileContext)
+	s.mux.HandleFunc("GET /contexts/{hash}", s.handleGetContextSnapshot)
+
+	// Runtime execution evidence and audit
+	s.mux.HandleFunc("POST /runs", s.handleCreateRun)
+	s.mux.HandleFunc("GET /runs/{id}/audit", s.handleRunAudit)
+	s.mux.HandleFunc("GET /runs/{id}/learning-recommendation", s.handleLearningRecommendation)
+	s.mux.HandleFunc("GET /runs/{id}/regression-case-proposal", s.handleRegressionCaseProposal)
+	s.mux.HandleFunc("POST /runs/{id}/regression-cases", s.handleCaptureRunRegressionCase)
+	s.mux.HandleFunc("POST /runs/{id}/learning-candidates", s.handleProposeRunLearning)
+
 	// Conversations
 	s.mux.HandleFunc("POST /conversations", s.handleCreateConversation)
 	s.mux.HandleFunc("GET /conversations", s.handleListConversations)

@@ -154,3 +154,281 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+func TestAgentStateReadContractJSONTags(t *testing.T) {
+	p := Promotion{
+		ID: "promo_1", AgentID: "agt_1", TargetKind: "memory", Status: "proposed",
+		Candidate: "Remember", SourceObservationIDs: []string{"obs_1"}, CreatedAt: "2026-09-30T10:00:00Z",
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal promotion: %v", err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"agentId":"agt_1"`,
+		`"targetKind":"memory"`,
+		`"sourceObservationIds":["obs_1"]`,
+		`"createdAt":"2026-09-30T10:00:00Z"`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected promotion JSON to contain %s, got %s", want, got)
+		}
+	}
+
+	d := EvaluationDatasetDetail{
+		EvaluationDataset: EvaluationDataset{ID: "ds_1", Name: "Golden", CreatedAt: "now"},
+		Cases:             []EvaluationCase{{ID: "case_1", DatasetID: "ds_1", Name: "Case", Input: map[string]interface{}{"x": true}, Tags: []string{}}},
+	}
+	b, err = json.Marshal(d)
+	if err != nil {
+		t.Fatalf("marshal dataset: %v", err)
+	}
+	got = string(b)
+	if !contains(got, `"cases":[{"id":"case_1"`) {
+		t.Errorf("expected dataset cases in JSON, got %s", got)
+	}
+
+	e := ExperimentDetail{
+		Experiment: Experiment{ID: "exp_1", DatasetID: "ds_1", Name: "baseline", AgentID: "agt_1", AgentRevision: 1, Status: "completed", Config: map[string]interface{}{}, CreatedAt: "now"},
+		Results:    []ExperimentResult{{ExperimentID: "exp_1", CaseID: "case_1", Label: "pass", Metadata: map[string]interface{}{}, CreatedAt: "now"}},
+	}
+	b, err = json.Marshal(e)
+	if err != nil {
+		t.Fatalf("marshal experiment: %v", err)
+	}
+	got = string(b)
+	if !contains(got, `"agentRevision":1`) || !contains(got, `"results":[`) {
+		t.Errorf("expected experiment detail fields in JSON, got %s", got)
+	}
+}
+
+func TestContextSnapshotJSONTags(t *testing.T) {
+	snapshot := ContextSnapshot{
+		Hash: "sha256:abc", AgentID: "agt_1", AgentRevision: 2, AgentTitle: "Agent",
+		KnowledgeScopes: []string{"project:test"}, ArtifactScopes: []string{},
+		ConversationScopes: []string{}, CapabilityRefs: []string{"github"},
+		Sections:   []ContextSection{{Kind: "identity", SourceID: "identity_1", SourcePath: "10-notes/id.md", Title: "Identity", Content: "Be precise."}},
+		Unresolved: []ContextReferenceIssue{},
+		Text:       "## identity: Identity\nBe precise.",
+	}
+	b, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"agentId":"agt_1"`,
+		`"agentRevision":2`,
+		`"sourceId":"identity_1"`,
+		`"knowledgeScopes":["project:test"]`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected context JSON to contain %s, got %s", want, got)
+		}
+	}
+}
+
+func TestRunAuditJSONTags(t *testing.T) {
+	audit := RunAudit{
+		Run: RunRecord{
+			ID: "run_1", AgentName: "coder", AgentID: "agt_1", AgentRevision: 3,
+			Task: "audit", Status: "succeeded", ContextHash: "sha256:ctx",
+			Input: map[string]interface{}{"issue": 81}, Output: map[string]interface{}{"ok": true},
+			CapabilitySnapshot: map[string]interface{}{}, RuntimeMetadata: map[string]interface{}{},
+			FilesChanged: []string{"README.md"}, CreatedAt: "now",
+		},
+		Context: &ContextSnapshot{
+			Hash: "sha256:ctx", AgentID: "agt_1", AgentRevision: 3, AgentTitle: "Coder",
+			KnowledgeScopes: []string{}, ArtifactScopes: []string{}, ConversationScopes: []string{},
+			CapabilityRefs: []string{}, Sections: []ContextSection{
+				{Kind: "identity", SourceID: "identity_1", SourcePath: "10-notes/identity.md", Title: "Identity", Content: "Be precise."},
+			},
+			Unresolved: []ContextReferenceIssue{}, Text: "compiled",
+		},
+		Observations: []RunObservation{{
+			ID: "obs_1", RunID: "run_1", Kind: "retrieval", Name: "search",
+			Input: map[string]interface{}{}, Output: map[string]interface{}{}, Evidence: map[string]interface{}{"noteId": "memory_1"},
+		}},
+		Evaluations: []RunEvaluation{{
+			ID: "eval_1", RunID: "run_1", Evaluator: "human:test", Name: "correctness",
+			Label: "pass", Metadata: map[string]interface{}{},
+		}},
+	}
+	b, err := json.Marshal(audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"agentId":"agt_1"`,
+		`"contextHash":"sha256:ctx"`,
+		`"context":{"hash":"sha256:ctx"`,
+		`"observations":[{"id":"obs_1"`,
+		`"evaluations":[{"id":"eval_1"`,
+		`"sourceId":"identity_1"`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected run audit JSON to contain %s, got %s", want, got)
+		}
+	}
+}
+
+func TestRunLearningCandidateRequestJSONTags(t *testing.T) {
+	req := RunLearningCandidateRequest{
+		TargetKind:           "memory",
+		Candidate:            "Run focused tests before broad verification.",
+		Rationale:            "Regression evidence",
+		SourceObservationIDs: []string{"obs_1"},
+		SourceEvaluationIDs:  []string{"eval_1"},
+		SupersedesNoteID:     "note_old",
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"targetKind":"memory"`,
+		`"candidate":"Run focused tests before broad verification."`,
+		`"sourceObservationIds":["obs_1"]`,
+		`"sourceEvaluationIds":["eval_1"]`,
+		`"supersedesNoteId":"note_old"`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected learning candidate JSON to contain %s, got %s", want, got)
+		}
+	}
+	if contains(got, "agentId") {
+		t.Fatalf("run learning request must not allow caller-supplied agentId: %s", got)
+	}
+}
+
+func TestLearningRecommendationJSONTags(t *testing.T) {
+	rec := LearningRecommendation{
+		RunID: "run_1", AgentID: "agt_1", AgentRevision: 3,
+		Eligible: true, SupportLevel: "strong", EvidenceCount: 2,
+		SuggestedTargetKind:  "memory",
+		ReasonCodes:          []string{"failed_observation", "negative_evaluation"},
+		SourceObservationIDs: []string{"obs_1"},
+		SourceEvaluationIDs:  []string{"eval_1"},
+		ContextMemoryRefs:    []string{"memory_1"},
+		SupersedesNoteIDs:    []string{"memory_1"},
+		Signals: []LearningSignal{{
+			Kind: "evaluation", ID: "eval_1", ObservationID: "obs_1",
+			Name: "regression", Label: "fail", Rationale: "Focused test was skipped.",
+		}},
+	}
+	b, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"runId":"run_1"`,
+		`"agentId":"agt_1"`,
+		`"supportLevel":"strong"`,
+		`"evidenceCount":2`,
+		`"suggestedTargetKind":"memory"`,
+		`"sourceObservationIds":["obs_1"]`,
+		`"sourceEvaluationIds":["eval_1"]`,
+		`"contextMemoryRefs":["memory_1"]`,
+		`"supersedesNoteIds":["memory_1"]`,
+		`"signals":[{"kind":"evaluation"`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected recommendation JSON to contain %s, got %s", want, got)
+		}
+	}
+}
+
+func TestRegressionCaseProposalJSONTags(t *testing.T) {
+	proposal := RegressionCaseProposal{
+		RunID: "run_1", AgentID: "agt_1", AgentRevision: 4,
+		Eligible: true, SupportLevel: "strong", Name: "Regression: checkout",
+		Input:                map[string]interface{}{"fixture": "checkout-42"},
+		Expected:             map[string]interface{}{"status": "pass"},
+		Tags:                 []string{"regression"},
+		ReasonCodes:          []string{"negative_evaluation"},
+		SourceObservationIDs: []string{"obs_1"},
+		SourceEvaluationIDs:  []string{"eval_1"},
+	}
+	b, err := json.Marshal(proposal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"runId":"run_1"`,
+		`"agentId":"agt_1"`,
+		`"agentRevision":4`,
+		`"supportLevel":"strong"`,
+		`"name":"Regression: checkout"`,
+		`"input":{"fixture":"checkout-42"}`,
+		`"expected":{"status":"pass"}`,
+		`"sourceEvaluationIds":["eval_1"]`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected proposal JSON to contain %s, got %s", want, got)
+		}
+	}
+}
+
+func TestEvaluationCaseProvenanceJSONTags(t *testing.T) {
+	item := EvaluationCase{
+		ID: "case_1", DatasetID: "ds_1", Name: "Regression",
+		Input: map[string]interface{}{}, Tags: []string{"regression"},
+		SourceRunID: "run_1", SourceObservationIDs: []string{"obs_1"},
+		SourceEvaluationIDs: []string{"eval_1"}, AgentID: "agt_1", AgentRevision: 3,
+	}
+	b, err := json.Marshal(item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"sourceRunId":"run_1"`,
+		`"sourceObservationIds":["obs_1"]`,
+		`"sourceEvaluationIds":["eval_1"]`,
+		`"agentId":"agt_1"`,
+		`"agentRevision":3`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected case provenance JSON to contain %s, got %s", want, got)
+		}
+	}
+}
+
+func TestExperimentComparisonJSONTags(t *testing.T) {
+	delta := 0.25
+	item := ExperimentComparison{
+		BaselineExperimentID: "exp_base", CandidateExperimentID: "exp_candidate",
+		DatasetID: "ds_1", AgentID: "agt_1",
+		BaselineAgentRevision: 2, CandidateAgentRevision: 3,
+		Comparable: true,
+		Summary:    ExperimentComparisonSummary{TotalCases: 1, PairedResults: 1, Fixes: 1},
+		Cases: []ExperimentCaseComparison{{
+			CaseID: "case_1", CaseName: "Regression", Transition: "fixed",
+			BaselineLabel: "fail", CandidateLabel: "pass", ScoreDelta: &delta,
+		}},
+	}
+	b, err := json.Marshal(item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{
+		`"baselineExperimentId":"exp_base"`,
+		`"candidateExperimentId":"exp_candidate"`,
+		`"baselineAgentRevision":2`,
+		`"candidateAgentRevision":3`,
+		`"pairedResults":1`,
+		`"fixes":1`,
+		`"transition":"fixed"`,
+		`"scoreDelta":0.25`,
+	} {
+		if !contains(got, want) {
+			t.Errorf("expected comparison JSON to contain %s, got %s", want, got)
+		}
+	}
+}

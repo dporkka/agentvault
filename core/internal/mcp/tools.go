@@ -12,9 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/agentstate"
 	"github.com/agentvault/core/internal/ai"
-	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/config"
+	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
 	"github.com/agentvault/core/internal/rag"
@@ -65,7 +66,7 @@ func (s *Server) registerSearch() {
 		Description: "Search the vault for notes, decisions, tasks, and other content. Supports full-text search with optional filters by type, project, tag, and status.",
 		InputSchema: makeSchema(map[string]interface{}{
 			"query":   schemaString("Search query text"),
-			"type":    schemaString("Filter by note type (note, decision, task, meeting, source)"),
+			"type":    schemaString("Filter by note type (note, decision, task, meeting, source, agent)"),
 			"project": schemaString("Filter by project name"),
 			"tag":     schemaString("Filter by tag"),
 			"status":  schemaString("Filter by status"),
@@ -255,7 +256,7 @@ func (s *Server) registerCreateNote() {
 		Name:        "agentvault.create_note",
 		Description: "Create a new note in the vault using a template. The note is written to the appropriate folder based on its type.",
 		InputSchema: makeSchema(map[string]interface{}{
-			"type":    schemaStringEnum("Note type", []string{"note", "decision", "task", "meeting", "source"}),
+			"type":    schemaStringEnum("Note type", []string{"note", "decision", "task", "meeting", "source", "agent"}),
 			"title":   schemaString("Note title"),
 			"project": schemaString("Project name (optional)"),
 			"tags":    schemaStringArray("Tags to apply"),
@@ -691,7 +692,6 @@ func (s *Server) registerGitStatus() {
 	}
 }
 
-
 // --- Tool: agentvault.open_daily ---
 
 func (s *Server) registerOpenDaily() {
@@ -803,42 +803,1091 @@ func (s *Server) handleGitStatus(args map[string]interface{}) (string, error) {
 func (s *Server) registerLogAgentRun() {
 	s.tools["agentvault.log_agent_run"] = Tool{
 		Name:        "agentvault.log_agent_run",
-		Description: "Log an agent run to the vault history. Records what the agent did for audit purposes.",
+		Description: "Log a structured agent run. AgentVault records execution evidence but does not execute the agent.",
 		InputSchema: makeSchema(map[string]interface{}{
-			"agent_name":    schemaString("Name of the agent that ran"),
-			"task":          schemaString("Description of the task performed"),
-			"files_changed": schemaStringArray("List of files changed during the run"),
+			"agent_name":               schemaString("Human-readable name of the agent that ran"),
+			"agent_id":                 schemaString("Canonical AgentVault agent manifest ID (optional for legacy callers)"),
+			"agent_revision":           schemaInt("Immutable agent manifest revision; required when agent_id is supplied", 0),
+			"task":                     schemaString("Description of the task performed"),
+			"status":                   schemaStringEnum("Run status", []string{"running", "succeeded", "failed", "cancelled"}),
+			"conversation_id":          schemaString("Conversation/session ID associated with this run"),
+			"context_hash":             schemaString("Hash of the compiled context used for this run"),
+			"input_json":               schemaString("JSON object describing run inputs"),
+			"output_json":              schemaString("JSON object describing run outputs"),
+			"capability_snapshot_json": schemaString("JSON object describing capability grants at execution time"),
+			"runtime_metadata_json":    schemaString("JSON object describing runtime/model/application revisions"),
+			"started_at":               schemaString("RFC3339 run start timestamp"),
+			"ended_at":                 schemaString("RFC3339 run end timestamp"),
+			"files_changed":            schemaStringArray("List of files changed during the run"),
 		}, []string{"agent_name", "task"}),
 		Handler: s.handleLogAgentRun,
 	}
 }
 
 func (s *Server) handleLogAgentRun(args map[string]interface{}) (string, error) {
-	agentName := stringArg(args, "agent_name")
-	task := stringArg(args, "task")
-	filesChanged := stringSliceArg(args, "files_changed")
-
-	if agentName == "" || task == "" {
-		return "", fmt.Errorf("agent_name and task are required")
+	inputJSON, err := normalizedJSONObjectArg(args, "input_json")
+	if err != nil {
+		return "", err
+	}
+	outputJSON, err := normalizedJSONObjectArg(args, "output_json")
+	if err != nil {
+		return "", err
+	}
+	capabilityJSON, err := normalizedJSONObjectArg(args, "capability_snapshot_json")
+	if err != nil {
+		return "", err
+	}
+	runtimeJSON, err := normalizedJSONObjectArg(args, "runtime_metadata_json")
+	if err != nil {
+		return "", err
 	}
 
-	id := fmt.Sprintf("run_%d", time.Now().Unix())
-	now := currentTimestamp()
-	filesJSON, _ := json.Marshal(filesChanged)
+	var input, output, capabilities, runtime map[string]interface{}
+	if err := json.Unmarshal([]byte(inputJSON), &input); err != nil {
+		return "", fmt.Errorf("input_json: %w", err)
+	}
+	if err := json.Unmarshal([]byte(outputJSON), &output); err != nil {
+		return "", fmt.Errorf("output_json: %w", err)
+	}
+	if err := json.Unmarshal([]byte(capabilityJSON), &capabilities); err != nil {
+		return "", fmt.Errorf("capability_snapshot_json: %w", err)
+	}
+	if err := json.Unmarshal([]byte(runtimeJSON), &runtime); err != nil {
+		return "", fmt.Errorf("runtime_metadata_json: %w", err)
+	}
 
-	_, err := s.db.Exec(
-		`INSERT INTO agent_runs (id, agent_name, task, input_json, output_json, files_changed_json, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		id, agentName, task,
-		"{}", "{}", string(filesJSON),
-		now,
+	record, err := agentstate.RecordRun(s.db, agentstate.RunRecord{
+		AgentName:          stringArg(args, "agent_name"),
+		AgentID:            stringArg(args, "agent_id"),
+		AgentRevision:      intArg(args, "agent_revision", 0),
+		Task:               stringArg(args, "task"),
+		Status:             agentstate.RunStatus(stringArg(args, "status")),
+		ConversationID:     stringArg(args, "conversation_id"),
+		ContextHash:        stringArg(args, "context_hash"),
+		Input:              input,
+		Output:             output,
+		CapabilitySnapshot: capabilities,
+		RuntimeMetadata:    runtime,
+		StartedAt:          stringArg(args, "started_at"),
+		EndedAt:            stringArg(args, "ended_at"),
+		FilesChanged:       stringSliceArg(args, "files_changed"),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	agentLabel := record.AgentName
+	if record.AgentID != "" {
+		agentLabel = fmt.Sprintf("%s@%d", record.AgentID, record.AgentRevision)
+	}
+	return fmt.Sprintf("Logged agent run: %s\n- **Agent:** %s\n- **Task:** %s\n- **Status:** %s\n- **Files changed:** %d",
+		record.ID, agentLabel, record.Task, record.Status, len(record.FilesChanged)), nil
+}
+
+// --- Tool: agentvault.log_observation ---
+
+func (s *Server) registerLogObservation() {
+	s.tools["agentvault.log_observation"] = Tool{
+		Name:        "agentvault.log_observation",
+		Description: "Record one structured step inside an existing agent run, such as context compilation, retrieval, generation, tool use, or artifact mutation.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id":                schemaString("Parent agent run ID"),
+			"parent_observation_id": schemaString("Optional parent observation ID for nested spans"),
+			"kind":                  schemaStringEnum("Observation kind", []string{"context.compile", "retrieval", "generation", "tool", "artifact.write", "event"}),
+			"name":                  schemaString("Stable operation name"),
+			"status":                schemaString("Runtime-defined observation status"),
+			"input_json":            schemaString("JSON object describing observation inputs"),
+			"output_json":           schemaString("JSON object describing observation outputs"),
+			"evidence_json":         schemaString("JSON object with source IDs, artifact refs, tool metadata, or other evidence"),
+			"started_at":            schemaString("RFC3339 observation start timestamp"),
+			"ended_at":              schemaString("RFC3339 observation end timestamp"),
+		}, []string{"run_id", "kind", "name"}),
+		Handler: s.handleLogObservation,
+	}
+}
+
+func (s *Server) handleLogObservation(args map[string]interface{}) (string, error) {
+	runID := stringArg(args, "run_id")
+	parentID := stringArg(args, "parent_observation_id")
+	kind := agentstate.ObservationKind(stringArg(args, "kind"))
+	name := stringArg(args, "name")
+	status := stringArg(args, "status")
+	startedAt := stringArg(args, "started_at")
+	endedAt := stringArg(args, "ended_at")
+
+	id := fmt.Sprintf("obs_%d", time.Now().UnixNano())
+	observation := agentstate.Observation{ID: id, RunID: runID, Kind: kind, Name: name}
+	if err := observation.Validate(); err != nil {
+		return "", err
+	}
+
+	inputJSON, err := normalizedJSONObjectArg(args, "input_json")
+	if err != nil {
+		return "", err
+	}
+	outputJSON, err := normalizedJSONObjectArg(args, "output_json")
+	if err != nil {
+		return "", err
+	}
+	evidenceJSON, err := normalizedJSONObjectArg(args, "evidence_json")
+	if err != nil {
+		return "", err
+	}
+	now := currentTimestamp()
+	if startedAt == "" {
+		startedAt = now
+	}
+
+	_, err = s.db.Exec(
+		`INSERT INTO run_observations (
+			id, run_id, parent_observation_id, kind, name, status,
+			input_json, output_json, evidence_json, started_at, ended_at, created_at
+		) VALUES (?, ?, NULLIF(?, ''), ?, ?, NULLIF(?, ''), ?, ?, ?, ?, NULLIF(?, ''), ?)`,
+		id, runID, parentID, string(kind), name, status,
+		inputJSON, outputJSON, evidenceJSON, startedAt, endedAt, now,
 	)
 	if err != nil {
-		return "", fmt.Errorf("failed to log agent run: %w", err)
+		return "", fmt.Errorf("failed to log observation: %w", err)
 	}
 
-	return fmt.Sprintf("Logged agent run: %s\n- **Agent:** %s\n- **Task:** %s\n- **Files changed:** %d",
-		id, agentName, task, len(filesChanged)), nil
+	return fmt.Sprintf("Logged observation: %s\n- **Run:** %s\n- **Kind:** %s\n- **Name:** %s",
+		id, runID, kind, name), nil
+}
+
+// --- Tool: agentvault.log_evaluation ---
+
+func (s *Server) registerLogEvaluation() {
+	s.tools["agentvault.log_evaluation"] = Tool{
+		Name:        "agentvault.log_evaluation",
+		Description: "Attach a human, rule-based, or model-based evaluation to an agent run or observation.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id":         schemaString("Agent run being evaluated"),
+			"observation_id": schemaString("Optional observation being evaluated"),
+			"evaluator":      schemaString("Evaluator identity or type"),
+			"name":           schemaString("Evaluation dimension, such as correctness or groundedness"),
+			"score":          map[string]interface{}{"type": "number", "description": "Optional numeric score"},
+			"label":          schemaString("Optional categorical label"),
+			"rationale":      schemaString("Why this score or label was assigned"),
+			"metadata_json":  schemaString("JSON object with evaluator metadata"),
+		}, []string{"run_id", "evaluator", "name"}),
+		Handler: s.handleLogEvaluation,
+	}
+}
+
+func (s *Server) handleLogEvaluation(args map[string]interface{}) (string, error) {
+	runID := stringArg(args, "run_id")
+	observationID := stringArg(args, "observation_id")
+	evaluator := stringArg(args, "evaluator")
+	name := stringArg(args, "name")
+	label := stringArg(args, "label")
+	rationale := stringArg(args, "rationale")
+
+	var score *float64
+	if raw, ok := args["score"]; ok {
+		switch v := raw.(type) {
+		case float64:
+			score = &v
+		case int:
+			value := float64(v)
+			score = &value
+		default:
+			return "", fmt.Errorf("score must be numeric")
+		}
+	}
+
+	id := fmt.Sprintf("eval_%d", time.Now().UnixNano())
+	evaluation := agentstate.Evaluation{
+		ID: id, RunID: runID, ObservationID: observationID,
+		Evaluator: evaluator, Name: name, Score: score, Label: label, Rationale: rationale,
+	}
+	if err := evaluation.Validate(); err != nil {
+		return "", err
+	}
+	metadataJSON, err := normalizedJSONObjectArg(args, "metadata_json")
+	if err != nil {
+		return "", err
+	}
+
+	var scoreValue interface{}
+	if score != nil {
+		scoreValue = *score
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO evaluations (
+			id, run_id, observation_id, evaluator, name, score, label, rationale, metadata_json, created_at
+		) VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?)`,
+		id, runID, observationID, evaluator, name, scoreValue, label, rationale, metadataJSON, currentTimestamp(),
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to log evaluation: %w", err)
+	}
+
+	return fmt.Sprintf("Logged evaluation: %s\n- **Run:** %s\n- **Name:** %s\n- **Evaluator:** %s",
+		id, runID, name, evaluator), nil
+}
+
+// --- Tool: agentvault.get_regression_case_proposal ---
+
+func (s *Server) registerGetRegressionCaseProposal() {
+	s.tools["agentvault.get_regression_case_proposal"] = Tool{
+		Name:        "agentvault.get_regression_case_proposal",
+		Description: "Project one audited failure into a read-only regression-case proposal with original input and evidence provenance.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id": schemaString("Agent run ID"),
+		}, []string{"run_id"}),
+		Handler: s.handleGetRegressionCaseProposal,
+	}
+}
+
+func (s *Server) handleGetRegressionCaseProposal(args map[string]interface{}) (string, error) {
+	proposal, err := agentstate.RecommendRunRegressionCase(s.db, stringArg(args, "run_id"))
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Regression Case Proposal\n\n")
+	sb.WriteString(fmt.Sprintf("- **Run:** %s\n", proposal.RunID))
+	if proposal.AgentID != "" {
+		sb.WriteString(fmt.Sprintf("- **Agent:** %s@%d\n", proposal.AgentID, proposal.AgentRevision))
+	} else {
+		sb.WriteString("- **Agent:** unbound\n")
+	}
+	sb.WriteString(fmt.Sprintf("- **Eligible:** %t\n", proposal.Eligible))
+	sb.WriteString(fmt.Sprintf("- **Support:** %s\n", proposal.SupportLevel))
+	sb.WriteString(fmt.Sprintf("- **Name:** %s\n", proposal.Name))
+	sb.WriteString(fmt.Sprintf("- **Expected hint:** %t\n", proposal.Expected != nil))
+	if len(proposal.SourceObservationIDs) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Observations:** %s\n", strings.Join(proposal.SourceObservationIDs, ", ")))
+	}
+	if len(proposal.SourceEvaluationIDs) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Evaluations:** %s\n", strings.Join(proposal.SourceEvaluationIDs, ", ")))
+	}
+	if len(proposal.ReasonCodes) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Reasons:** %s\n", strings.Join(proposal.ReasonCodes, ", ")))
+	}
+	return sb.String(), nil
+}
+
+// --- Tool: agentvault.capture_run_regression_case ---
+
+func (s *Server) registerCaptureRunRegressionCase() {
+	s.tools["agentvault.capture_run_regression_case"] = Tool{
+		Name:        "agentvault.capture_run_regression_case",
+		Description: "Explicitly add an eligible failed run to a caller-selected evaluation dataset, preserving run/observation/evaluation provenance. Repeated capture of the same run into the same dataset is idempotent.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id":        schemaString("Originating agent run ID"),
+			"dataset_id":    schemaString("Target evaluation dataset ID"),
+			"name":          schemaString("Optional case name override"),
+			"expected_json": schemaString("Optional JSON object overriding explicit evaluator expected behavior"),
+			"tags":          schemaStringArray("Optional tags added to the default regression tag"),
+		}, []string{"run_id", "dataset_id"}),
+		Handler: s.handleCaptureRunRegressionCase,
+	}
+}
+
+func (s *Server) handleCaptureRunRegressionCase(args map[string]interface{}) (string, error) {
+	var expected map[string]interface{}
+	if stringArg(args, "expected_json") != "" {
+		expectedJSON, err := normalizedJSONObjectArg(args, "expected_json")
+		if err != nil {
+			return "", err
+		}
+		if err := json.Unmarshal([]byte(expectedJSON), &expected); err != nil {
+			return "", err
+		}
+	}
+
+	record, err := agentstate.CaptureRunRegressionCase(s.db, agentstate.RunRegressionCaseCapture{
+		RunID: stringArg(args, "run_id"), DatasetID: stringArg(args, "dataset_id"),
+		Name: stringArg(args, "name"), Expected: expected, Tags: stringSliceArg(args, "tags"),
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(
+		"Captured regression case: %s\n- **ID:** %s\n- **Dataset:** %s\n- **Run:** %s\n- **Agent:** %s@%d",
+		record.Name, record.ID, record.DatasetID, record.SourceRunID, record.AgentID, record.AgentRevision,
+	), nil
+}
+
+// --- Tool: agentvault.get_learning_recommendation ---
+
+func (s *Server) registerGetLearningRecommendation() {
+	s.tools["agentvault.get_learning_recommendation"] = Tool{
+		Name:        "agentvault.get_learning_recommendation",
+		Description: "Inspect one audited run for deterministic failure signals and explicit evaluator hints without creating or mutating memory.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id": schemaString("Agent run ID"),
+		}, []string{"run_id"}),
+		Handler: s.handleGetLearningRecommendation,
+	}
+}
+
+func (s *Server) handleGetLearningRecommendation(args map[string]interface{}) (string, error) {
+	rec, err := agentstate.RecommendRunLearning(s.db, stringArg(args, "run_id"))
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Learning Recommendation\n\n")
+	sb.WriteString(fmt.Sprintf("- **Run:** %s\n", rec.RunID))
+	if rec.AgentID != "" {
+		sb.WriteString(fmt.Sprintf("- **Agent:** %s@%d\n", rec.AgentID, rec.AgentRevision))
+	} else {
+		sb.WriteString("- **Agent:** unbound\n")
+	}
+	sb.WriteString(fmt.Sprintf("- **Eligible:** %t\n", rec.Eligible))
+	sb.WriteString(fmt.Sprintf("- **Support:** %s\n", rec.SupportLevel))
+	sb.WriteString(fmt.Sprintf("- **Evidence:** %d\n", rec.EvidenceCount))
+	if rec.SuggestedTargetKind != "" {
+		sb.WriteString(fmt.Sprintf("- **Target hint:** %s\n", rec.SuggestedTargetKind))
+	}
+	if len(rec.ReasonCodes) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Reasons:** %s\n", strings.Join(rec.ReasonCodes, ", ")))
+	}
+	if len(rec.ContextMemoryRefs) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Context memory refs:** %s\n", strings.Join(rec.ContextMemoryRefs, ", ")))
+	}
+	if len(rec.SupersedesNoteIDs) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Supersession hints:** %s\n", strings.Join(rec.SupersedesNoteIDs, ", ")))
+	}
+
+	sb.WriteString("\n## Signals\n\n")
+	if len(rec.Signals) == 0 {
+		sb.WriteString("No explicit negative evidence.\n")
+		return sb.String(), nil
+	}
+	for _, signal := range rec.Signals {
+		sb.WriteString(fmt.Sprintf("- %s **%s** %s", signal.ID, signal.Kind, signal.Name))
+		if signal.Status != "" {
+			sb.WriteString(fmt.Sprintf(" status=%s", signal.Status))
+		}
+		if signal.Label != "" {
+			sb.WriteString(fmt.Sprintf(" label=%s", signal.Label))
+		}
+		if signal.Rationale != "" {
+			sb.WriteString(fmt.Sprintf(" — %s", signal.Rationale))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
+// --- Tool: agentvault.propose_run_learning ---
+
+func (s *Server) registerProposeRunLearning() {
+	s.tools["agentvault.propose_run_learning"] = Tool{
+		Name:        "agentvault.propose_run_learning",
+		Description: "Create a reviewable memory or knowledge promotion from one recorded run, deriving the agent identity and validating selected evidence lineage.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id":                 schemaString("Originating agent run ID"),
+			"target_kind":            schemaStringEnum("Promotion destination", []string{"memory", "knowledge"}),
+			"candidate":              schemaString("Candidate memory or knowledge text"),
+			"rationale":              schemaString("Why this run supports promotion"),
+			"source_observation_ids": schemaStringArray("Optional observations from the same run supporting the candidate"),
+			"source_evaluation_ids":  schemaStringArray("Optional evaluations from the same run supporting the candidate"),
+			"supersedes_note_id":     schemaString("Canonical note this candidate would supersede, if any"),
+		}, []string{"run_id", "target_kind", "candidate"}),
+		Handler: s.handleProposeRunLearning,
+	}
+}
+
+func (s *Server) handleProposeRunLearning(args map[string]interface{}) (string, error) {
+	record, err := agentstate.ProposeRunLearningCandidate(s.db, agentstate.RunLearningCandidate{
+		RunID:                stringArg(args, "run_id"),
+		TargetKind:           agentstate.PromotionTargetKind(stringArg(args, "target_kind")),
+		Candidate:            stringArg(args, "candidate"),
+		Rationale:            stringArg(args, "rationale"),
+		SourceObservationIDs: stringSliceArg(args, "source_observation_ids"),
+		SourceEvaluationIDs:  stringSliceArg(args, "source_evaluation_ids"),
+		SupersedesNoteID:     stringArg(args, "supersedes_note_id"),
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Run learning proposed: %s\n- **Run:** %s\n- **Agent:** %s\n- **Target:** %s\n- **Status:** %s",
+		record.ID, stringArg(args, "run_id"), record.AgentID, record.TargetKind, record.Status), nil
+}
+
+// --- Tool: agentvault.propose_promotion ---
+
+func (s *Server) registerProposePromotion() {
+	s.tools["agentvault.propose_promotion"] = Tool{
+		Name:        "agentvault.propose_promotion",
+		Description: "Propose evidence-backed knowledge or memory for later review. This records lineage only; it does not create or mutate canonical notes.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"agent_id":               schemaString("Agent manifest ID that would receive the promoted state"),
+			"target_kind":            schemaStringEnum("Promotion destination", []string{"memory", "knowledge"}),
+			"candidate":              schemaString("Candidate memory or knowledge text"),
+			"rationale":              schemaString("Why the candidate should be promoted"),
+			"source_run_ids":         schemaStringArray("Runs supporting the candidate"),
+			"source_observation_ids": schemaStringArray("Observations supporting the candidate"),
+			"source_evaluation_ids":  schemaStringArray("Evaluations supporting the candidate"),
+			"supersedes_note_id":     schemaString("Canonical note this candidate would supersede, if any"),
+		}, []string{"agent_id", "target_kind", "candidate"}),
+		Handler: s.handleProposePromotion,
+	}
+}
+
+func (s *Server) handleProposePromotion(args map[string]interface{}) (string, error) {
+	record, err := agentstate.ProposePromotion(s.db, agentstate.PromotionRecord{
+		AgentID:              stringArg(args, "agent_id"),
+		TargetKind:           agentstate.PromotionTargetKind(stringArg(args, "target_kind")),
+		Candidate:            stringArg(args, "candidate"),
+		Rationale:            stringArg(args, "rationale"),
+		SourceRunIDs:         stringSliceArg(args, "source_run_ids"),
+		SourceObservationIDs: stringSliceArg(args, "source_observation_ids"),
+		SourceEvaluationIDs:  stringSliceArg(args, "source_evaluation_ids"),
+		SupersedesNoteID:     stringArg(args, "supersedes_note_id"),
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Promotion proposed: %s\n- **Agent:** %s\n- **Target:** %s\n- **Status:** %s",
+		record.ID, record.AgentID, record.TargetKind, record.Status), nil
+}
+
+// --- Tool: agentvault.review_promotion ---
+
+func (s *Server) registerReviewPromotion() {
+	s.tools["agentvault.review_promotion"] = Tool{
+		Name:        "agentvault.review_promotion",
+		Description: "Approve or reject an evidence-backed promotion proposal. Review is explicit and does not mutate canonical notes.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"promotion_id": schemaString("Promotion proposal ID"),
+			"decision":     schemaStringEnum("Review decision", []string{"approve", "reject"}),
+			"reviewer":     schemaString("Reviewer identity"),
+			"note":         schemaString("Optional review rationale"),
+		}, []string{"promotion_id", "decision", "reviewer"}),
+		Handler: s.handleReviewPromotion,
+	}
+}
+
+func (s *Server) handleReviewPromotion(args map[string]interface{}) (string, error) {
+	promotionID := stringArg(args, "promotion_id")
+	reviewer := stringArg(args, "reviewer")
+
+	var decision agentstate.PromotionStatus
+	switch stringArg(args, "decision") {
+	case "approve":
+		decision = agentstate.PromotionApproved
+	case "reject":
+		decision = agentstate.PromotionRejected
+	default:
+		return "", fmt.Errorf("decision must be approve or reject")
+	}
+
+	record, err := agentstate.ReviewPromotion(
+		s.db,
+		promotionID,
+		decision,
+		reviewer,
+		stringArg(args, "note"),
+	)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Promotion %s: %s\n- **Reviewer:** %s", record.Status, record.ID, reviewer), nil
+}
+
+// --- Tool: agentvault.commit_promotion ---
+
+func (s *Server) registerCommitPromotion() {
+	s.tools["agentvault.commit_promotion"] = Tool{
+		Name:        "agentvault.commit_promotion",
+		Description: "Mark an approved promotion committed only after its exact candidate text exists in a canonical Markdown note.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"promotion_id":   schemaString("Approved promotion ID"),
+			"target_note_id": schemaString("Canonical note ID containing the promoted candidate text"),
+		}, []string{"promotion_id", "target_note_id"}),
+		Handler: s.handleCommitPromotion,
+	}
+}
+
+func (s *Server) handleCommitPromotion(args map[string]interface{}) (string, error) {
+	promotionID := stringArg(args, "promotion_id")
+	targetNoteID := stringArg(args, "target_note_id")
+	if promotionID == "" || targetNoteID == "" {
+		return "", fmt.Errorf("promotion_id and target_note_id are required")
+	}
+
+	promotion, err := agentstate.GetPromotion(s.db, promotionID)
+	if err != nil {
+		return "", err
+	}
+	note, err := s.searcher.GetByID(targetNoteID)
+	if err != nil {
+		return "", fmt.Errorf("target note not found: %s", targetNoteID)
+	}
+	doc, err := markdown.ParseFile(filepath.Join(s.vaultPath, note.Path))
+	if err != nil {
+		return "", fmt.Errorf("target note is not readable canonical Markdown: %w", err)
+	}
+	if !strings.Contains(doc.Body, promotion.Candidate) {
+		return "", fmt.Errorf("target note does not contain promotion candidate text")
+	}
+
+	record, err := agentstate.CommitPromotion(s.db, promotionID, targetNoteID)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Promotion committed: %s\n- **Target note:** %s", record.ID, record.TargetNoteID), nil
+}
+
+// --- Tool: agentvault.create_evaluation_dataset ---
+
+func (s *Server) registerCreateEvaluationDataset() {
+	s.tools["agentvault.create_evaluation_dataset"] = Tool{
+		Name:        "agentvault.create_evaluation_dataset",
+		Description: "Create a reusable evaluation dataset. AgentVault stores cases but does not execute evaluations.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"name":        schemaString("Dataset name"),
+			"description": schemaString("Dataset purpose"),
+			"agent_id":    schemaString("Optional agent manifest ID this dataset targets"),
+		}, []string{"name"}),
+		Handler: s.handleCreateEvaluationDataset,
+	}
+}
+
+func (s *Server) handleCreateEvaluationDataset(args map[string]interface{}) (string, error) {
+	record, err := agentstate.CreateEvaluationDataset(s.db, agentstate.EvaluationDataset{
+		Name:        stringArg(args, "name"),
+		Description: stringArg(args, "description"),
+		AgentID:     stringArg(args, "agent_id"),
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Created evaluation dataset: %s\n- **ID:** %s", record.Name, record.ID), nil
+}
+
+// --- Tool: agentvault.add_evaluation_case ---
+
+func (s *Server) registerAddEvaluationCase() {
+	s.tools["agentvault.add_evaluation_case"] = Tool{
+		Name:        "agentvault.add_evaluation_case",
+		Description: "Add one reproducible input and optional expected output to an evaluation dataset.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"dataset_id":    schemaString("Evaluation dataset ID"),
+			"name":          schemaString("Case name"),
+			"input_json":    schemaString("Required JSON object containing the evaluation input"),
+			"expected_json": schemaString("Optional JSON object describing the expected outcome"),
+			"tags":          schemaStringArray("Optional case tags"),
+		}, []string{"dataset_id", "name", "input_json"}),
+		Handler: s.handleAddEvaluationCase,
+	}
+}
+
+func (s *Server) handleAddEvaluationCase(args map[string]interface{}) (string, error) {
+	inputJSON, err := normalizedJSONObjectArg(args, "input_json")
+	if err != nil {
+		return "", err
+	}
+	var input map[string]interface{}
+	if err := json.Unmarshal([]byte(inputJSON), &input); err != nil {
+		return "", err
+	}
+
+	var expected map[string]interface{}
+	if stringArg(args, "expected_json") != "" {
+		expectedJSON, err := normalizedJSONObjectArg(args, "expected_json")
+		if err != nil {
+			return "", err
+		}
+		if err := json.Unmarshal([]byte(expectedJSON), &expected); err != nil {
+			return "", err
+		}
+	}
+
+	record, err := agentstate.AddEvaluationCase(s.db, agentstate.EvaluationCase{
+		DatasetID: stringArg(args, "dataset_id"),
+		Name:      stringArg(args, "name"),
+		Input:     input,
+		Expected:  expected,
+		Tags:      stringSliceArg(args, "tags"),
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Added evaluation case: %s\n- **ID:** %s\n- **Dataset:** %s", record.Name, record.ID, record.DatasetID), nil
+}
+
+// --- Tool: agentvault.record_experiment ---
+
+func (s *Server) registerRecordExperiment() {
+	s.tools["agentvault.record_experiment"] = Tool{
+		Name:        "agentvault.record_experiment",
+		Description: "Record metadata for an evaluation experiment executed by an external runtime.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"dataset_id":     schemaString("Evaluation dataset ID"),
+			"name":           schemaString("Experiment name"),
+			"agent_id":       schemaString("Agent manifest ID"),
+			"agent_revision": schemaInt("Immutable agent revision evaluated", 1),
+			"status":         schemaStringEnum("Experiment status", []string{"planned", "running", "completed", "failed", "cancelled"}),
+			"config_json":    schemaString("JSON object describing model/runtime/context configuration"),
+		}, []string{"dataset_id", "name", "agent_id", "agent_revision"}),
+		Handler: s.handleRecordExperiment,
+	}
+}
+
+func (s *Server) handleRecordExperiment(args map[string]interface{}) (string, error) {
+	configJSON, err := normalizedJSONObjectArg(args, "config_json")
+	if err != nil {
+		return "", err
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
+		return "", err
+	}
+
+	record, err := agentstate.RecordExperiment(s.db, agentstate.Experiment{
+		DatasetID:     stringArg(args, "dataset_id"),
+		Name:          stringArg(args, "name"),
+		AgentID:       stringArg(args, "agent_id"),
+		AgentRevision: intArg(args, "agent_revision", 0),
+		Status:        agentstate.ExperimentStatus(stringArg(args, "status")),
+		Config:        config,
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Recorded experiment: %s\n- **ID:** %s\n- **Status:** %s", record.Name, record.ID, record.Status), nil
+}
+
+// --- Tool: agentvault.record_experiment_result ---
+
+func (s *Server) registerRecordExperimentResult() {
+	s.tools["agentvault.record_experiment_result"] = Tool{
+		Name:        "agentvault.record_experiment_result",
+		Description: "Record one externally produced evaluation result for a dataset case.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"experiment_id": schemaString("Experiment ID"),
+			"case_id":       schemaString("Evaluation case ID"),
+			"run_id":        schemaString("Optional agent run providing execution evidence"),
+			"score":         map[string]interface{}{"type": "number", "description": "Optional numeric score"},
+			"label":         schemaString("Optional categorical label"),
+			"metadata_json": schemaString("Optional JSON object with metrics such as latency or token usage"),
+		}, []string{"experiment_id", "case_id"}),
+		Handler: s.handleRecordExperimentResult,
+	}
+}
+
+func (s *Server) handleRecordExperimentResult(args map[string]interface{}) (string, error) {
+	var score *float64
+	if raw, ok := args["score"]; ok {
+		switch v := raw.(type) {
+		case float64:
+			score = &v
+		case int:
+			value := float64(v)
+			score = &value
+		default:
+			return "", fmt.Errorf("score must be numeric")
+		}
+	}
+
+	metadataJSON, err := normalizedJSONObjectArg(args, "metadata_json")
+	if err != nil {
+		return "", err
+	}
+	var metadata map[string]interface{}
+	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+		return "", err
+	}
+
+	record, err := agentstate.RecordExperimentResult(s.db, agentstate.ExperimentResult{
+		ExperimentID: stringArg(args, "experiment_id"),
+		CaseID:       stringArg(args, "case_id"),
+		RunID:        stringArg(args, "run_id"),
+		Score:        score,
+		Label:        stringArg(args, "label"),
+		Metadata:     metadata,
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Recorded experiment result\n- **Experiment:** %s\n- **Case:** %s", record.ExperimentID, record.CaseID), nil
+}
+
+// --- Tool: agentvault.list_promotions ---
+
+func (s *Server) registerListPromotions() {
+	s.tools["agentvault.list_promotions"] = Tool{
+		Name:        "agentvault.list_promotions",
+		Description: "List promotion records awaiting review or filtered by status and agent. Defaults to proposed promotions.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"status":   schemaStringEnum("Promotion status filter", []string{"proposed", "approved", "rejected", "committed", "superseded", "all"}),
+			"agent_id": schemaString("Optional agent manifest ID"),
+			"limit":    schemaInt("Maximum records to return (max 100)", 50),
+		}, []string{}),
+		Handler: s.handleListPromotions,
+	}
+}
+
+func (s *Server) handleListPromotions(args map[string]interface{}) (string, error) {
+	items, err := agentstate.ListPromotions(
+		s.db,
+		stringArg(args, "status"),
+		stringArg(args, "agent_id"),
+		intArg(args, "limit", 50),
+	)
+	if err != nil {
+		return "", err
+	}
+	if len(items) == 0 {
+		return "# Promotions\n\nNo matching promotions.", nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Promotions\n\n")
+	for _, item := range items {
+		sb.WriteString(fmt.Sprintf("## %s\n", item.ID))
+		sb.WriteString(fmt.Sprintf("- **Agent:** %s\n", item.AgentID))
+		sb.WriteString(fmt.Sprintf("- **Status:** %s\n", item.Status))
+		sb.WriteString(fmt.Sprintf("- **Target:** %s\n", item.TargetKind))
+		sb.WriteString(fmt.Sprintf("- **Candidate:** %s\n", item.Candidate))
+		if item.Rationale != "" {
+			sb.WriteString(fmt.Sprintf("- **Rationale:** %s\n", item.Rationale))
+		}
+		if len(item.SourceRunIDs) > 0 {
+			sb.WriteString(fmt.Sprintf("- **Runs:** %s\n", strings.Join(item.SourceRunIDs, ", ")))
+		}
+		if len(item.SourceObservationIDs) > 0 {
+			sb.WriteString(fmt.Sprintf("- **Observations:** %s\n", strings.Join(item.SourceObservationIDs, ", ")))
+		}
+		if len(item.SourceEvaluationIDs) > 0 {
+			sb.WriteString(fmt.Sprintf("- **Evaluations:** %s\n", strings.Join(item.SourceEvaluationIDs, ", ")))
+		}
+		if item.ReviewedBy != "" {
+			sb.WriteString(fmt.Sprintf("- **Reviewed by:** %s\n", item.ReviewedBy))
+		}
+		if item.TargetNoteID != "" {
+			sb.WriteString(fmt.Sprintf("- **Target note:** %s\n", item.TargetNoteID))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
+// --- Tool: agentvault.get_evaluation_dataset ---
+
+func (s *Server) registerGetEvaluationDataset() {
+	s.tools["agentvault.get_evaluation_dataset"] = Tool{
+		Name:        "agentvault.get_evaluation_dataset",
+		Description: "Fetch an evaluation dataset and all of its reproducible cases.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"dataset_id": schemaString("Evaluation dataset ID"),
+		}, []string{"dataset_id"}),
+		Handler: s.handleGetEvaluationDataset,
+	}
+}
+
+func (s *Server) handleGetEvaluationDataset(args map[string]interface{}) (string, error) {
+	id := stringArg(args, "dataset_id")
+	if id == "" {
+		return "", fmt.Errorf("dataset_id is required")
+	}
+	item, err := agentstate.GetEvaluationDataset(s.db, id)
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Evaluation Dataset: %s\n\n", item.Name))
+	sb.WriteString(fmt.Sprintf("- **ID:** %s\n", item.ID))
+	if item.Description != "" {
+		sb.WriteString(fmt.Sprintf("- **Description:** %s\n", item.Description))
+	}
+	if item.AgentID != "" {
+		sb.WriteString(fmt.Sprintf("- **Agent:** %s\n", item.AgentID))
+	}
+	sb.WriteString(fmt.Sprintf("- **Cases:** %d\n\n", len(item.Cases)))
+
+	for _, evaluationCase := range item.Cases {
+		inputJSON, _ := json.Marshal(evaluationCase.Input)
+		expectedJSON := []byte("null")
+		if evaluationCase.Expected != nil {
+			expectedJSON, _ = json.Marshal(evaluationCase.Expected)
+		}
+		sb.WriteString(fmt.Sprintf("## %s (%s)\n", evaluationCase.Name, evaluationCase.ID))
+		sb.WriteString(fmt.Sprintf("- **Input:** %s\n", inputJSON))
+		sb.WriteString(fmt.Sprintf("- **Expected:** %s\n", expectedJSON))
+		if len(evaluationCase.Tags) > 0 {
+			sb.WriteString(fmt.Sprintf("- **Tags:** %s\n", strings.Join(evaluationCase.Tags, ", ")))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
+// --- Tool: agentvault.compare_experiments ---
+
+func (s *Server) registerCompareExperiments() {
+	s.tools["agentvault.compare_experiments"] = Tool{
+		Name:        "agentvault.compare_experiments",
+		Description: "Compare two persisted experiments for the same dataset and agent. Reports explicit pass/fail transitions and raw score deltas without executing evaluations or interpreting score polarity.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"baseline_experiment_id":  schemaString("Baseline experiment ID"),
+			"candidate_experiment_id": schemaString("Candidate experiment ID"),
+		}, []string{"baseline_experiment_id", "candidate_experiment_id"}),
+		Handler: s.handleCompareExperiments,
+	}
+}
+
+func (s *Server) handleCompareExperiments(args map[string]interface{}) (string, error) {
+	comparison, err := agentstate.CompareExperiments(
+		s.db,
+		stringArg(args, "baseline_experiment_id"),
+		stringArg(args, "candidate_experiment_id"),
+	)
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Experiment Comparison\n\n")
+	sb.WriteString(fmt.Sprintf("- **Baseline:** %s (agent revision %d)\n", comparison.BaselineExperimentID, comparison.BaselineAgentRevision))
+	sb.WriteString(fmt.Sprintf("- **Candidate:** %s (agent revision %d)\n", comparison.CandidateExperimentID, comparison.CandidateAgentRevision))
+	sb.WriteString(fmt.Sprintf("- **Dataset:** %s\n", comparison.DatasetID))
+	sb.WriteString(fmt.Sprintf("- **Agent:** %s\n", comparison.AgentID))
+	sb.WriteString(fmt.Sprintf("- **Comparable:** %t\n", comparison.Comparable))
+	if len(comparison.ReasonCodes) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Reasons:** %s\n", strings.Join(comparison.ReasonCodes, ", ")))
+	}
+
+	sb.WriteString("\n## Summary\n\n")
+	sb.WriteString(fmt.Sprintf("- **Cases:** %d\n", comparison.Summary.TotalCases))
+	sb.WriteString(fmt.Sprintf("- **Paired results:** %d\n", comparison.Summary.PairedResults))
+	sb.WriteString(fmt.Sprintf("- **Fixes:** %d\n", comparison.Summary.Fixes))
+	sb.WriteString(fmt.Sprintf("- **Regressions:** %d\n", comparison.Summary.Regressions))
+	sb.WriteString(fmt.Sprintf("- **Stable pass:** %d\n", comparison.Summary.StablePass))
+	sb.WriteString(fmt.Sprintf("- **Stable fail:** %d\n", comparison.Summary.StableFail))
+	sb.WriteString(fmt.Sprintf("- **Unclassified:** %d\n", comparison.Summary.Unclassified))
+	sb.WriteString(fmt.Sprintf("- **Missing baseline:** %d\n", comparison.Summary.MissingBaseline))
+	sb.WriteString(fmt.Sprintf("- **Missing candidate:** %d\n", comparison.Summary.MissingCandidate))
+
+	sb.WriteString("\n## Cases\n\n")
+	for _, item := range comparison.Cases {
+		sb.WriteString(fmt.Sprintf("- **%s** (%s): %s", item.CaseName, item.CaseID, item.Transition))
+		if item.BaselineLabel != "" || item.CandidateLabel != "" {
+			sb.WriteString(fmt.Sprintf(" [%s → %s]", item.BaselineLabel, item.CandidateLabel))
+		}
+		if item.ScoreDelta != nil {
+			sb.WriteString(fmt.Sprintf(" score_delta=%g", *item.ScoreDelta))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
+// --- Tool: agentvault.get_experiment ---
+
+func (s *Server) registerGetExperiment() {
+	s.tools["agentvault.get_experiment"] = Tool{
+		Name:        "agentvault.get_experiment",
+		Description: "Fetch one recorded evaluation experiment and all case-level results.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"experiment_id": schemaString("Experiment ID"),
+		}, []string{"experiment_id"}),
+		Handler: s.handleGetExperiment,
+	}
+}
+
+func (s *Server) handleGetExperiment(args map[string]interface{}) (string, error) {
+	id := stringArg(args, "experiment_id")
+	if id == "" {
+		return "", fmt.Errorf("experiment_id is required")
+	}
+	item, err := agentstate.GetExperiment(s.db, id)
+	if err != nil {
+		return "", err
+	}
+
+	configJSON, _ := json.Marshal(item.Config)
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Experiment: %s\n\n", item.Name))
+	sb.WriteString(fmt.Sprintf("- **ID:** %s\n", item.ID))
+	sb.WriteString(fmt.Sprintf("- **Dataset:** %s\n", item.DatasetID))
+	sb.WriteString(fmt.Sprintf("- **Agent:** %s@%d\n", item.AgentID, item.AgentRevision))
+	sb.WriteString(fmt.Sprintf("- **Status:** %s\n", item.Status))
+	sb.WriteString(fmt.Sprintf("- **Config:** %s\n", configJSON))
+	sb.WriteString(fmt.Sprintf("- **Results:** %d\n\n", len(item.Results)))
+
+	for _, result := range item.Results {
+		metadataJSON, _ := json.Marshal(result.Metadata)
+		sb.WriteString(fmt.Sprintf("## Case %s\n", result.CaseID))
+		if result.RunID != "" {
+			sb.WriteString(fmt.Sprintf("- **Run:** %s\n", result.RunID))
+		}
+		if result.Score != nil {
+			sb.WriteString(fmt.Sprintf("- **Score:** %g\n", *result.Score))
+		}
+		if result.Label != "" {
+			sb.WriteString(fmt.Sprintf("- **Label:** %s\n", result.Label))
+		}
+		sb.WriteString(fmt.Sprintf("- **Metadata:** %s\n\n", metadataJSON))
+	}
+	return sb.String(), nil
+}
+
+// --- Tool: agentvault.get_run_audit ---
+
+func (s *Server) registerGetRunAudit() {
+	s.tools["agentvault.get_run_audit"] = Tool{
+		Name:        "agentvault.get_run_audit",
+		Description: "Fetch a run with its exact immutable context snapshot, source provenance, observations, and evaluations.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"run_id": schemaString("Agent run ID"),
+		}, []string{"run_id"}),
+		Handler: s.handleGetRunAudit,
+	}
+}
+
+func (s *Server) handleGetRunAudit(args map[string]interface{}) (string, error) {
+	audit, err := agentstate.GetRunAudit(s.db, stringArg(args, "run_id"))
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Run Audit\n\n")
+	sb.WriteString(fmt.Sprintf("- **Run:** %s\n", audit.Run.ID))
+	agentLabel := audit.Run.AgentName
+	if audit.Run.AgentID != "" {
+		agentLabel = fmt.Sprintf("%s@%d", audit.Run.AgentID, audit.Run.AgentRevision)
+	}
+	sb.WriteString(fmt.Sprintf("- **Agent:** %s\n", agentLabel))
+	sb.WriteString(fmt.Sprintf("- **Task:** %s\n", audit.Run.Task))
+	sb.WriteString(fmt.Sprintf("- **Status:** %s\n", audit.Run.Status))
+	if audit.Run.ContextHash != "" {
+		sb.WriteString(fmt.Sprintf("- **Context:** %s\n", audit.Run.ContextHash))
+	}
+
+	if audit.Context != nil {
+		sb.WriteString("\n## Context Provenance\n\n")
+		for _, section := range audit.Context.Sections {
+			source := section.SourceID
+			if section.SourcePath != "" {
+				source = fmt.Sprintf("%s (%s)", source, section.SourcePath)
+			}
+			sb.WriteString(fmt.Sprintf("- **%s:** %s\n", section.Kind, source))
+		}
+		for _, issue := range audit.Context.Unresolved {
+			sb.WriteString(fmt.Sprintf("- **unresolved %s:** %s - %s\n", issue.Kind, issue.SourceID, issue.Reason))
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf("\n## Observations (%d)\n\n", len(audit.Observations)))
+	for _, observation := range audit.Observations {
+		sb.WriteString(fmt.Sprintf("- %s **%s** %s", observation.ID, observation.Kind, observation.Name))
+		if observation.Status != "" {
+			sb.WriteString(fmt.Sprintf(" [%s]", observation.Status))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString(fmt.Sprintf("\n## Evaluations (%d)\n\n", len(audit.Evaluations)))
+	for _, evaluation := range audit.Evaluations {
+		sb.WriteString(fmt.Sprintf("- %s **%s** by %s", evaluation.ID, evaluation.Name, evaluation.Evaluator))
+		if evaluation.Score != nil {
+			sb.WriteString(fmt.Sprintf(" score=%g", *evaluation.Score))
+		}
+		if evaluation.Label != "" {
+			sb.WriteString(fmt.Sprintf(" label=%s", evaluation.Label))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
+// --- Tool: agentvault.compile_context ---
+
+func (s *Server) registerCompileContext() {
+	s.tools["agentvault.compile_context"] = Tool{
+		Name:        "agentvault.compile_context",
+		Description: "Compile deterministic, provenance-carrying context for an agent and persist the immutable snapshot by SHA-256 hash.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"agent_id":                  schemaString("Canonical agent manifest ID"),
+			"task":                      schemaString("Current task text"),
+			"conversation_id":           schemaString("Optional conversation/session ID"),
+			"retrieved_note_ids":        schemaStringArray("Explicit knowledge note IDs selected by external retrieval"),
+			"artifact_note_ids":         schemaStringArray("Explicit artifact note IDs relevant to the run"),
+			"max_conversation_messages": schemaInt("Maximum recent conversation messages to include", 20),
+		}, []string{"agent_id"}),
+		Handler: s.handleCompileContext,
+	}
+}
+
+func (s *Server) handleCompileContext(args map[string]interface{}) (string, error) {
+	snapshot, err := agentstate.CompileContext(s.db, s.vaultPath, agentstate.ContextCompileRequest{
+		AgentID:                 stringArg(args, "agent_id"),
+		Task:                    stringArg(args, "task"),
+		ConversationID:          stringArg(args, "conversation_id"),
+		RetrievedNoteIDs:        stringSliceArg(args, "retrieved_note_ids"),
+		ArtifactNoteIDs:         stringSliceArg(args, "artifact_note_ids"),
+		MaxConversationMessages: intArg(args, "max_conversation_messages", 20),
+	})
+	if err != nil {
+		return "", err
+	}
+	return formatContextSnapshot(snapshot), nil
+}
+
+// --- Tool: agentvault.get_context_snapshot ---
+
+func (s *Server) registerGetContextSnapshot() {
+	s.tools["agentvault.get_context_snapshot"] = Tool{
+		Name:        "agentvault.get_context_snapshot",
+		Description: "Fetch an immutable compiled context snapshot by its SHA-256 hash for audit or replay.",
+		InputSchema: makeSchema(map[string]interface{}{
+			"hash": schemaString("Compiled context hash"),
+		}, []string{"hash"}),
+		Handler: s.handleGetContextSnapshot,
+	}
+}
+
+func (s *Server) handleGetContextSnapshot(args map[string]interface{}) (string, error) {
+	snapshot, err := agentstate.GetContextSnapshot(s.db, stringArg(args, "hash"))
+	if err != nil {
+		return "", err
+	}
+	return formatContextSnapshot(snapshot), nil
+}
+
+func formatContextSnapshot(snapshot *agentstate.ContextSnapshot) string {
+	var sb strings.Builder
+	sb.WriteString("# Compiled Context\n\n")
+	sb.WriteString(fmt.Sprintf("- **Hash:** %s\n", snapshot.Hash))
+	sb.WriteString(fmt.Sprintf("- **Agent:** %s@%d\n", snapshot.AgentID, snapshot.AgentRevision))
+	sb.WriteString(fmt.Sprintf("- **Sections:** %d\n", len(snapshot.Sections)))
+	sb.WriteString(fmt.Sprintf("- **Unresolved references:** %d\n", len(snapshot.Unresolved)))
+	if len(snapshot.Unresolved) > 0 {
+		sb.WriteString("\n## Unresolved\n")
+		for _, issue := range snapshot.Unresolved {
+			sb.WriteString(fmt.Sprintf("- %s %s: %s\n", issue.Kind, issue.SourceID, issue.Reason))
+		}
+	}
+	sb.WriteString("\n## Context\n\n")
+	sb.WriteString(snapshot.Text)
+	return sb.String()
+}
+
+func normalizedJSONObjectArg(args map[string]interface{}, key string) (string, error) {
+	raw := stringArg(args, key)
+	if raw == "" {
+		return "{}", nil
+	}
+	var value map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return "", fmt.Errorf("%s must be a JSON object: %w", key, err)
+	}
+	normalized, err := json.Marshal(value)
+	if err != nil {
+		return "", fmt.Errorf("%s could not be normalized: %w", key, err)
+	}
+	return string(normalized), nil
 }
 
 // sanitizeFilename creates a safe filename from a title.

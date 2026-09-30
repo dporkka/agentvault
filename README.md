@@ -9,13 +9,13 @@
   <img src="docs/assets/logo.png" alt="AgentVault logo" width="160">
 </p>
 
-**A local-first knowledge operating system for notes, decisions, research, tasks, and agent-readable context.**
+**A local-first knowledge and state operating system for durable agents, notes, decisions, research, tasks, and agent-readable context.**
 
 AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The same files are readable by you, editable in any editor, and indexable by the Go core for fast full-text, semantic, and hybrid search. A single shared API contract keeps the CLI, local HTTP API, MCP server, desktop app, web app, browser extension, and mobile app in sync.
 
 - **Files first.** Markdown is the durable source of truth; the SQLite index can be rebuilt at any time.
 - **Local by default.** The CLI, HTTP API, and desktop app run on your machine.
-- **Agent-ready.** Source-grounded answers, MCP tools, and structured note types make the vault usable by AI assistants.
+- **Durable agent state.** Canonical agent manifests, deterministic context snapshots, structured run evidence, explicit promotion review/commit, and reproducible evaluation datasets persist across runtimes without making AgentVault an execution engine.
 - **One shared contract.** Go and TypeScript clients share a single API contract so server and clients stay in sync. See [`packages/contract/`](packages/contract/) and [`core/internal/contract/`](core/internal/contract/).
 
 ## Table of Contents
@@ -40,10 +40,10 @@ AgentVault keeps your knowledge in plain Markdown with YAML frontmatter. The sam
 | --- | --- |
 | **Markdown-native vault** | Notes are plain Markdown files with YAML frontmatter. No lock-in, full version-control friendliness. |
 | **Full-text, vector, and hybrid search** | SQLite FTS5 plus optional embedding-based semantic search, exposed through one search interface. |
-| **Structured note types** | `note`, `decision`, `task`, `meeting`, `source`, and `project` templates with consistent folder rules. |
+| **Structured note types** | `note`, `decision`, `task`, `meeting`, `source`, `project`, and `agent` templates with consistent folder rules. |
 | **Source-grounded AI** | `agentvault ask` and `POST /ask` retrieve relevant notes first, then answer with citations. |
 | **Local HTTP API** | A loopback REST API for desktop, web, extension, and mobile clients. |
-| **MCP server** | Expose vault search, read, create, capture, and ask as Model Context Protocol tools. |
+| **MCP server** | Expose vault search, read, create, capture, ask, run evidence, promotion review, and evaluation experiment records as Model Context Protocol tools. |
 | **Multi-client support** | First-party desktop (Wails), web (Vite), browser extension (MV3), and mobile (Expo) apps. |
 | **Vault diagnostics** | `agentvault doctor` checks config, database, migrations, links, orphan chunks, embeddings, and API auth. |
 
@@ -132,6 +132,7 @@ agentvault new task --project platform --title "Build API"
 agentvault new meeting --project platform --title "Sprint Planning"
 agentvault new source --title "Article" --url "https://example.com"
 agentvault new project --title "Platform"
+agentvault new agent --title "Coding Agent"
 ```
 
 ## AI Configuration
@@ -183,6 +184,24 @@ The server prints an auth token at startup. `GET` endpoints are open locally; wr
 | `GET /recent` | Recent notes |
 | `GET /stale` | Stale notes |
 | `GET /git/status` | Vault Git status |
+| `GET /promotions` | List promotion records; defaults to pending (`proposed`) reviews |
+| `POST /promotions` | Propose evidence-backed memory or knowledge |
+| `POST /promotions/{id}/review` | Approve or reject a proposed promotion |
+| `POST /promotions/{id}/commit` | Commit an approved promotion to canonical Markdown |
+| `GET /evaluation-datasets/{id}` | Fetch an evaluation dataset with its cases |
+| `POST /evaluation-datasets` | Create an evaluation dataset |
+| `POST /evaluation-datasets/{id}/cases` | Add a reproducible evaluation case |
+| `GET /experiments/{id}` | Fetch an experiment with its recorded results |
+| `POST /experiments` | Record an externally executed experiment |
+| `POST /experiments/{id}/results` | Record a case-level experiment result |
+| `POST /agents/{id}/context` | Compile and persist deterministic context for an agent |
+| `GET /contexts/{hash}` | Retrieve an immutable compiled context snapshot |
+| `POST /runs` | Record a runtime execution bound to an optional immutable context snapshot |
+| `GET /runs/{id}/audit` | Retrieve a run with context provenance, observations, and evaluations |
+| `GET /runs/{id}/learning-recommendation` | Inspect deterministic failure signals and explicit evaluator learning hints |
+| `GET /runs/{id}/regression-case-proposal` | Project a failed run into a read-only regression-case candidate |
+| `POST /runs/{id}/regression-cases` | Explicitly capture a provenance-rich regression case into a selected dataset |
+| `POST /runs/{id}/learning-candidates` | Create a reviewable promotion proposal derived from one run |
 
 For the full contract, including exact request/response shapes, auth rules, CORS policy, and rate limits, see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
 
@@ -209,6 +228,26 @@ Registered tools:
 - `agentvault.list_recent`
 - `agentvault.git_status`
 - `agentvault.log_agent_run`
+- `agentvault.log_observation`
+- `agentvault.log_evaluation`
+- `agentvault.propose_promotion`
+- `agentvault.review_promotion`
+- `agentvault.commit_promotion`
+- `agentvault.create_evaluation_dataset`
+- `agentvault.add_evaluation_case`
+- `agentvault.record_experiment`
+- `agentvault.record_experiment_result`
+- `agentvault.list_promotions`
+- `agentvault.get_evaluation_dataset`
+- `agentvault.get_experiment`
+- `agentvault.compare_experiments`
+- `agentvault.compile_context`
+- `agentvault.get_context_snapshot`
+- `agentvault.get_run_audit`
+- `agentvault.get_learning_recommendation`
+- `agentvault.get_regression_case_proposal`
+- `agentvault.capture_run_regression_case`
+- `agentvault.propose_run_learning`
 - `agentvault.ask`
 
 ## Clients
@@ -247,6 +286,7 @@ agentvault/
 ├── core/                         # Go core engine and CLI
 │   ├── cmd/agentvault/           # Cobra commands
 │   ├── internal/
+│   │   ├── agentstate/           # Durable agent/evidence/promotion domain model
 │   │   ├── ai/                   # AI provider interface and providers
 │   │   ├── api/                  # Local HTTP API
 │   │   ├── chunker/              # Markdown/text chunking

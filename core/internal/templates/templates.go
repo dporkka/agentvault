@@ -41,6 +41,9 @@ var projectTemplate string
 //go:embed daily.md
 var dailyTemplate string
 
+//go:embed agent.md
+var agentTemplate string
+
 // templateRegistry maps template names to their embedded content.
 var templateRegistry = map[string]string{
 	"note":     noteTemplate,
@@ -50,6 +53,7 @@ var templateRegistry = map[string]string{
 	"source":   sourceTemplate,
 	"project":  projectTemplate,
 	"daily":    dailyTemplate,
+	"agent":    agentTemplate,
 }
 
 // typeAbbrev maps note types to their ID abbreviation.
@@ -64,6 +68,7 @@ var typeAbbrev = map[string]string{
 	"prompt":   "prm",
 	"capture":  "cap",
 	"daily":    "day",
+	"agent":    "agt",
 }
 
 // join is a template function that joins strings with a separator.
