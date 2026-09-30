@@ -41,6 +41,7 @@ import type {
   ProposePromotionRequest,
   ReviewPromotionRequest,
   RunAudit,
+  RunLearningCandidateRequest,
   RunRecord,
   RecentParams,
   SearchResult,
@@ -96,6 +97,7 @@ export const routes: {
   readonly contextSnapshot: EndpointDef<{ hash: string }, ContextSnapshot>;
   readonly createRun: EndpointDef<CreateRunRequest, RunRecord>;
   readonly runAudit: EndpointDef<{ id: string }, RunAudit>;
+  readonly proposeRunLearning: EndpointDef<RunLearningCandidateRequest, Promotion>;
 } = {
   health: {
     method: 'GET',
@@ -320,6 +322,13 @@ export const routes: {
     auth: false,
     request: undefined as unknown as { id: string },
     response: undefined as unknown as RunAudit,
+  },
+  proposeRunLearning: {
+    method: 'POST',
+    path: '/runs/{id}/learning-candidates',
+    auth: true,
+    request: undefined as unknown as RunLearningCandidateRequest,
+    response: undefined as unknown as Promotion,
   },
 };
 
