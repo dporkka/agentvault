@@ -91,7 +91,11 @@ func (s *Store) projectJournalEvent(event JournalEvent) error {
 		}
 		return s.projectSessionClose(closeEvent)
 	default:
-		handled, err := s.projectMemoryCandidateJournalEvent(event)
+		handled, err := s.projectMemorySynthesisJournalEvent(event)
+		if handled {
+			return err
+		}
+		handled, err = s.projectMemoryCandidateJournalEvent(event)
 		if handled {
 			return err
 		}
