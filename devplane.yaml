@@ -1,0 +1,39 @@
+version: 1
+
+verification:
+  lint:
+    command: make lint
+    timeout_seconds: 1800
+  core:
+    command: make test-ci
+    timeout_seconds: 1800
+  contract:
+    command: make contract-check
+    timeout_seconds: 1800
+  full:
+    command: make ci
+    timeout_seconds: 1800
+
+work:
+  isolation: container
+  max_parallel_cost: 4
+  require_clean_handoff: true
+
+review:
+  independent: true
+  exact_head: true
+
+risk:
+  - paths:
+      - core/**
+      - packages/contract/**
+    level: high
+    requires:
+      - core
+      - contract
+      - independent_review
+  - paths:
+      - apps/**
+    level: medium
+    requires:
+      - contract
