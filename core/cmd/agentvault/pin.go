@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/agentvault/core/internal/atomicfile"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -77,7 +78,7 @@ func togglePin(id string, pin bool) error {
 		fmMap[k] = v
 	}
 	yamlBytes, _ := yaml.Marshal(fmMap)
-	if err := os.WriteFile(fullPath, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644); err != nil {
+	if err := atomicfile.WriteFile(fullPath, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644); err != nil {
 		return fmt.Errorf("failed to write note: %w", err)
 	}
 
