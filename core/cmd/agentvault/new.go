@@ -1,13 +1,13 @@
 package main
 
 import (
-	"github.com/agentvault/core/internal/atomicfile"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/git"
 	"github.com/agentvault/core/internal/templates"
 	"github.com/agentvault/core/internal/vault"
