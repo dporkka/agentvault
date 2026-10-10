@@ -350,7 +350,7 @@ func (s *Server) handleCreateNote(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"path": relPath,
+		"path": filepath.ToSlash(relPath),
 		"id":   id,
 	})
 }
