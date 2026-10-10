@@ -20,6 +20,7 @@ import (
 	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
+	"github.com/agentvault/core/internal/notepublish"
 	"github.com/agentvault/core/internal/rag"
 	"github.com/agentvault/core/internal/search"
 	"github.com/agentvault/core/internal/templates"
@@ -294,37 +295,29 @@ func (s *Server) createNote(noteType, title, project string, tags []string) (str
 		return "", fmt.Errorf("unknown note type: %q", noteType)
 	}
 
-	id := templates.GenerateID(noteType)
 	folder := templates.FolderPathForType(noteType, project, s.vaultPath)
-
 	if err := os.MkdirAll(folder, 0755); err != nil {
 		return "", fmt.Errorf("create folder: %w", err)
 	}
-
 	safeTitle := sanitizeFilename(title)
-	idParts := strings.Split(id, "_")
-	var shortID string
-	if len(idParts) > 0 {
-		shortID = idParts[len(idParts)-1]
-	}
-	filename := fmt.Sprintf("%s_%s.md", safeTitle, shortID)
-	outPath := filepath.Join(folder, filename)
-
-	data := templates.TemplateData{
-		ID:      id,
-		Title:   title,
-		Project: project,
-		Tags:    tags,
-		Created: currentTimestamp(),
-	}
-
-	content, err := templates.Render(noteType, data)
+	created := currentTimestamp()
+	id, outPath, err := notepublish.Create(
+		folder,
+		func() string { return templates.GenerateID(noteType) },
+		func(id string) string {
+			suffix := id[strings.LastIndexByte(id, '_')+1:]
+			return fmt.Sprintf("%s_%s.md", safeTitle, suffix)
+		},
+		func(id string) ([]byte, error) {
+			rendered, err := templates.Render(noteType, templates.TemplateData{
+				ID: id, Title: title, Project: project,
+				Tags: tags, Created: created,
+			})
+			return []byte(rendered), err
+		},
+	)
 	if err != nil {
-		return "", fmt.Errorf("render template: %w", err)
-	}
-
-	if err := atomicfile.WriteFile(outPath, []byte(content), 0644); err != nil {
-		return "", fmt.Errorf("write file: %w", err)
+		return "", fmt.Errorf("create note without overwriting existing files: %w", err)
 	}
 
 	// Log the agent write
@@ -337,7 +330,7 @@ func (s *Server) createNote(noteType, title, project string, tags []string) (str
 		_, _ = s.indexer.Index(indexer.IndexOptions{Path: relPath})
 	}()
 
-	return fmt.Sprintf("Created note: `%s`\n- **Path:** %s\n- **ID:** %s\n- **Type:** %s", relPath, relPath, id, noteType), nil
+	return fmt.Sprintf("Created note: `%s`\n- **Path:** %s\n- **ID:** %s\n- **Type:** %s", filepath.ToSlash(relPath), filepath.ToSlash(relPath), id, noteType), nil
 }
 
 // --- Tool: agentvault.create_decision ---

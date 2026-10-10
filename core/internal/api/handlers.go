@@ -20,6 +20,7 @@ import (
 	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
+	"github.com/agentvault/core/internal/notepublish"
 	"github.com/agentvault/core/internal/rag"
 	"github.com/agentvault/core/internal/search"
 	"github.com/agentvault/core/internal/templates"
@@ -297,49 +298,43 @@ func (s *Server) handleCreateNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate ID and render template
-	id := templates.GenerateID(req.Type)
-	now := time.Now().UTC().Format(time.RFC3339)
-
-	data := templates.TemplateData{
-		ID:      id,
-		Title:   req.Title,
-		Project: req.Project,
-		Tags:    req.Tags,
-		Created: now,
+	// Each candidate is fully rendered before exclusive publication.
+	// A generated ID collision must not overwrite an existing user note.
+	folder := templates.FolderRelForType(req.Type, req.Project)
+	fullFolder := filepath.Join(s.vaultPath, folder)
+	if err := os.MkdirAll(fullFolder, 0755); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error": "failed to create directory", "detail": err.Error(),
+		})
+		return
 	}
-
-	rendered, err := templates.Render(req.Type, data)
+	now := time.Now().UTC().Format(time.RFC3339)
+	id, fullPath, err := notepublish.Create(
+		fullFolder,
+		func() string { return templates.GenerateID(req.Type) },
+		func(id string) string { return id + ".md" },
+		func(id string) ([]byte, error) {
+			rendered, err := templates.Render(req.Type, templates.TemplateData{
+				ID: id, Title: req.Title, Project: req.Project,
+				Tags: req.Tags, Created: now,
+			})
+			return []byte(rendered), err
+		},
+	)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, notepublish.ErrExhausted) {
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, map[string]interface{}{
+			"error": "failed to publish new note", "detail": err.Error(),
+		})
+		return
+	}
+	relPath, err := filepath.Rel(s.vaultPath, fullPath)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"error":  "template render failed",
-			"detail": err.Error(),
-		})
-		return
-	}
-
-	// Determine folder (vault-relative) and filename. Folder resolution is
-	// shared with the CLI and MCP server via templates.FolderRelForType so
-	// every write surface files notes in the same place.
-	folder := templates.FolderRelForType(req.Type, req.Project)
-	filename := fmt.Sprintf("%s.md", id)
-	relPath := filepath.Join(folder, filename)
-	fullPath := filepath.Join(s.vaultPath, relPath)
-
-	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"error":  "failed to create directory",
-			"detail": err.Error(),
-		})
-		return
-	}
-
-	// Write file
-	if err := atomicfile.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"error":  "failed to write file",
-			"detail": err.Error(),
+			"error": "failed to resolve note path", "detail": err.Error(),
 		})
 		return
 	}

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/git"
+	"github.com/agentvault/core/internal/notepublish"
 	"github.com/agentvault/core/internal/templates"
 	"github.com/agentvault/core/internal/vault"
 	"github.com/spf13/cobra"
@@ -126,46 +126,31 @@ func runNew(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Generate ID and determine output path. Folder resolution is shared
-	// with the HTTP API and MCP server via templates.FolderPathForType so a
-	// note written from any surface lands in the same place.
-	id := templates.GenerateID(noteType)
+	// Generated note IDs have short random suffixes. Publish each completed
+	// candidate exclusively so independent writers never replace an older note.
 	folder := templates.FolderPathForType(noteType, newProject, vp)
-
-	// Create folder (and subfolder for project if needed)
 	if err := os.MkdirAll(folder, 0755); err != nil {
 		return fmt.Errorf("create folder %s: %w", folder, err)
 	}
-
-	// Build filename: {sanitized-title}_{id-abbrev}.md
 	safeTitle := sanitizeFilename(newTitle)
-	idParts := strings.Split(id, "_")
-	var shortID string
-	if len(idParts) > 0 {
-		shortID = idParts[len(idParts)-1]
-	}
-	filename := fmt.Sprintf("%s_%s.md", safeTitle, shortID)
-	outPath := filepath.Join(folder, filename)
-
-	// Build template data
-	data := templates.TemplateData{
-		ID:      id,
-		Title:   newTitle,
-		Project: newProject,
-		Tags:    tags,
-		Created: timeNowFunc().Format("2006-01-02T15:04:05Z"),
-		URL:     newURL,
-	}
-
-	// Render template
-	content, err := templates.Render(noteType, data)
+	created := timeNowFunc().Format("2006-01-02T15:04:05Z")
+	_, outPath, err := notepublish.Create(
+		folder,
+		func() string { return templates.GenerateID(noteType) },
+		func(id string) string {
+			suffix := id[strings.LastIndexByte(id, '_')+1:]
+			return fmt.Sprintf("%s_%s.md", safeTitle, suffix)
+		},
+		func(id string) ([]byte, error) {
+			rendered, err := templates.Render(noteType, templates.TemplateData{
+				ID: id, Title: newTitle, Project: newProject,
+				Tags: tags, Created: created, URL: newURL,
+			})
+			return []byte(rendered), err
+		},
+	)
 	if err != nil {
-		return fmt.Errorf("render template: %w", err)
-	}
-
-	// Write file
-	if err := atomicfile.WriteFile(outPath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("write file %s: %w", outPath, err)
+		return fmt.Errorf("create note without overwriting existing files: %w", err)
 	}
 
 	// Print results
