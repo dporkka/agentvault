@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/agentvault/core/internal/atomicfile"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/git"
 	"github.com/agentvault/core/internal/indexer"
