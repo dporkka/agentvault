@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/agentvault/core/internal/atomicfile"
 	"context"
 	"fmt"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/ai"
 	"github.com/agentvault/core/internal/api"
 	"github.com/agentvault/core/internal/config"
