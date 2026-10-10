@@ -673,7 +673,7 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Find next available number using atomic file creation
+	// Prepare the inbox for exclusive capture publication
 	inboxPath := filepath.Join(s.vaultPath, "00-inbox")
 	if err := os.MkdirAll(inboxPath, 0755); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
@@ -692,6 +692,18 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		filename := fmt.Sprintf("%s_capture_%03d.md", dateStr, num)
 		relPath := filepath.Join("00-inbox", filename)
 		fullPath := filepath.Join(s.vaultPath, relPath)
+
+		// Skip occupied slots cheaply. The hard-link install remains the
+		// authority if another writer races us after this check.
+		if _, err := os.Lstat(fullPath); err == nil {
+			continue
+		} else if !errors.Is(err, os.ErrNotExist) {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"error":  "failed to check capture path",
+				"detail": err.Error(),
+			})
+			return
+		}
 
 		// Build capture content
 		var sb strings.Builder
@@ -725,7 +737,6 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		if req.URL != "" {
 			sb.WriteString(fmt.Sprintf("\n*Captured from: <%s>*\n", req.URL))
 		}
-
 
 		err := atomicfile.WriteNewFile(fullPath, []byte(sb.String()), 0644)
 		if errors.Is(err, os.ErrExist) {
