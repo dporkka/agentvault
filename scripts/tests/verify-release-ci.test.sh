@@ -20,14 +20,14 @@ make_response() {
     '{workflow_runs:[{head_sha:$sha,head_branch:$branch,event:$event,status:$status,conclusion:$conclusion}]}' > "$MOCK_JSON_FILE"
 }
 expect_success() {
-  if ! "$SCRIPT" "$SHA" dporkka/agentvault >/dev/null; then echo "expected success: $1" >&2; exit 1; fi
+  if ! bash "$SCRIPT" "$SHA" dporkka/agentvault >/dev/null; then echo "expected success: $1" >&2; exit 1; fi
   if ! grep -q 'repos/dporkka/agentvault/actions/workflows/ci.yml/runs' "$MOCK_ARGS_FILE"; then
     echo "wrong API endpoint" >&2; exit 1
   fi
   if ! grep -q "head_sha=$SHA" "$MOCK_ARGS_FILE"; then echo "did not filter tagged head" >&2; exit 1; fi
 }
 expect_failure() {
-  if "$SCRIPT" "$SHA" dporkka/agentvault >"$TMP/out" 2>&1; then echo "unexpected success: $1" >&2; exit 1; fi
+  if bash "$SCRIPT" "$SHA" dporkka/agentvault >"$TMP/out" 2>&1; then echo "unexpected success: $1" >&2; exit 1; fi
 }
 make_response "$SHA" main push completed success
 expect_success 'verified main push'
@@ -47,6 +47,6 @@ printf '{"workflow_runs":null}' > "$MOCK_JSON_FILE"
 expect_failure 'malformed response'
 make_response "$SHA" main push completed success
 MOCK_FAIL=1 expect_failure 'API failure must block'
-if "$SCRIPT" badsha dporkka/agentvault >"$TMP/out" 2>&1; then echo 'invalid SHA allowed' >&2; exit 1; fi
-if "$SCRIPT" "$SHA" '../bad/repo' >"$TMP/out" 2>&1; then echo 'invalid repo allowed' >&2; exit 1; fi
+if bash "$SCRIPT" badsha dporkka/agentvault >"$TMP/out" 2>&1; then echo 'invalid SHA allowed' >&2; exit 1; fi
+if bash "$SCRIPT" "$SHA" '../bad/repo' >"$TMP/out" 2>&1; then echo 'invalid repo allowed' >&2; exit 1; fi
 echo 'release admission guard: all cases passed'
