@@ -438,7 +438,7 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 				if extID, ok := doc.Frontmatter.Extra["external_id"]; ok {
 					if extStr, isStr := extID.(string); isStr && extStr == externalID {
 						relPath, _ := filepath.Rel(s.vaultPath, fullPath)
-						return fmt.Sprintf("(idempotent) Captured to inbox: `%s`", relPath), nil
+						return fmt.Sprintf("(idempotent) Captured to inbox: `%s`", filepath.ToSlash(relPath)), nil
 					}
 				}
 			}
@@ -512,7 +512,7 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 		_, _ = s.indexer.Index(indexer.IndexOptions{Path: relPath})
 	}()
 
-	return fmt.Sprintf("Captured to inbox: `%s`\n- **ID:** %s\n- **Path:** %s", relPath, id, relPath), nil
+	return fmt.Sprintf("Captured to inbox: `%s`\n- **ID:** %s\n- **Path:** %s", filepath.ToSlash(relPath), id, filepath.ToSlash(relPath)), nil
 }
 
 // --- Tool: agentvault.summarize ---
