@@ -67,7 +67,12 @@ func TestDifferentExternalIDsCanProceedIndependently(t *testing.T) {
 }
 
 func TestVaultIsPartOfCaptureLockKey(t *testing.T) {
-	if stripeFor("/vault-a", "shared-event") == stripeFor("/vault-b", "shared-event") {
-		t.Skip("unrelated hash keys share a stripe; safe but serial")
+	first := stripeFor("/vault-a", "shared-event")
+	for n := 0; n < 256; n++ {
+		otherVault := fmt.Sprintf("/vault-b-%d", n)
+		if stripeFor(otherVault, "shared-event") != first {
+			return
+		}
 	}
+	t.Fatal("vault identity has no effect on lock selection")
 }
