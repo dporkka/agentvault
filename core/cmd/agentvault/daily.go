@@ -1,12 +1,12 @@
 package main
 
 import (
-	"github.com/agentvault/core/internal/atomicfile"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/templates"
 	"github.com/spf13/cobra"
 )
