@@ -264,6 +264,9 @@ jobs:
             exit 1
           fi
 
+      - name: Verify release CI admission tests
+        run: bash scripts/tests/verify-release-ci.test.sh
+
   ci-gate:
     name: CI Gate
     if: always()

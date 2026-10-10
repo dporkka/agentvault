@@ -6,7 +6,8 @@ on:
       - 'v*.*.*'
 
 permissions:
-  contents: write
+  contents: read
+  actions: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -34,6 +35,10 @@ jobs:
             echo "Release tags must point to a commit reachable from main."
             exit 1
           fi
+      - name: Require exact tagged commit to have successful main CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-release-ci.sh "$GITHUB_SHA" "$GITHUB_REPOSITORY"
 
   build-linux:
     name: Build CLI, Linux desktop, extension, and mobile artifacts
@@ -205,6 +210,9 @@ jobs:
 
   release:
     name: Create GitHub release
+    permissions:
+      contents: write
+      actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs:
