@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -672,7 +673,7 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Find next available number using atomic file creation
+	// Prepare the inbox for exclusive capture publication
 	inboxPath := filepath.Join(s.vaultPath, "00-inbox")
 	if err := os.MkdirAll(inboxPath, 0755); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
@@ -684,82 +685,84 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	dateStr := now.Format("2006-01-02")
-	num := 1
 
-	var filename, relPath, fullPath string
-	for {
-		filename = fmt.Sprintf("%s_capture_%03d.md", dateStr, num)
-		relPath = filepath.Join("00-inbox", filename)
-		fullPath = filepath.Join(s.vaultPath, relPath)
-		f, err := os.OpenFile(fullPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-		if err == nil {
-			f.Close()
-			break
-		}
-		if !os.IsExist(err) {
+	// Publish fully staged captures with an exclusive hard link. Competing
+	// writers cannot overwrite each other's files or expose empty placeholders.
+	for num := 1; num <= 999; num++ {
+		filename := fmt.Sprintf("%s_capture_%03d.md", dateStr, num)
+		relPath := filepath.Join("00-inbox", filename)
+		fullPath := filepath.Join(s.vaultPath, relPath)
+
+		// Skip occupied slots cheaply. The hard-link install remains the
+		// authority if another writer races us after this check.
+		if _, err := os.Lstat(fullPath); err == nil {
+			continue
+		} else if !errors.Is(err, os.ErrNotExist) {
 			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
-				"error":  "failed to create capture file",
+				"error":  "failed to check capture path",
 				"detail": err.Error(),
 			})
 			return
 		}
-		num++
-		if num > 999 {
-			writeJSON(w, http.StatusConflict, map[string]interface{}{
-				"error": "too many captures for today",
+
+		// Build capture content
+		var sb strings.Builder
+		sb.WriteString("---\n")
+		sb.WriteString(fmt.Sprintf("id: capture_%s_%03d\n", strings.ReplaceAll(dateStr, "-", "_"), num))
+		sb.WriteString("type: capture\n")
+		sb.WriteString(fmt.Sprintf("title: %q\n", req.Title))
+		if req.URL != "" {
+			sb.WriteString(fmt.Sprintf("source_url: %q\n", req.URL))
+		}
+		if req.Project != "" {
+			sb.WriteString(fmt.Sprintf("project: %q\n", req.Project))
+		}
+		if len(req.Tags) > 0 {
+			quotedTags := make([]string, len(req.Tags))
+			for i, t := range req.Tags {
+				quotedTags[i] = fmt.Sprintf("%q", t)
+			}
+			sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(quotedTags, ", ")))
+		}
+		sb.WriteString(fmt.Sprintf("created: %s\n", now.UTC().Format(time.RFC3339)))
+		if req.ExternalID != "" {
+			sb.WriteString(fmt.Sprintf("external_id: %q\n", req.ExternalID))
+		}
+		sb.WriteString("---\n\n")
+
+		if req.Text != "" {
+			sb.WriteString(req.Text)
+			sb.WriteString("\n")
+		}
+		if req.URL != "" {
+			sb.WriteString(fmt.Sprintf("\n*Captured from: <%s>*\n", req.URL))
+		}
+
+		err := atomicfile.WriteNewFile(fullPath, []byte(sb.String()), 0644)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"error":  "failed to write capture",
+				"detail": err.Error(),
 			})
 			return
 		}
-	}
 
-	// Build capture content
-	var sb strings.Builder
-	sb.WriteString("---\n")
-	sb.WriteString(fmt.Sprintf("id: capture_%s_%03d\n", strings.ReplaceAll(dateStr, "-", "_"), num))
-	sb.WriteString("type: capture\n")
-	sb.WriteString(fmt.Sprintf("title: %q\n", req.Title))
-	if req.URL != "" {
-		sb.WriteString(fmt.Sprintf("source_url: %q\n", req.URL))
-	}
-	if req.Project != "" {
-		sb.WriteString(fmt.Sprintf("project: %q\n", req.Project))
-	}
-	if len(req.Tags) > 0 {
-		quotedTags := make([]string, len(req.Tags))
-		for i, t := range req.Tags {
-			quotedTags[i] = fmt.Sprintf("%q", t)
-		}
-		sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(quotedTags, ", ")))
-	}
-	sb.WriteString(fmt.Sprintf("created: %s\n", now.UTC().Format(time.RFC3339)))
-	if req.ExternalID != "" {
-		sb.WriteString(fmt.Sprintf("external_id: %q\n", req.ExternalID))
-	}
-	sb.WriteString("---\n\n")
+		// Index only after the completed file becomes visible.
+		go func() {
+			_, _ = s.indexer.Index(indexer.IndexOptions{Path: relPath})
+		}()
 
-	if req.Text != "" {
-		sb.WriteString(req.Text)
-		sb.WriteString("\n")
-	}
-	if req.URL != "" {
-		sb.WriteString(fmt.Sprintf("\n*Captured from: <%s>*\n", req.URL))
-	}
-
-	if err := atomicfile.WriteFile(fullPath, []byte(sb.String()), 0644); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"error":  "failed to write capture",
-			"detail": err.Error(),
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"path": relPath,
 		})
 		return
 	}
 
-	// Auto-index the newly created capture (non-blocking)
-	go func() {
-		_, _ = s.indexer.Index(indexer.IndexOptions{Path: relPath})
-	}()
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"path": relPath,
+	writeJSON(w, http.StatusConflict, map[string]interface{}{
+		"error": "too many captures for today",
 	})
 }
 
