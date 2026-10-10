@@ -1,0 +1,42 @@
+name: Filesystem portability (Go)
+
+on:
+  pull_request:
+    paths:
+      - 'core/internal/atomicfile/**'
+      - 'core/internal/capturelock/**'
+      - 'core/internal/api/**'
+      - 'core/internal/mcp/**'
+      - '.github/workflows/filesystem-portability.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: filesystem-portability-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  filesystem:
+    name: Filesystem primitives (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - macos-latest
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - name: Test same-directory staging, exclusive publication, and locks
+        run: go test -count=1 -v ./internal/atomicfile ./internal/capturelock
+      - name: Test HTTP and MCP capture contracts
+        run: go test -count=1 -run '^(TestCaptureEndpoint.*|TestPublishUniqueCapture.*|TestCaptureConcurrentExternalIDAcrossMCPServers|TestHandleCapture.*)$' ./internal/api ./internal/mcp

@@ -669,7 +669,7 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 				}
 				if extID, ok := doc.Frontmatter.Extra["external_id"]; ok {
 					if extStr, isStr := extID.(string); isStr && extStr == req.ExternalID {
-						relPath := filepath.Join("00-inbox", entry.Name())
+						relPath := filepath.ToSlash(filepath.Join("00-inbox", entry.Name()))
 						writeJSON(w, http.StatusOK, map[string]interface{}{
 							"path":       relPath,
 							"idempotent": true,
@@ -768,7 +768,7 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"path": relPath,
+			"path": filepath.ToSlash(relPath),
 		})
 		return
 	}
