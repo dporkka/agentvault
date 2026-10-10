@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"github.com/agentvault/core/internal/atomicfile"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/ai"
 	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/config"
