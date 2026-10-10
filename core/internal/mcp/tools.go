@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/agentvault/core/internal/atomicfile"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -320,7 +321,7 @@ func (s *Server) createNote(noteType, title, project string, tags []string) (str
 		return "", fmt.Errorf("render template: %w", err)
 	}
 
-	if err := os.WriteFile(outPath, []byte(content), 0644); err != nil {
+	if err := atomicfile.WriteFile(outPath, []byte(content), 0644); err != nil {
 		return "", fmt.Errorf("write file: %w", err)
 	}
 
@@ -480,7 +481,7 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 		sb.WriteString(fmt.Sprintf("Source: <%s>\n", sourceURL))
 	}
 
-	if err := os.WriteFile(outPath, []byte(sb.String()), 0644); err != nil {
+	if err := atomicfile.WriteFile(outPath, []byte(sb.String()), 0644); err != nil {
 		return "", fmt.Errorf("write capture: %w", err)
 	}
 
@@ -746,7 +747,7 @@ func (s *Server) handleOpenDaily(args map[string]interface{}) (string, error) {
 			return "", fmt.Errorf("failed to create directory: %w", err)
 		}
 
-		if err := os.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
+		if err := atomicfile.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
 			return "", fmt.Errorf("failed to write daily note: %w", err)
 		}
 
@@ -1146,7 +1147,9 @@ func (s *Server) annotateNote(args map[string]interface{}) string {
 
 	yamlBytes, _ := yaml.Marshal(fmMap)
 	newContent := "---\n" + string(yamlBytes) + "---\n\n" + doc.Body
-	os.WriteFile(fullPath, []byte(newContent), 0644)
+	if err := atomicfile.WriteFile(fullPath, []byte(newContent), 0644); err != nil {
+		return fmt.Sprintf("Error: failed to write annotation: %v", err)
+	}
 
 	go func() { _, _ = s.indexer.Index(indexer.IndexOptions{Path: result.Path}) }()
 
@@ -1235,7 +1238,9 @@ func (s *Server) handleTogglePinTool(args map[string]interface{}) (string, error
 		fmMap[k] = v
 	}
 	yamlBytes, _ := yaml.Marshal(fmMap)
-	os.WriteFile(fullPath, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644)
+	if err := atomicfile.WriteFile(fullPath, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644); err != nil {
+		return "", fmt.Errorf("failed to write pinned note: %w", err)
+	}
 
 	go func() { _, _ = s.indexer.Index(indexer.IndexOptions{Path: result.Path}) }()
 
