@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/agentvault/core/internal/atomicfile"
 	"fmt"
 	"path/filepath"
 	"time"
 
+	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
 	"github.com/agentvault/core/internal/search"
