@@ -445,51 +445,48 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 		}
 	}
 
-	// Build capture content
-	id := templates.GenerateID("capture")
+	// Build a complete capture for each proposed ID. Publication must never
+	// overwrite an existing note if a generated three-digit suffix collides.
 	now := currentTimestamp()
 	folder := filepath.Join(s.vaultPath, "00-inbox")
 	if err := os.MkdirAll(folder, 0755); err != nil {
 		return "", fmt.Errorf("create inbox folder: %w", err)
 	}
-
 	safeTitle := sanitizeFilename(title)
-	idParts := strings.Split(id, "_")
-	var shortID string
-	if len(idParts) > 0 {
-		shortID = idParts[len(idParts)-1]
-	}
-	filename := fmt.Sprintf("%s_%s.md", safeTitle, shortID)
-	outPath := filepath.Join(folder, filename)
 
-	var sb strings.Builder
-	sb.WriteString("---\n")
-	sb.WriteString(fmt.Sprintf("id: %s\n", id))
-	sb.WriteString("type: capture\n")
-	sb.WriteString(fmt.Sprintf("title: %s\n", title))
-	if project != "" {
-		sb.WriteString(fmt.Sprintf("project: %s\n", project))
-	}
-	if len(tags) > 0 {
-		sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(tags, ", ")))
-	}
-	if sourceURL != "" {
-		sb.WriteString(fmt.Sprintf("source_url: %s\n", sourceURL))
-	}
-	sb.WriteString(fmt.Sprintf("created: %s\n", now))
-	if externalID != "" {
-		sb.WriteString(fmt.Sprintf("external_id: %q\n", externalID))
-	}
-	sb.WriteString("---\n\n")
-	if text != "" {
-		sb.WriteString(text)
-		sb.WriteString("\n")
-	}
-	if sourceURL != "" && text == "" {
-		sb.WriteString(fmt.Sprintf("Source: <%s>\n", sourceURL))
-	}
-
-	if err := atomicfile.WriteFile(outPath, []byte(sb.String()), 0644); err != nil {
+	id, outPath, err := publishUniqueCapture(folder, safeTitle,
+		func() string { return templates.GenerateID("capture") },
+		func(id string) []byte {
+			var sb strings.Builder
+			sb.WriteString("---\n")
+			sb.WriteString(fmt.Sprintf("id: %s\n", id))
+			sb.WriteString("type: capture\n")
+			sb.WriteString(fmt.Sprintf("title: %s\n", title))
+			if project != "" {
+				sb.WriteString(fmt.Sprintf("project: %s\n", project))
+			}
+			if len(tags) > 0 {
+				sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(tags, ", ")))
+			}
+			if sourceURL != "" {
+				sb.WriteString(fmt.Sprintf("source_url: %s\n", sourceURL))
+			}
+			sb.WriteString(fmt.Sprintf("created: %s\n", now))
+			if externalID != "" {
+				sb.WriteString(fmt.Sprintf("external_id: %q\n", externalID))
+			}
+			sb.WriteString("---\n\n")
+			if text != "" {
+				sb.WriteString(text)
+				sb.WriteString("\n")
+			}
+			if sourceURL != "" && text == "" {
+				sb.WriteString(fmt.Sprintf("Source: <%s>\n", sourceURL))
+			}
+			return []byte(sb.String())
+		},
+	)
+	if err != nil {
 		return "", fmt.Errorf("write capture: %w", err)
 	}
 
