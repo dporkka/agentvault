@@ -16,6 +16,10 @@ func TestWriteFileReplacesCompleteContentAndPreservesPermissions(t *testing.T) {
 	if err := os.WriteFile(target, []byte("original"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	initial, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
 	replacement := bytes.Repeat([]byte("replacement\n"), 1024)
 	if err := WriteFile(target, replacement, 0644); err != nil {
 		t.Fatal(err)
@@ -31,8 +35,8 @@ func TestWriteFileReplacesCompleteContentAndPreservesPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stat.Mode().Perm() != 0600 {
-		t.Fatalf("file permissions changed: %o", stat.Mode().Perm())
+	if stat.Mode().Perm() != initial.Mode().Perm() {
+		t.Fatalf("file permissions changed from %o to %o", initial.Mode().Perm(), stat.Mode().Perm())
 	}
 	assertNoStagingFiles(t, dir)
 }
@@ -47,8 +51,19 @@ func TestWriteFileCreatesNoteWithRequestedPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stat.Mode().Perm() != 0640 {
-		t.Fatalf("permissions = %o", stat.Mode().Perm())
+	// Windows exposes only limited POSIX permission bits through os.Stat.
+	// Compare against an os.WriteFile control on the same filesystem so
+	// POSIX modes stay exact where supported without inventing Windows bits.
+	control := filepath.Join(dir, "reference.md")
+	if err := os.WriteFile(control, []byte("control"), 0640); err != nil {
+		t.Fatal(err)
+	}
+	controlStat, err := os.Stat(control)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stat.Mode().Perm() != controlStat.Mode().Perm() {
+		t.Fatalf("mode %o differs from native os.WriteFile mode %o", stat.Mode().Perm(), controlStat.Mode().Perm())
 	}
 	assertNoStagingFiles(t, dir)
 }
