@@ -12,16 +12,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/git"
+	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
 	"github.com/agentvault/core/internal/rag"
 	"github.com/agentvault/core/internal/search"
-	"github.com/agentvault/core/internal/graph"
+	"github.com/agentvault/core/internal/templates"
 	"github.com/agentvault/core/internal/vault"
 	"gopkg.in/yaml.v3"
-	"github.com/agentvault/core/internal/templates"
 )
 
 // ── Health ──────────────────────────────────────────────────────────
@@ -333,7 +334,7 @@ func (s *Server) handleCreateNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write file
-	if err := os.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
+	if err := atomicfile.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "failed to write file",
 			"detail": err.Error(),
@@ -476,7 +477,7 @@ func (s *Server) handleUpdateNote(w http.ResponseWriter, r *http.Request) {
 
 	newContent := "---\n" + string(yamlBytes) + "---\n\n" + body
 
-	if err := os.WriteFile(clean, []byte(newContent), 0644); err != nil {
+	if err := atomicfile.WriteFile(clean, []byte(newContent), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "failed to write file",
 			"detail": err.Error(),
@@ -589,7 +590,7 @@ func (s *Server) handleDeleteNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write archived copy
-	if err := os.WriteFile(archiveFullPath, []byte(newContent), 0644); err != nil {
+	if err := atomicfile.WriteFile(archiveFullPath, []byte(newContent), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "failed to write archive file",
 			"detail": err.Error(),
@@ -744,7 +745,7 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		sb.WriteString(fmt.Sprintf("\n*Captured from: <%s>*\n", req.URL))
 	}
 
-	if err := os.WriteFile(fullPath, []byte(sb.String()), 0644); err != nil {
+	if err := atomicfile.WriteFile(fullPath, []byte(sb.String()), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "failed to write capture",
 			"detail": err.Error(),
@@ -766,11 +767,11 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Question     string  `json:"question"`
-		UseVector    *bool   `json:"useVector,omitempty"`
+		Question     string   `json:"question"`
+		UseVector    *bool    `json:"useVector,omitempty"`
 		HybridWeight *float64 `json:"hybridWeight,omitempty"`
-		TopK         *int    `json:"topK,omitempty"`
-		MaxSources   *int    `json:"maxSources,omitempty"`
+		TopK         *int     `json:"topK,omitempty"`
+		MaxSources   *int     `json:"maxSources,omitempty"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
@@ -805,25 +806,25 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.HybridWeight != nil {
 			opts.HybridWeight = *req.HybridWeight
+		}
+		if req.TopK != nil {
+			opts.TopK = *req.TopK
+		}
+		if req.MaxSources != nil {
+			opts.MaxSources = *req.MaxSources
+		}
 	}
-	if req.TopK != nil {
-		opts.TopK = *req.TopK
-	}
-	if req.MaxSources != nil {
-		opts.MaxSources = *req.MaxSources
-	}
-}
 
-answer, err := rag.New(s.searcher, provider).AskWithOptions(r.Context(), req.Question, opts)
-if err != nil {
-	writeJSON(w, http.StatusBadGateway, map[string]interface{}{
-		"error":  "AI provider failed",
-		"detail": err.Error(),
-	})
-	return
-}
+	answer, err := rag.New(s.searcher, provider).AskWithOptions(r.Context(), req.Question, opts)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]interface{}{
+			"error":  "AI provider failed",
+			"detail": err.Error(),
+		})
+		return
+	}
 
-writeJSON(w, http.StatusOK, answer)
+	writeJSON(w, http.StatusOK, answer)
 }
 
 // ── Daily Note ───────────────────────────────────────────────────────
@@ -865,8 +866,14 @@ func (s *Server) handleDaily(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		os.MkdirAll(filepath.Dir(fullPath), 0755)
-		os.WriteFile(fullPath, []byte(rendered), 0644)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "failed to create daily directory", "detail": err.Error()})
+			return
+		}
+		if err := atomicfile.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "failed to write daily note", "detail": err.Error()})
+			return
+		}
 		go func() { _, _ = s.indexer.Index(indexer.IndexOptions{Path: relPath}) }()
 	}
 
@@ -1154,7 +1161,7 @@ func (s *Server) handleAnnotate(w http.ResponseWriter, r *http.Request) {
 	yamlBytes, _ := yaml.Marshal(fmMap)
 	newContent := "---\n" + string(yamlBytes) + "---\n\n" + doc.Body
 
-	if err := os.WriteFile(clean, []byte(newContent), 0644); err != nil {
+	if err := atomicfile.WriteFile(clean, []byte(newContent), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error": "failed to write file", "detail": err.Error(),
 		})
@@ -1225,7 +1232,10 @@ func (s *Server) handleTogglePin(w http.ResponseWriter, r *http.Request) {
 		fmMap[k] = v
 	}
 	yamlBytes, _ := yaml.Marshal(fmMap)
-	os.WriteFile(clean, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644)
+	if err := atomicfile.WriteFile(clean, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "failed to write pinned note", "detail": err.Error()})
+		return
+	}
 	go func() { _, _ = s.indexer.Index(indexer.IndexOptions{Path: result.Path}) }()
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -1397,7 +1407,6 @@ func (s *Server) handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-
 // ── Graph ────────────────────────────────────────────────────────────
 
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
@@ -1452,6 +1461,7 @@ func (s *Server) handleGraphNeighbors(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, g)
 }
+
 // safeCloseBody is a helper to safely close request bodies.
 func safeCloseBody(r *http.Request) {
 	if r != nil && r.Body != nil {

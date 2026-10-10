@@ -13,6 +13,7 @@ import (
 
 	"github.com/agentvault/core/internal/ai"
 	"github.com/agentvault/core/internal/api"
+	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/db"
@@ -303,7 +304,7 @@ func (s *NoteService) SaveNote(path string, content string) error {
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		return fmt.Errorf("failed to create note directory: %w", err)
 	}
-	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+	if err := atomicfile.WriteFile(fullPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to save note: %w", err)
 	}
 	return nil
@@ -343,7 +344,7 @@ func (s *NoteService) CreateNote(noteType string, title string, project string) 
 	filename := fmt.Sprintf("%s_%s.md", safeTitle, id)
 	outPath := filepath.Join(outDir, filename)
 
-	if err := os.WriteFile(outPath, []byte(content), 0644); err != nil {
+	if err := atomicfile.WriteFile(outPath, []byte(content), 0644); err != nil {
 		return "", err
 	}
 

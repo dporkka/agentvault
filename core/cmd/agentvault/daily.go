@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/templates"
 	"github.com/spf13/cobra"
 )
@@ -78,7 +79,7 @@ func runDaily(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	if err := os.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
+	if err := atomicfile.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
 		return fmt.Errorf("failed to write daily note: %w", err)
 	}
 

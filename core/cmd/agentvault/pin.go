@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/indexer"
 	"github.com/agentvault/core/internal/markdown"
 	"github.com/agentvault/core/internal/search"
@@ -77,7 +77,7 @@ func togglePin(id string, pin bool) error {
 		fmMap[k] = v
 	}
 	yamlBytes, _ := yaml.Marshal(fmMap)
-	if err := os.WriteFile(fullPath, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644); err != nil {
+	if err := atomicfile.WriteFile(fullPath, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644); err != nil {
 		return fmt.Errorf("failed to write note: %w", err)
 	}
 
