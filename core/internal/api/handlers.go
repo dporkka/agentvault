@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/agentvault/core/internal/atomicfile"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -333,7 +334,7 @@ func (s *Server) handleCreateNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write file
-	if err := os.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
+	if err := atomicfile.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "failed to write file",
 			"detail": err.Error(),
@@ -476,7 +477,7 @@ func (s *Server) handleUpdateNote(w http.ResponseWriter, r *http.Request) {
 
 	newContent := "---\n" + string(yamlBytes) + "---\n\n" + body
 
-	if err := os.WriteFile(clean, []byte(newContent), 0644); err != nil {
+	if err := atomicfile.WriteFile(clean, []byte(newContent), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "failed to write file",
 			"detail": err.Error(),
@@ -589,7 +590,7 @@ func (s *Server) handleDeleteNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write archived copy
-	if err := os.WriteFile(archiveFullPath, []byte(newContent), 0644); err != nil {
+	if err := atomicfile.WriteFile(archiveFullPath, []byte(newContent), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "failed to write archive file",
 			"detail": err.Error(),
@@ -744,7 +745,7 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		sb.WriteString(fmt.Sprintf("\n*Captured from: <%s>*\n", req.URL))
 	}
 
-	if err := os.WriteFile(fullPath, []byte(sb.String()), 0644); err != nil {
+	if err := atomicfile.WriteFile(fullPath, []byte(sb.String()), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":  "failed to write capture",
 			"detail": err.Error(),
@@ -865,8 +866,14 @@ func (s *Server) handleDaily(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		os.MkdirAll(filepath.Dir(fullPath), 0755)
-		os.WriteFile(fullPath, []byte(rendered), 0644)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "failed to create daily directory", "detail": err.Error()})
+			return
+		}
+		if err := atomicfile.WriteFile(fullPath, []byte(rendered), 0644); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "failed to write daily note", "detail": err.Error()})
+			return
+		}
 		go func() { _, _ = s.indexer.Index(indexer.IndexOptions{Path: relPath}) }()
 	}
 
@@ -1154,7 +1161,7 @@ func (s *Server) handleAnnotate(w http.ResponseWriter, r *http.Request) {
 	yamlBytes, _ := yaml.Marshal(fmMap)
 	newContent := "---\n" + string(yamlBytes) + "---\n\n" + doc.Body
 
-	if err := os.WriteFile(clean, []byte(newContent), 0644); err != nil {
+	if err := atomicfile.WriteFile(clean, []byte(newContent), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error": "failed to write file", "detail": err.Error(),
 		})
@@ -1225,7 +1232,10 @@ func (s *Server) handleTogglePin(w http.ResponseWriter, r *http.Request) {
 		fmMap[k] = v
 	}
 	yamlBytes, _ := yaml.Marshal(fmMap)
-	os.WriteFile(clean, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644)
+	if err := atomicfile.WriteFile(clean, []byte("---\n"+string(yamlBytes)+"---\n\n"+doc.Body), 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "failed to write pinned note", "detail": err.Error()})
+		return
+	}
 	go func() { _, _ = s.indexer.Index(indexer.IndexOptions{Path: result.Path}) }()
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
