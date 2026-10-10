@@ -37,7 +37,6 @@ func TestMCPCaptureSharesDeterministicAuthorityWithHTTP(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 }
 
-
 func TestMCPCaptureKeyedSupportsYAMLMetacharacters(t *testing.T) {
 	srv, database := setupTestServer(t)
 	defer database.Close()
