@@ -686,6 +686,10 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	dateStr := now.Format("2006-01-02")
 
+	if s.beforeCapturePublish != nil {
+		s.beforeCapturePublish()
+	}
+
 	// Publish fully staged captures with an exclusive hard link. Competing
 	// writers cannot overwrite each other's files or expose empty placeholders.
 	for num := 1; num <= 999; num++ {
