@@ -42,6 +42,8 @@ jobs:
         run: go test -count=1 -v ./internal/atomicfile ./internal/capturelock
       - name: Test HTTP capture contract
         run: go test -count=1 -run ^TestCaptureEndpoint ./internal/api
+      - name: Test note creation portable path
+        run: go test -count=1 -run ^TestCreateNoteEndpoint_DefaultType$ ./internal/api
       - name: Test MCP capture contract
         run: go test -count=1 -run ^TestMCPCapture ./internal/mcp
       - name: Test legacy MCP capture behavior
