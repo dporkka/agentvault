@@ -39,7 +39,15 @@ jobs:
           cache-dependency-path: core/go.sum
       - name: Test same-directory staging, exclusive publication, and locks
         run: go test -count=1 -v ./internal/atomicfile ./internal/capturelock
-      - name: Test HTTP and MCP capture contracts
-        run: go test -count=1 ./internal/api ./internal/mcp
+      - name: Test HTTP capture contract
+        run: go test -count=1 -run ^TestCaptureEndpoint ./internal/api
+      - name: Test MCP capture contract
+        run: go test -count=1 -run ^TestMCPCapture ./internal/mcp
+      - name: Test legacy MCP capture behavior
+        run: go test -count=1 -run ^TestHandleCapture ./internal/mcp
+      - name: Test MCP filename collision protection
+        run: go test -count=1 -run ^TestPublishUniqueCapture ./internal/mcp
+      - name: Test shared-process MCP idempotency
+        run: go test -count=1 -run ^TestCaptureConcurrentExternalIDAcrossMCPServers ./internal/mcp
       - name: Test multi-process deterministic capture publication
         run: go test -count=1 -v ./internal/capturekey
