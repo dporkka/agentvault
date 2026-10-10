@@ -70,6 +70,12 @@ jobs:
           if [ -n "$unformatted" ]; then
             echo "Changed Go files need gofmt:"
             echo "$unformatted"
+            while IFS= read -r file; do
+              [ -z "$file" ] && continue
+              echo "::group::gofmt diff: $file"
+              gofmt -d "$file"
+              echo "::endgroup::"
+            done <<< "$unformatted"
             exit 1
           fi
       - name: Upload CLI artifact
