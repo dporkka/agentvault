@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/ai"
 	"github.com/agentvault/core/internal/api"
+	"github.com/agentvault/core/internal/atomicfile"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/db"
