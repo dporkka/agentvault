@@ -692,7 +692,6 @@ func (s *Server) registerGitStatus() {
 	}
 }
 
-
 // --- Tool: agentvault.open_daily ---
 
 func (s *Server) registerOpenDaily() {
