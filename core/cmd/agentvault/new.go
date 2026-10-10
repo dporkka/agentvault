@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/agentvault/core/internal/atomicfile"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -163,7 +164,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write file
-	if err := os.WriteFile(outPath, []byte(content), 0644); err != nil {
+	if err := atomicfile.WriteFile(outPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("write file %s: %w", outPath, err)
 	}
 
