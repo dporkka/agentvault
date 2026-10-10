@@ -75,6 +75,7 @@ func stageAndInstall(path string, data []byte, perm fs.FileMode, install func(st
 	if err := install(tempPath, path); err != nil {
 		return fmt.Errorf("replace %q: %w", path, err)
 	}
-	tempPath = ""
+	// A rename has already consumed the staging name; hard-link publication
+	// leaves it behind until this deferred cleanup.
 	return nil
 }
