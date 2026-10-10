@@ -40,7 +40,6 @@ jobs:
       - name: Test same-directory staging, exclusive publication, and locks
         run: go test -count=1 -v ./internal/atomicfile ./internal/capturelock
       - name: Test HTTP and MCP capture contracts
-        run: go test -count=1 -run '^(TestCaptureEndpoint.*|TestPublishUniqueCapture.*|TestCaptureConcurrentExternalIDAcrossMCPServers|TestMCPCapture.*|TestHandleCapture.*)
- ./internal/api ./internal/mcp
+        run: go test -count=1 ./internal/api ./internal/mcp
       - name: Test multi-process deterministic capture publication
         run: go test -count=1 -v ./internal/capturekey
