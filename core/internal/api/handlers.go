@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/agentvault/core/internal/atomicfile"
+	"github.com/agentvault/core/internal/capturelock"
 	"github.com/agentvault/core/internal/contract"
 	"github.com/agentvault/core/internal/git"
 	"github.com/agentvault/core/internal/graph"
@@ -644,6 +645,13 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		req.Title = "Untitled Capture"
 	}
 
+	// Keep the scan and atomic publication under one process-wide keyed
+	// guard. Multiple HTTP server instances in this process share it.
+	if req.ExternalID != "" {
+		unlock := capturelock.Lock(s.vaultPath, req.ExternalID)
+		defer unlock()
+	}
+
 	// Idempotency: if an external_id is provided, check for an existing
 	// capture with the same external_id to avoid duplicates on retry.
 	if req.ExternalID != "" {
@@ -685,6 +693,10 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	dateStr := now.Format("2006-01-02")
+
+	if s.beforeCapturePublish != nil {
+		s.beforeCapturePublish()
+	}
 
 	// Publish fully staged captures with an exclusive hard link. Competing
 	// writers cannot overwrite each other's files or expose empty placeholders.

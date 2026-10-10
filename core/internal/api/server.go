@@ -70,6 +70,10 @@ type Server struct {
 	aiProviderMu sync.Mutex
 	rateLimiter  *simpleRateLimiter
 	watcher      *watcher.Watcher
+
+	// Optional test seam for forcing the scan/publish race in capture tests.
+	// This hook is never configured in production.
+	beforeCapturePublish func()
 }
 
 // NewServer creates a new API server.
