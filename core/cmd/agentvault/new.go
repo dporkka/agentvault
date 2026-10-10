@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentvault/core/internal/notepublish"
 	"github.com/agentvault/core/internal/git"
+	"github.com/agentvault/core/internal/notepublish"
 	"github.com/agentvault/core/internal/templates"
 	"github.com/agentvault/core/internal/vault"
 	"github.com/spf13/cobra"
