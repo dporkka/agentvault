@@ -1,11 +1,12 @@
-# Capture idempotency and filesystem publication contract (proposal)
+# Capture idempotency and filesystem publication contract
 
-**Status:** design only; not implemented. This is a proposed follow-up to drafts
-[#105](https://github.com/dporkka/agentvault/pull/105) →
-[#106](https://github.com/dporkka/agentvault/pull/106) →
+**Status:** implemented in draft [#109](https://github.com/dporkka/agentvault/pull/109), stacked on
+[#108](https://github.com/dporkka/agentvault/pull/108) →
 [#107](https://github.com/dporkka/agentvault/pull/107) →
-[#108](https://github.com/dporkka/agentvault/pull/108).
-Do not describe the current capture API as cross-process exactly-once.
+[#106](https://github.com/dporkka/agentvault/pull/106) →
+[#105](https://github.com/dporkka/agentvault/pull/105).
+Not yet merged or deployed. This is inbox-scoped idempotency on cooperative
+filesystems, **not** durable global exactly-once event processing.
 
 ## Authority and scope
 
@@ -26,7 +27,7 @@ Do not describe the current capture API as cross-process exactly-once.
   requirement for trusted direct captures. Reviewed agent mutations remain
   owned by [PR #53](https://github.com/dporkka/agentvault/pull/53).
 
-## Proposed keyed path (not yet shipped)
+## Deterministic keyed path (draft #109)
 
 For a *new* keyed capture, let `digest = lowercase_hex(SHA256(UTF8(external_id)))`
 with the full 32-byte digest (64 hex characters). The canonical target is:
@@ -43,12 +44,12 @@ would silently change its identity or create a new path on each retry.
 Resolve the vault root canonically before writing and reject symlinked/
 non-directory inbox components: aliases must not evade the same authority.
 
-Use the same canonical path in both HTTP and MCP. Preserve the human-readable
-title and generated capture `id` *inside the winning Markdown file*; a
-conflicting writer must return the winner's path rather than reporting its
-own unused generated ID.
+Use the same canonical path in both HTTP and MCP. The winner's Markdown
+frontmatter retains the supplied human-readable title and a deterministic
+`capture_ext_<digest>` ID. A conflicting writer must return that winner's path
+rather than its own unused generated ID.
 
-## Proposed decision sequence
+## Keyed capture decision sequence
 
 1. Validate and bound the external ID (suggested: 1–512 UTF-8 bytes,
    rejecting invalid encodings and control characters; specify migration/
@@ -104,15 +105,27 @@ equivalent hard-link semantics can violate stronger guarantees. The design
 does not claim a portable inter-process mutex or linearizable arbitrary
 filesystem transactions.
 
-The implementation must not land until the proposed behavior is proven with:
-- multiprocess independent HTTP/MCP writers sharing an inbox, simultaneous
-  same-key writes, and two distinct-key writes;
-- legacy-path reuse, conflict detection, wrong-key/malformed destination and
-  symlink rejection, process-kill-before/after-install recovery, projection
-  rebuilding, and non-ASCII external IDs;
-- actual Linux, macOS and Windows filesystem tests (not just `GOOS`
-  cross-compilation), clearly recording any unsupported substrate.
+## Verification and remaining limits
 
-See `.github/workflows/filesystem-portability.yml` for the focused primitive
-qualification; a green result there does **not** prove the above unimplemented
-cross-process protocol.
+The implementation in #109 includes independent-process competition in the
+`capturekey` tests, key-sensitive legacy lookup, malformed/wrong-key destination
+conflicts, non-regular/symlink rejection, content validation, retry after an
+already-completed install, Unicode IDs, and API/MCP integration tests. The
+Windows/macOS workflow covers focused capture contracts; the Linux CI runs
+the Go race suite. See the draft PR for **exact-head run references**.
+
+This does **not** cover a deliberate process-kill fault at every staging/fsync/
+link boundary, durable directory metadata under sudden power loss, all
+network/shared filesystem substrates, or guaranteed recovery after a user
+moves/deletes a note. The cross-process helper is only safe when **all writers
+using that vault** adopt the deterministic keyed path protocol; rolling out
+mixed-version writers concurrently can still create duplicates. A legacy
+scan followed by a new path install is not atomic with an unupgraded writer.
+
+`external_id` is limited to 1–512 valid UTF-8 bytes with no control
+characters. This is a new admission constraint: deployers should identify
+any legacy clients using larger/control-containing keys before migration.
+
+Unkeyed captures retain existing naming behavior and are not assigned a
+deterministic path. The separate reviewed mutation engine in #53 remains
+independent; direct capture creation does not imply agent approval.

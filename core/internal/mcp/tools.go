@@ -14,6 +14,7 @@ import (
 
 	"github.com/agentvault/core/internal/ai"
 	"github.com/agentvault/core/internal/atomicfile"
+	"github.com/agentvault/core/internal/capturekey"
 	"github.com/agentvault/core/internal/capturelock"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/graph"
@@ -420,31 +421,6 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 		defer unlock()
 	}
 
-	// Idempotency: if an external_id is provided, check for an existing
-	// capture with the same external_id to avoid duplicates on retry.
-	if externalID != "" {
-		inboxDir := filepath.Join(s.vaultPath, "00-inbox")
-		entries, readErr := os.ReadDir(inboxDir)
-		if readErr == nil {
-			for _, entry := range entries {
-				if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-					continue
-				}
-				fullPath := filepath.Join(inboxDir, entry.Name())
-				doc, parseErr := markdown.ParseFile(fullPath)
-				if parseErr != nil {
-					continue
-				}
-				if extID, ok := doc.Frontmatter.Extra["external_id"]; ok {
-					if extStr, isStr := extID.(string); isStr && extStr == externalID {
-						relPath, _ := filepath.Rel(s.vaultPath, fullPath)
-						return fmt.Sprintf("(idempotent) Captured to inbox: `%s`", filepath.ToSlash(relPath)), nil
-					}
-				}
-			}
-		}
-	}
-
 	// Build a complete capture for each proposed ID. Publication must never
 	// overwrite an existing note if a generated three-digit suffix collides.
 	now := currentTimestamp()
@@ -454,40 +430,58 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 	}
 	safeTitle := sanitizeFilename(title)
 
-	id, outPath, err := publishUniqueCapture(folder, safeTitle,
-		func() string { return templates.GenerateID("capture") },
-		func(id string) []byte {
-			var sb strings.Builder
-			sb.WriteString("---\n")
-			sb.WriteString(fmt.Sprintf("id: %s\n", id))
-			sb.WriteString("type: capture\n")
-			sb.WriteString(fmt.Sprintf("title: %s\n", title))
-			if project != "" {
-				sb.WriteString(fmt.Sprintf("project: %s\n", project))
+	render := func(id string) []byte {
+		var sb strings.Builder
+		sb.WriteString("---\n")
+		sb.WriteString(fmt.Sprintf("id: %s\n", id))
+		sb.WriteString("type: capture\n")
+		sb.WriteString(fmt.Sprintf("title: %q\n", title))
+		if project != "" {
+			sb.WriteString(fmt.Sprintf("project: %q\n", project))
+		}
+		if len(tags) > 0 {
+			quoted := make([]string, len(tags))
+			for i, tag := range tags {
+				quoted[i] = fmt.Sprintf("%q", tag)
 			}
-			if len(tags) > 0 {
-				sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(tags, ", ")))
-			}
-			if sourceURL != "" {
-				sb.WriteString(fmt.Sprintf("source_url: %s\n", sourceURL))
-			}
-			sb.WriteString(fmt.Sprintf("created: %s\n", now))
-			if externalID != "" {
-				sb.WriteString(fmt.Sprintf("external_id: %q\n", externalID))
-			}
-			sb.WriteString("---\n\n")
-			if text != "" {
-				sb.WriteString(text)
-				sb.WriteString("\n")
-			}
-			if sourceURL != "" && text == "" {
-				sb.WriteString(fmt.Sprintf("Source: <%s>\n", sourceURL))
-			}
-			return []byte(sb.String())
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf("write capture: %w", err)
+			sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(quoted, ", ")))
+		}
+		if sourceURL != "" {
+			sb.WriteString(fmt.Sprintf("source_url: %q\n", sourceURL))
+		}
+		sb.WriteString(fmt.Sprintf("created: %s\n", now))
+		if externalID != "" {
+			sb.WriteString(fmt.Sprintf("external_id: %q\n", externalID))
+		}
+		sb.WriteString("---\n\n")
+		if text != "" {
+			sb.WriteString(text)
+			sb.WriteString("\n")
+		}
+		if sourceURL != "" && text == "" {
+			sb.WriteString(fmt.Sprintf("Source: <%s>\n", sourceURL))
+		}
+		return []byte(sb.String())
+	}
+
+	var id, outPath string
+	var err error
+	if externalID != "" {
+		id = "capture_" + strings.TrimSuffix(filepath.Base(capturekey.CanonicalPath(externalID)), ".md")
+		result, publishErr := capturekey.Publish(s.vaultPath, externalID, render(id))
+		if publishErr != nil {
+			return "", fmt.Errorf("write keyed capture: %w", publishErr)
+		}
+		if !result.Created {
+			return fmt.Sprintf("(idempotent) Captured to inbox: `%s`", result.Path), nil
+		}
+		outPath = filepath.Join(s.vaultPath, filepath.FromSlash(result.Path))
+	} else {
+		id, outPath, err = publishUniqueCapture(folder, safeTitle,
+			func() string { return templates.GenerateID("capture") }, render)
+		if err != nil {
+			return "", fmt.Errorf("write capture: %w", err)
+		}
 	}
 
 	// Log the agent write

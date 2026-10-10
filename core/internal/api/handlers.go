@@ -645,40 +645,16 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		req.Title = "Untitled Capture"
 	}
 
-	// Keep the scan and atomic publication under one process-wide keyed
-	// guard. Multiple HTTP server instances in this process share it.
+	// Keep the process-local optimization for same-process callers. Cross-
+	// process correctness comes from capturekey's shared filesystem path.
 	if req.ExternalID != "" {
 		unlock := capturelock.Lock(s.vaultPath, req.ExternalID)
 		defer unlock()
-	}
-
-	// Idempotency: if an external_id is provided, check for an existing
-	// capture with the same external_id to avoid duplicates on retry.
-	if req.ExternalID != "" {
-		inboxPath := filepath.Join(s.vaultPath, "00-inbox")
-		entries, err := os.ReadDir(inboxPath)
-		if err == nil {
-			for _, entry := range entries {
-				if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-					continue
-				}
-				fullPath := filepath.Join(inboxPath, entry.Name())
-				doc, parseErr := markdown.ParseFile(fullPath)
-				if parseErr != nil {
-					continue
-				}
-				if extID, ok := doc.Frontmatter.Extra["external_id"]; ok {
-					if extStr, isStr := extID.(string); isStr && extStr == req.ExternalID {
-						relPath := filepath.ToSlash(filepath.Join("00-inbox", entry.Name()))
-						writeJSON(w, http.StatusOK, map[string]interface{}{
-							"path":       relPath,
-							"idempotent": true,
-						})
-						return
-					}
-				}
-			}
+		if s.beforeCapturePublish != nil {
+			s.beforeCapturePublish()
 		}
+		s.handleKeyedCapture(w, req.Title, req.URL, req.Text, req.Project, req.Tags, req.ExternalID)
+		return
 	}
 
 	// Prepare the inbox for exclusive capture publication
