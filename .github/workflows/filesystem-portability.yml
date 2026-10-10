@@ -5,6 +5,7 @@ on:
     paths:
       - 'core/internal/atomicfile/**'
       - 'core/internal/capturekey/**'
+      - 'docs/CAPTURE_IDEMPOTENCY_CONTRACT.md'
       - 'core/internal/capturelock/**'
       - 'core/internal/api/**'
       - 'core/internal/mcp/**'
