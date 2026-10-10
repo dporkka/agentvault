@@ -36,3 +36,30 @@ func TestMCPCaptureSharesDeterministicAuthorityWithHTTP(t *testing.T) {
 	}
 	time.Sleep(200 * time.Millisecond)
 }
+
+
+func TestMCPCaptureKeyedSupportsYAMLMetacharacters(t *testing.T) {
+	srv, database := setupTestServer(t)
+	defer database.Close()
+	key := "provider:yaml:001"
+	title := "Product: launch, phase 1"
+	result, err := srv.handleCapture(map[string]interface{}{
+		"title":       title,
+		"text":        "original",
+		"external_id": key,
+		"project":     "Roadmap: priority",
+		"tags":        []interface{}{"x,y", "tag: one"},
+	})
+	if err != nil {
+		t.Fatalf("valid opaque fields should not create malformed YAML: %v", err)
+	}
+	path := capturekey.CanonicalPath(key)
+	if !strings.Contains(result, path) {
+		t.Fatalf("wrong path: %q", result)
+	}
+	replay, err := srv.handleCapture(map[string]interface{}{"title": "different", "external_id": key})
+	if err != nil || !strings.Contains(replay, "(idempotent)") {
+		t.Fatalf("replay failed for YAML special characters: %q (%v)", replay, err)
+	}
+	time.Sleep(200 * time.Millisecond)
+}
