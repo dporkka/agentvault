@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -26,6 +27,24 @@ func TestCaptureEndpointConcurrentExternalIDAcrossServersConverges(t *testing.T)
 	first.RegisterRoutes()
 	second := NewServer(vaultPath, database)
 	second.RegisterRoutes()
+
+	// Force multiple callers past the deduplication scan before either can
+	// publish. After the fix only the first new capture can reach this hook;
+	// the others must wait and then observe that already-published file.
+	var arrivals atomic.Int32
+	arrivedTwice := make(chan struct{})
+	var signal sync.Once
+	beforePublish := func() {
+		if arrivals.Add(1) >= 2 {
+			signal.Do(func() { close(arrivedTwice) })
+		}
+		select {
+		case <-arrivedTwice:
+		case <-time.After(180 * time.Millisecond):
+		}
+	}
+	first.beforeCapturePublish = beforePublish
+	second.beforeCapturePublish = beforePublish
 
 	serve := func(srv *Server) *httptest.Server {
 		var handler http.Handler = srv.mux
