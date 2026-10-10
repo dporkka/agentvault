@@ -14,6 +14,7 @@ import (
 
 	"github.com/agentvault/core/internal/ai"
 	"github.com/agentvault/core/internal/atomicfile"
+	"github.com/agentvault/core/internal/capturelock"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
@@ -412,6 +413,13 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 		return "", fmt.Errorf("title is required")
 	}
 
+	// Share the process-local idempotency guard with the HTTP capture path.
+	// The scan and complete-file write must be one critical section.
+	if externalID != "" {
+		unlock := capturelock.Lock(s.vaultPath, externalID)
+		defer unlock()
+	}
+
 	// Idempotency: if an external_id is provided, check for an existing
 	// capture with the same external_id to avoid duplicates on retry.
 	if externalID != "" {
@@ -470,7 +478,7 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 	}
 	sb.WriteString(fmt.Sprintf("created: %s\n", now))
 	if externalID != "" {
-		sb.WriteString(fmt.Sprintf("external_id: %s\n", externalID))
+		sb.WriteString(fmt.Sprintf("external_id: %q\n", externalID))
 	}
 	sb.WriteString("---\n\n")
 	if text != "" {
