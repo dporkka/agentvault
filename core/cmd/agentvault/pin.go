@@ -3,7 +3,6 @@ package main
 import (
 	"github.com/agentvault/core/internal/atomicfile"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
