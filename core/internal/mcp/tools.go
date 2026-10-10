@@ -435,15 +435,19 @@ func (s *Server) handleCapture(args map[string]interface{}) (string, error) {
 		sb.WriteString("---\n")
 		sb.WriteString(fmt.Sprintf("id: %s\n", id))
 		sb.WriteString("type: capture\n")
-		sb.WriteString(fmt.Sprintf("title: %s\n", title))
+		sb.WriteString(fmt.Sprintf("title: %q\n", title))
 		if project != "" {
-			sb.WriteString(fmt.Sprintf("project: %s\n", project))
+			sb.WriteString(fmt.Sprintf("project: %q\n", project))
 		}
 		if len(tags) > 0 {
-			sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(tags, ", ")))
+			quoted := make([]string, len(tags))
+			for i, tag := range tags {
+				quoted[i] = fmt.Sprintf("%q", tag)
+			}
+			sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(quoted, ", ")))
 		}
 		if sourceURL != "" {
-			sb.WriteString(fmt.Sprintf("source_url: %s\n", sourceURL))
+			sb.WriteString(fmt.Sprintf("source_url: %q\n", sourceURL))
 		}
 		sb.WriteString(fmt.Sprintf("created: %s\n", now))
 		if externalID != "" {
