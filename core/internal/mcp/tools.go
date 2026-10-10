@@ -14,8 +14,8 @@ import (
 
 	"github.com/agentvault/core/internal/ai"
 	"github.com/agentvault/core/internal/atomicfile"
-	"github.com/agentvault/core/internal/capturelock"
 	"github.com/agentvault/core/internal/capturekey"
+	"github.com/agentvault/core/internal/capturelock"
 	"github.com/agentvault/core/internal/config"
 	"github.com/agentvault/core/internal/graph"
 	"github.com/agentvault/core/internal/indexer"
