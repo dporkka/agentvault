@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'core/internal/atomicfile/**'
+      - 'core/internal/notepublish/**'
+      - 'core/cmd/agentvault/new*.go'
       - 'core/internal/capturekey/**'
       - 'docs/CAPTURE_IDEMPOTENCY_CONTRACT.md'
       - 'core/internal/capturelock/**'
@@ -44,6 +46,14 @@ jobs:
         run: go test -count=1 -run ^TestCaptureEndpoint ./internal/api
       - name: Test note creation portable path
         run: go test -count=1 -run ^TestCreateNoteEndpoint_DefaultType$ ./internal/api
+      - name: Test exclusive HTTP note creation under exhausted IDs
+        run: go test -count=1 -run ^TestCreateNoteEndpointRefusesOccupiedGeneratedIDs$ ./internal/api
+      - name: Test exclusive CLI note creation under exhausted IDs
+        run: go test -count=1 -run ^TestRunNewRefusesOccupiedGeneratedIDs$ ./cmd/agentvault
+      - name: Test exclusive MCP note creation under exhausted IDs
+        run: go test -count=1 -run ^TestMCPCreateNoteRefusesOccupiedGeneratedIDs$ ./internal/mcp
+      - name: Test note collision helper
+        run: go test -count=1 ./internal/notepublish
       - name: Test MCP capture contract
         run: go test -count=1 -run ^TestMCPCapture ./internal/mcp
       - name: Test legacy MCP capture behavior
